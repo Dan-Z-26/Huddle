@@ -1,28 +1,64 @@
 const sumBy = (items, key) => items.reduce((sum, item) => sum + item[key], 0);
 
+const TOP_RANK_PCT = 160;
+const LAST_RANK_PCT = 100;
+const UNRANKED_PCT = 50;
+const FALLBACK_TYPICAL_BPS = 1000;
+
+/** The share of a new budget set aside for the unexpected. */
+export const DEFAULT_BUFFER_BPS = 1000;
+
+function rankPct(index, rankedCount) {
+  if (index < 0) return UNRANKED_PCT;
+  if (rankedCount === 1) return TOP_RANK_PCT;
+  const step = ((TOP_RANK_PCT - LAST_RANK_PCT) * index) / (rankedCount - 1);
+  return Math.round(TOP_RANK_PCT - step);
+}
+
 /**
- * Splits a total across ranked categories, weighting rank r of n by n-r+1, summing exactly.
+ * Splits a total across categories: each starts from its usual share for this event type, raised
+ * or lowered by where the user ranked it. Nothing unranked drops to zero. Sums exactly.
  * @param {number} totalMinor Non-negative integer total.
+ * @param {Array<{id: string, typicalBps?: number}>} categories The event's categories.
  * @param {string[]} priorities Category ids, highest priority first.
- * @returns {Record<string, number>} Allocation per category; empty when nothing is ranked.
+ * @returns {Record<string, number>} Allocation per category.
  * @throws {RangeError} When the total is negative or not an integer.
  */
-export function allocate(totalMinor, priorities) {
+export function allocate(totalMinor, categories, priorities) {
   if (!Number.isSafeInteger(totalMinor) || totalMinor < 0) {
     throw new RangeError("totalMinor must be a non-negative integer");
   }
-  const ids = [...new Set(priorities)];
-  const weightSum = (ids.length * (ids.length + 1)) / 2;
-  const shares = ids.map((id, index) => {
-    const scaled = totalMinor * (ids.length - index);
-    const remainder = scaled % weightSum;
-    return { id, minor: (scaled - remainder) / weightSum, remainder };
+  const known = new Set(categories.map(({ id }) => id));
+  const ranked = [...new Set(priorities)].filter((id) => known.has(id));
+  const weightOf = ({ id, typicalBps }) =>
+    (typicalBps ?? FALLBACK_TYPICAL_BPS) * rankPct(ranked.indexOf(id), ranked.length);
+  const weightSum = categories.reduce((sum, category) => sum + weightOf(category), 0);
+  if (weightSum === 0) return Object.fromEntries(categories.map(({ id }) => [id, 0]));
+  // BigInt: a large budget times a weight goes past what a Number holds exactly.
+  const shares = categories.map((category) => {
+    const scaled = BigInt(totalMinor) * BigInt(weightOf(category));
+    const sum = BigInt(weightSum);
+    return { id: category.id, minor: Number(scaled / sum), remainder: Number(scaled % sum) };
   });
   const leftover = totalMinor - sumBy(shares, "minor");
-  // A stable sort gives ties to the higher-ranked category.
-  const byRemainder = shares.toSorted((a, b) => b.remainder - a.remainder);
-  byRemainder.slice(0, leftover).forEach((share) => (share.minor += 1));
+  // A stable sort gives ties to the category listed first.
+  shares
+    .toSorted((a, b) => b.remainder - a.remainder)
+    .slice(0, leftover)
+    .forEach((share) => (share.minor += 1));
   return Object.fromEntries(shares.map((share) => [share.id, share.minor]));
+}
+
+/**
+ * What the contingency buffer holds.
+ * @param {{contingency?: {reservedMinor: number, spentMinor: number}}} state BudgetState.
+ * @returns {{reservedMinor: number, spentMinor: number, availableMinor: number}} Set aside, already
+ *   paid from it, and what is left.
+ */
+export function contingencyOf({ contingency }) {
+  const reservedMinor = contingency?.reservedMinor ?? 0;
+  const spentMinor = contingency?.spentMinor ?? 0;
+  return { reservedMinor, spentMinor, availableMinor: reservedMinor - spentMinor };
 }
 
 /**
@@ -95,7 +131,8 @@ export function categoryCost(category, guestCount) {
  * Computes committed and estimate-inclusive totals for a budget state.
  * @param {object} state BudgetState.
  * @returns {{categories: object[], committedMinor: number, lowMinor: number, highMinor: number,
- *   totalMinor: number, remainingMinor: number}} remainingMinor is negative when over budget.
+ *   totalMinor: number, contingency: object, remainingMinor: number}} remainingMinor leaves out the
+ *   buffer, and is negative when over budget.
  */
 export function computeBudget(state) {
   const categories = state.categories.map((category) => ({
@@ -104,13 +141,15 @@ export function computeBudget(state) {
     ...categoryCost(category, state.guestCount),
   }));
   const committedMinor = sumBy(categories, "committedMinor");
+  const contingency = contingencyOf(state);
   return {
     categories,
     committedMinor,
     lowMinor: sumBy(categories, "lowMinor"),
     highMinor: sumBy(categories, "highMinor"),
     totalMinor: state.totalMinor,
-    remainingMinor: state.totalMinor - committedMinor,
+    contingency,
+    remainingMinor: state.totalMinor - contingency.reservedMinor - committedMinor,
   };
 }
 

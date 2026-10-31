@@ -9,6 +9,7 @@ const categories = [
       capacityDriver("venue-hire", "Venue hire by capacity", 8500),
       driver("venue-staff", "Venue staff and cleaning", "fixed", 1500),
     ],
+    2000,
   ),
   category(
     "catering",
@@ -18,6 +19,7 @@ const categories = [
       driver("catering-plate", "Catering per plate", "perGuest", 9000),
       driver("kitchen-setup", "Kitchen setup", "fixed", 1000),
     ],
+    3800,
   ),
   category(
     "decor",
@@ -27,6 +29,7 @@ const categories = [
       driver("mandap", "Mandap and stage", "fixed", 7000),
       driver("florals", "Flowers and lighting", "fixed", 3000),
     ],
+    1500,
   ),
   category(
     "photo-video",
@@ -36,6 +39,7 @@ const categories = [
       driver("shoot-days", "Shoot days", "perUnit", 8000, { units: 2 }),
       driver("album", "Album and editing", "fixed", 2000),
     ],
+    1000,
   ),
   category(
     "music",
@@ -45,6 +49,7 @@ const categories = [
       driver("music-hours", "Performance hours", "perUnit", 8000, { units: 5 }),
       driver("sound", "Sound system", "fixed", 2000),
     ],
+    700,
   ),
   category(
     "attire",
@@ -54,6 +59,7 @@ const categories = [
       driver("outfits", "Outfits", "perUnit", 8000, { units: 4 }),
       driver("alterations", "Alterations and styling", "fixed", 2000),
     ],
+    700,
   ),
   category(
     "invitations",
@@ -63,6 +69,7 @@ const categories = [
       driver("invites", "Invitation per guest", "perGuest", 8000),
       driver("invite-design", "Invitation design", "fixed", 2000),
     ],
+    300,
   ),
 ];
 
@@ -98,10 +105,42 @@ export const wedding = defineTemplate({
     "family-helper": "Sunita Verma",
   },
   categoryGroups: [
-    { slug: "food-beverage", categoryIds: ["catering"] },
-    { slug: "decor-venue", categoryIds: ["decor", "venue"] },
-    { slug: "photo-video", categoryIds: ["photo-video"] },
-    { slug: "music", categoryIds: ["music"] },
+    { slug: "food-beverage", name: "Food & beverage", categoryIds: ["catering"] },
+    { slug: "decor-venue", name: "Décor & venue", categoryIds: ["decor", "venue"] },
+    { slug: "photo-video", name: "Photo & video", categoryIds: ["photo-video"] },
+    { slug: "music", name: "Music", categoryIds: ["music"] },
   ],
   milestones: scaledMilestones(200),
+  intakeOptions: {
+    purpose: [
+      "Celebrate with family and friends",
+      "An intimate ceremony",
+      "A big traditional wedding",
+      "A destination wedding",
+    ],
+    venueType: ["Banquet hall", "Hotel", "Lawn or garden", "Temple or place of worship", "At home"],
+    guests: ["50", "100", "200", "300", "500"],
+    budget: ["₹5 lakh", "₹10 lakh", "₹20 lakh", "₹35 lakh", "₹50 lakh"],
+    attendeeExperience: [
+      "Warmly welcomed",
+      "Part of the family",
+      "Well fed and happy",
+      "Moved by the ceremony",
+    ],
+    mustHaves: [
+      { text: "A traditional ceremony", categoryId: "venue" },
+      { text: "A sit-down dinner", categoryId: "catering" },
+      { text: "A floral mandap or stage", categoryId: "decor" },
+      { text: "A wedding film", categoryId: "photo-video" },
+      { text: "Live music", categoryId: "music" },
+      { text: "Printed invitations", categoryId: "invitations" },
+    ],
+    constraints: [
+      "Vegetarian menu",
+      "Jain food",
+      "Wheelchair access",
+      "Rooms for out-of-town family",
+      "Fixed muhurat time",
+    ],
+  },
 });

@@ -1,0 +1,336 @@
+/* Team workspace */
+.link-button {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--pink-deep);
+  background: none;
+  border: 0;
+  padding: 0.15rem 0;
+  text-align: left;
+  cursor: pointer;
+}
+.link-button:hover {
+  text-decoration: underline;
+}
+.attention-list {
+  display: grid;
+  gap: 0.5rem;
+  color: var(--text);
+}
+.attention-list .link-button {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  line-height: 1.4;
+}
+.unread {
+  margin-left: auto;
+  flex: none;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.button.small {
+  padding: 0.25rem 0.8rem;
+  font-size: 0.85rem;
+}
+
+/* Composer */
+.composer {
+  flex: none;
+  display: grid;
+  gap: 0.35rem;
+  width: min(46rem, 100% - clamp(2rem, 6vw, 4rem));
+  margin: 0.75rem auto 1.25rem;
+  padding: 0.7rem 0.7rem 0.55rem 0.95rem;
+  background: var(--bg);
+  border: 1px solid var(--control);
+  border-radius: 1rem;
+  box-shadow: var(--shadow);
+}
+.composer textarea {
+  display: block;
+  border: 0;
+  padding: 0.15rem 0;
+  resize: none;
+  max-height: 11rem;
+  overflow-y: auto;
+  background: none;
+}
+.composer textarea:focus-visible {
+  outline: none;
+}
+.composer:has(textarea:focus-visible) {
+  outline: 2px solid var(--pink);
+  outline-offset: 1px;
+}
+.composer-row,
+.composer-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.composer-row {
+  justify-content: space-between;
+}
+.composer-status:not(.is-error) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.composer-status.is-error {
+  color: var(--risk);
+  font-size: 0.875rem;
+}
+.icon-button {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.55rem;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.icon-button:hover {
+  background: var(--wash);
+  color: var(--text);
+}
+.attach input:focus-visible + .icon-button {
+  outline: 2px solid var(--pink);
+  outline-offset: 2px;
+}
+.icon-button svg,
+.send svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ask-chip {
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ai);
+  background: var(--ai-bg);
+  border: 0;
+  border-radius: 999px;
+  padding: 0.25rem 0.75rem;
+  cursor: pointer;
+}
+.ask-chip:hover {
+  background: #ebe1f3;
+}
+.send {
+  display: grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 0;
+  border-radius: 50%;
+  background: var(--pink-soft);
+  color: var(--pink-deep);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.composer:has(textarea:not(:placeholder-shown)) .send,
+.composer:has(.picked:not([hidden])) .send {
+  background: var(--pink);
+  color: #fff;
+}
+.send[aria-disabled="true"] {
+  cursor: progress;
+  opacity: 0.7;
+}
+.picked {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+}
+.picked li {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.25rem 0.1rem 0.65rem;
+  border-radius: 0.5rem;
+  background: var(--wash);
+  font-size: 0.85rem;
+}
+.picked button {
+  font: inherit;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 0.35rem;
+  cursor: pointer;
+}
+.picked button:hover {
+  background: var(--line);
+}
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.35rem;
+}
+.attachments a {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.6rem;
+  background: var(--bg);
+  color: var(--pink-deep);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+.attachments a:hover {
+  background: var(--blush);
+}
+.thinking {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  color: var(--ai);
+  font-size: 0.9rem;
+}
+.thinking::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ai);
+  animation: breathe 1.2s ease-in-out infinite;
+}
+.message-actions {
+  position: absolute;
+  top: -0.55rem;
+  right: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.05rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.message:hover .message-actions,
+.message:focus-within .message-actions {
+  opacity: 1;
+}
+.message-actions.is-suggested {
+  position: static;
+  flex-wrap: wrap;
+  width: fit-content;
+  margin-top: 0.4rem;
+  opacity: 1;
+}
+@media (hover: none) {
+  .message-actions,
+  .message.mine .message-actions {
+    position: static;
+    width: fit-content;
+    margin-top: 0.3rem;
+    opacity: 1;
+  }
+}
+
+/* Directives */
+.directive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  align-items: center;
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--pink-soft);
+  border-radius: 0.75rem;
+  background: var(--blush);
+  font-size: 0.925rem;
+}
+.directive > strong {
+  color: var(--pink-deep);
+  font-weight: 600;
+}
+.directive-status {
+  font-size: 0.875rem;
+  color: var(--muted);
+}
+.directive-status:focus {
+  outline: none;
+}
+.pinned {
+  flex: none;
+  max-height: 30%;
+  overflow-y: auto;
+  padding: 0.75rem clamp(1rem, 3vw, 2rem);
+  border-bottom: 1px solid var(--line);
+}
+.pinned-title {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 0.4rem;
+}
+.pinned-list {
+  display: grid;
+  gap: 0.4rem;
+}
+.pinned-item .directive {
+  margin-top: 0;
+}
+.directive-text {
+  flex: 1 1 14rem;
+  font-weight: 500;
+}
+.pin-quote {
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.7rem;
+  background: var(--blush);
+  white-space: pre-wrap;
+}
+.admin-list {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.admin-row,
+.admin-new {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+}
+.admin-name {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.admin-new h3 {
+  font-size: 1rem;
+  font-weight: 500;
+}

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createHub } from "../../server/sse.js";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
-import { assertError, startDemo } from "./helpers.js";
+import { assertError, startDemo, cookieAt } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
@@ -12,7 +12,7 @@ const PR_HEAD = `user-pr-head@${ID}`;
 async function listen(t, base, as) {
   const controller = new AbortController();
   const res = await fetch(`${base}/api/stream`, {
-    headers: { cookie: `huddle_user=${encodeURIComponent(as)}` },
+    headers: { cookie: cookieAt(base, as) },
     signal: controller.signal,
   });
   t.after(() => controller.abort());

@@ -30,6 +30,7 @@ export function canView(role, resource) {
 export function canPost(role, group) {
   if (!inSameEvent(role, group)) return false;
   if (isManager(role) || role?.kind === "agent") return true;
+  if (role?.kind === "vendor") return isMember(role, group);
   if (role?.kind !== "core" || !isMember(role, group) || group.kind === "announcements") {
     return false;
   }

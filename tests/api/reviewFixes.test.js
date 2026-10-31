@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { getTemplate } from "../../server/core/templates.js";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
-import { assertError, startDemo } from "./helpers.js";
+import { assertError, startDemo, cookieAt } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const PR_HEAD = `user-pr-head@${ID}`;
@@ -190,13 +190,13 @@ describe("choosing how to close the gap", () => {
     const { call, store } = await startDemo(t);
     const { changeId, consequences } = await over(call);
     assert.ok(consequences.shortfall.highMinor > 0);
-    const res = await accept(call, changeId, { cuts: ["pr"] });
+    const res = await accept(call, changeId, { cuts: ["reveal"] });
     const { budget } = await res.json();
     assert.equal(budget.guestCount, 250);
     assert.ok(budget.remainingMinor >= 0, "the gap is closed");
-    const option = consequences.options.find(({ categoryId }) => categoryId === "pr");
+    const option = consequences.options.find(({ categoryId }) => categoryId === "reveal");
     assert.equal(
-      budget.categories.find(({ id }) => id === "pr").committedMinor,
+      budget.categories.find(({ id }) => id === "reveal").committedMinor,
       option.atHigh.newTotalMinor,
     );
     assert.equal(store.budgets.get(ID).totalMinor, 160000000);
@@ -324,7 +324,7 @@ describe("judge's fixes", () => {
     }
   });
 
-  it("tells #announcements when the date moves", async (t) => {
+  it("tells Announcements when the date moves", async (t) => {
     const { call, store } = await startDemo(t);
     await call(`/events/${ID}/reschedule`, {
       as: MANAGER,
@@ -489,7 +489,7 @@ describe("security review of phases 5 and 6", () => {
     form.append("files", new Blob([PDF]), "quo’te 中.pdf");
     const res = await fetch(`${base}/api/groups/g-${ID}-core-team/messages`, {
       method: "POST",
-      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      headers: { cookie: cookieAt(base, MANAGER) },
       body: form,
     });
     const { message } = await res.json();
@@ -516,7 +516,7 @@ describe("security review of phases 5 and 6", () => {
     form.append("files", new Blob([PDF]), "one-too-many.pdf");
     const res = await fetch(`${base}/api/groups/g-${ID}-core-team/messages`, {
       method: "POST",
-      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      headers: { cookie: cookieAt(base, MANAGER) },
       body: form,
     });
     await assertError(res, 413, "PAYLOAD_TOO_LARGE");
@@ -565,7 +565,7 @@ describe("security review of phases 5 and 6", () => {
     t.mock.method(console, "error", () => {});
     const res = await fetch(`${base}/api/events/${ID}/quotes`, {
       method: "POST",
-      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      headers: { cookie: cookieAt(base, MANAGER) },
       body: form,
     });
     assert.equal(res.status, 500);

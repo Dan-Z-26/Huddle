@@ -1,80 +1,22 @@
-import {
-  agentPrompt,
-  generate as realGenerate,
-  generateOrDemo,
-  wrapUntrusted,
-} from "../llm/index.js";
+import { generate as realGenerate, generateOrDemo } from "../llm/index.js";
 import { missingProfileFields } from "../core/profile.js";
-import { demoExtract } from "./discoveryDemo.js";
+import { buildMessage, SYSTEM } from "./discoveryPrompt.js";
+import { demoExtract, directExtract } from "./discoveryDemo.js";
 import { groundedOr } from "./grounded.js";
 import { applyExtracted, resolveGuests } from "./profileMerge.js";
-import { guestConfirmation, questionFor } from "./questions.js";
+import { cleanOptions, guestConfirmation, optionsFor, questionFor } from "./questions.js";
 import { discoveryOutput, extraction } from "./schemas.js";
 import { buildTools } from "./tools.js";
 
 const SKIPPABLE = new Set(["mustHaves", "absoluteMustHave", "constraints", "vendorNeeds"]);
-const NONE = /^\s*(?:none|no|nothing|nope|nil|n\/a|skip|not really)\b/i;
+// The whole reply, so a must-have like "No alcohol" isn't taken for a skip.
+const NONE =
+  /^\s*(?:none|no|nothing|nope|nil|n\/a|skip(?: for now| it| this)?|not really)(?:,?\s*thanks)?\s*[.!]?\s*$/i;
 const MAX_ANSWER = 2000;
+const MAX_PURPOSE = 500;
 const INTAKE_TOOLS = new Set(["parse_guest_count", "missing_profile_fields"]);
 
-const SYSTEM = agentPrompt({
-  role:
-    "You are the Discovery agent of Huddle, a warm, practical event planner who listens. You " +
-    "help an organiser describe their event, one question at a time. A good event fits the " +
-    "organiser, the planner and the guests; it is not the most expensive one.",
-  steps: [
-    "understand the answer",
-    "check the profile and constraints so far",
-    "check the priorities and must-haves",
-    "use a tool for any number you need",
-    "use only tool results",
-    "write the output",
-  ],
-  rules: [
-    "Extract only what the user actually said. Never invent values and never do arithmetic.",
-    "Copy dates and money exactly as the user wrote them (date, budgetText, guestText); code " +
-      "parses them.",
-    "Priorities: only the category ids you are given, in exactly the order the user ranked " +
-      "them. Never assume a ranking.",
-    "If the user says none or skip for an optional field, set skipped to true.",
-    "Set nextField to the first field in the missing list that is still unanswered after this " +
-      "answer, and write nextQuestion as one short, friendly question about that field only.",
-  ],
-});
-
-function summarise(profile) {
-  const { guests, budget, mustHaves, constraints, vendorNeeds, priorities } = profile;
-  const filled = ["name", "purpose", "date", "city", "venueType", "attendeeExperience"]
-    .filter((key) => profile[key])
-    .map((key) => [key, profile[key]]);
-  return JSON.stringify({
-    ...Object.fromEntries(filled),
-    guests: guests.confirmed ?? (guests.max ? `${guests.min}-${guests.max}` : undefined),
-    budget: budget.totalMinor ? "set" : undefined,
-    priorities,
-    mustHaves: mustHaves.map(({ text }) => text),
-    constraints,
-    vendorNeeds,
-  });
-}
-
-function buildMessage({ profile, template, field, answer, missing }) {
-  const categories = template.categories.map(({ id, name, tiers }) => ({
-    id,
-    name,
-    tiers: tiers.map((tier) => tier.id),
-  }));
-  return [
-    `Event type: ${template.eventType}`,
-    `Field being answered: ${field}`,
-    `Missing fields in order: ${missing.join(", ")}`,
-    `Categories: ${JSON.stringify(categories)}`,
-    wrapUntrusted("profile so far", summarise(profile)),
-    wrapUntrusted("user answer", answer),
-  ].join("\n");
-}
-
-async function extractWithModel(input, generate, nowIso) {
+async function extractWithModel(input, generate, nowIso, { useTools = true } = {}) {
   const { profile, template } = input;
   const demoOutput = () => {
     // A long reply can overflow a field's length cap; read nothing from it rather than fail.
@@ -84,12 +26,14 @@ async function extractWithModel(input, generate, nowIso) {
       rationale: "I read your answer with simple rules.",
     };
   };
-  const tools = buildTools({
-    actor: { kind: "manager", eventId: profile.id },
-    profile,
-    template,
-    nowIso,
-  }).filter(({ name }) => INTAKE_TOOLS.has(name));
+  const tools = useTools
+    ? buildTools({
+        actor: { kind: "manager", eventId: profile.id },
+        profile,
+        template,
+        nowIso,
+      }).filter(({ name }) => INTAKE_TOOLS.has(name))
+    : [];
   const { data } = await generateOrDemo(generate, {
     agent: "discovery",
     system: SYSTEM,
@@ -138,14 +82,17 @@ const valueOf = (profile, key) =>
  * Takes the user's answer to the current intake question, updates the EventProfile and returns the
  * next question. Which field is next, guest-count confirmation and all parsing are done in code;
  * the model only reads free text and words the next question. The caller stores the new profile.
- * @param {{profile: object, template: object, answer?: string, nowIso?: string}} input The profile
- *   so far, the event template, the answer (omit it to get the first question) and the current time.
+ * @param {{profile: object, template: object, answer?: string, mode?: "opening" | "direct",
+ *   nowIso?: string}} input The profile so far, the event template, the answer (omit it to get the
+ *   first question), how it was given, and the current time. "opening" is a free description of the
+ *   whole event; "direct" is a tapped or picked answer, which needs no model.
  * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
- * @returns {Promise<{nextQuestion: string, feedback: string, field: string | null, extracted: object, rejected: object[],
- *   complete: boolean, rationale: string, profile: object}>} The result.
+ * @returns {Promise<{nextQuestion: string, feedback: string, field: string | null, options: string[],
+ *   remaining: number, heard: string[], extracted: object, rejected: object[], complete: boolean,
+ *   rationale: string, profile: object}>} The result.
  */
 export async function nextStep(
-  { profile, template, answer, nowIso = new Date().toISOString() },
+  { profile, template, answer, mode, nowIso = new Date().toISOString() },
   { generate = realGenerate } = {},
 ) {
   const field = missingProfileFields(profile)[0] ?? null;
@@ -155,7 +102,28 @@ export async function nextStep(
   let rationale = "Let's start with the basics.";
   let model = null;
 
-  if (typeof answer === "string" && field) {
+  const opening = mode === "opening" && typeof answer === "string";
+  if (opening) {
+    const text = answer.slice(0, MAX_ANSWER);
+    model = await extractWithModel(
+      { profile: working, template, field: "opening", answer: text },
+      generate,
+      nowIso,
+      { useTools: false },
+    );
+    // Anything unusable here is simply asked for in its turn, so nothing is refused out loud.
+    ({ profile: working, accepted } = applyExtracted(working, model.extracted, {
+      template,
+      nowIso,
+      answer: text,
+      field: "opening",
+    }));
+    // Their description is what the event is about, even if the model didn't lift a purpose out.
+    if (!working.purpose) working.purpose = text.trim().slice(0, MAX_PURPOSE);
+    const options = cleanOptions(model.options, template);
+    if (Object.keys(options).length) working.suggestedOptions = options;
+    rationale = groundedOr(model.rationale, "", rationale);
+  } else if (typeof answer === "string" && field) {
     const text = answer.slice(0, MAX_ANSWER);
     if (field === "guests") {
       const result = resolveGuests(working, text);
@@ -168,6 +136,16 @@ export async function nextStep(
       working.skippedFields = [...new Set([...working.skippedFields, field])];
       accepted = [field];
       rationale = "Okay, we'll leave that for now.";
+    } else if (mode === "direct") {
+      ({
+        profile: working,
+        accepted,
+        rejected,
+      } = applyExtracted(
+        working,
+        directExtract({ profile: working, template, field, answer: text }),
+        { template, nowIso, answer: text, field },
+      ));
     } else {
       model = await extractWithModel(
         { profile: working, template, field, answer: text },
@@ -187,7 +165,7 @@ export async function nextStep(
   const missing = missingProfileFields(working);
   const nextField = missing[0] ?? null;
   const complete = nextField === null;
-  const progressed = accepted.length > 0 || answer === undefined;
+  const progressed = accepted.length > 0 || answer === undefined || opening;
   const nextQuestion = complete
     ? "That's everything I need. Check the summary and confirm to create your workspace."
     : chooseQuestion({
@@ -204,6 +182,9 @@ export async function nextStep(
     nextQuestion,
     feedback,
     field: nextField,
+    options: complete ? [] : optionsFor(nextField, working, template),
+    remaining: missing.length,
+    heard: opening ? accepted : [],
     extracted,
     rejected,
     complete,

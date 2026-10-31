@@ -7,6 +7,7 @@ import {
   generateOrDemo,
   wrapUntrusted,
 } from "../llm/index.js";
+import { advise } from "./advisor.js";
 import { interpretChange } from "./budget.js";
 import { categoriesMentioned } from "./discoveryDemo.js";
 import { groundedOr, isGrounded } from "./grounded.js";
@@ -26,6 +27,8 @@ const DELEGATE = {
   vendor_help: "vendor",
   timeline: "timeline",
   ideas: "ideas",
+  advice: "planner",
+  vendor_brief: "vendor",
   question: null,
 };
 
@@ -38,8 +41,9 @@ const PLANNER_SYSTEM = agentPrompt({
   rules: [
     "Intents: budget_change (guests, budget, costs, swapping items), vendor_help (vendor " +
       "checklist, RFQ questions, quotes), timeline (tasks, deadlines, what is due or at risk), " +
-      "ideas (suggestions, themes), question (anything else).",
-    "For vendor_help set categoryId to one of the listed category ids when the message names " +
+      "ideas (suggestions, themes), advice (what to do next, what needs attention), vendor_brief " +
+      "(hiring a vendor, drafting a brief), question (anything else).",
+    "For vendor_help and vendor_brief set categoryId to one of the listed category ids when the message names " +
       "one, otherwise null.",
     "Set suggestDirective to true only when the message is an instruction with a deadline that " +
       "the manager may want to pin.",
@@ -140,6 +144,18 @@ async function ideasReply(input, deps) {
   };
 }
 
+async function adviceReply(input, deps) {
+  if (!canSeeBudget(input.actor, "total"))
+    return { reply: "What to do next depends on the budget, so please ask the event manager." };
+  const result = await advise(input, deps);
+  return {
+    reply: result.items.length
+      ? `What I'd do next:\n${bullet(result.items.map(({ title, why }) => `${title}: ${why}`))}`
+      : result.summary,
+    result,
+  };
+}
+
 /**
  * Handles an @huddle message: reads what it asks for, hands it to the right agent and returns the
  * reply to post in the same group. The caller posts it and stores any budget change the user accepts.
@@ -178,6 +194,9 @@ export async function handleMention(input, deps = {}) {
     vendor_help: () => vendorReply(call, plan, { generate }),
     timeline: async () => ({ reply: (await digest(call, { generate })).digestText }),
     ideas: () => ideasReply(call, { generate }),
+    advice: () => adviceReply(call, { generate }),
+    // Saving a brief belongs to the route, which knows who is asking and in which group.
+    vendor_brief: async () => ({ reply: "", result: { categoryId: plan.categoryId ?? null } }),
     question: async () => ({
       reply: groundedOr(plan.reply, `${context} ${text}`, HELP),
     }),

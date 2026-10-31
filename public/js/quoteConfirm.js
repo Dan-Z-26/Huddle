@@ -9,6 +9,13 @@ const ANSWERS = [
   ["dietary", "confirm-dietary"],
 ];
 
+const LABEL = {
+  staffing: "staffing",
+  setupHours: "setup time",
+  cancellationTerms: "cancellation terms",
+  dietary: "dietary handling",
+};
+
 const priceText = (minor) => (minor ? formatMoney(minor) : "");
 
 /**
@@ -26,13 +33,32 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
       : "Change anything that is wrong, then confirm.";
   const list = $("confirm-warnings");
   clear(list);
-  for (const warning of warnings) list.append(el("li", { text: warning }));
+  const notStated = [
+    ...(quote.taxStated === false ? ["taxes"] : []),
+    ...ANSWERS.filter(([key]) => quote.answers && !quote.answers[key]).map(([key]) => LABEL[key]),
+  ];
+  const shown = [
+    ...warnings,
+    ...(quote.status === "extracted" && notStated.length
+      ? [`Not stated in the quote: ${notStated.join(", ")}`]
+      : []),
+  ];
+  for (const warning of shown) list.append(el("li", { text: warning }));
+  const sources = Object.entries(quote.sources ?? {}).filter(([, text]) => text);
+  $("confirm-sources-box").hidden = sources.length === 0;
+  $("confirm-sources-box").open = sources.length > 0;
+  const quoted = $("confirm-sources");
+  clear(quoted);
+  for (const [key, text] of sources) quoted.append(el("li", { text: `${key}: "${text}"` }));
   $("confirm-vendor").value = quote.vendorName ?? "";
   $("confirm-per-guest").value = priceText(quote.perGuestMinor);
   $("confirm-fixed").value = priceText(quote.fixedMinor);
   $("confirm-tax").value = quote.taxBps ? String(quote.taxBps / 100) : "";
   $("confirm-includes").value = (quote.includes ?? []).join(", ");
   for (const [key, id] of ANSWERS) $(id).value = quote.answers?.[key] ?? "";
+  $("confirm-exclusions").value = (quote.exclusions ?? []).join(", ");
+  $("confirm-min-guests").value = quote.minGuests ?? "";
+  $("confirm-valid").value = quote.validUntil ?? "";
 
   const musts = $("confirm-musts");
   musts.replaceChildren(musts.querySelector("legend"));
@@ -47,12 +73,16 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
   }
   $("confirm-error").textContent = "";
 
+  dialog.onclose = () => {
+    if (document.activeElement === document.body) $("vendors-title").focus();
+  };
   $("confirm-cancel").onclick = () => dialog.close();
   $("confirm-form").onsubmit = async (e) => {
     e.preventDefault();
     const field = (id) => $(id).value.trim();
     const answers = Object.fromEntries(ANSWERS.map(([key, id]) => [key, field(id) || null]));
     const tax = field("confirm-tax");
+    const minGuests = Number(field("confirm-min-guests"));
     try {
       await api.confirmQuote(quote.id, {
         vendorName: field("confirm-vendor"),
@@ -63,6 +93,12 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
+        exclusions: field("confirm-exclusions")
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        ...(Number.isInteger(minGuests) && minGuests > 0 ? { minGuests } : {}),
+        validUntil: field("confirm-valid"),
         mustHaveIdsMet: [...musts.querySelectorAll("input:checked")].map((box) => box.value),
         answers,
       });

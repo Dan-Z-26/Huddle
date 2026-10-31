@@ -26,7 +26,7 @@ describe("noticeTargets", () => {
     assert.deepEqual(slugs, ["food-beverage"]);
   });
 
-  it("sends an unmapped category to #core-team", () => {
+  it("sends an unmapped category to Core team", () => {
     const targets = noticeTargets({ deltas: [{ categoryId: "mystery" }], categoryGroupMap: map });
     assert.deepEqual(targets, [{ slug: "core-team", categoryIds: ["mystery"] }]);
   });
@@ -66,7 +66,7 @@ describe("noticeFacts", () => {
   });
 
   it("leaves amounts out when a core member of the group doesn't own the category", () => {
-    // #core-team includes the PR head, who doesn't own gifting.
+    // Core team includes the PR head, who doesn't own gifting.
     assert.deepEqual(facts(["gifting"], null, "core-team"), ["Gifting cost has changed."]);
   });
 
@@ -76,7 +76,7 @@ describe("noticeFacts", () => {
 });
 
 describe("word", () => {
-  const input = { facts: ["Guest count is now 250 (it was 200)."], groupName: "#food-beverage" };
+  const input = { facts: ["Guest count is now 250 (it was 200)."], groupName: "Food & beverage" };
 
   it("states the facts plainly in demo mode", async () => {
     const result = await word(input, { generate: demoGenerate });

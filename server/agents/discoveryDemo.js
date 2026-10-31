@@ -1,4 +1,5 @@
 import { parseEventDate } from "../core/dateText.js";
+import { categoryOfOption } from "./questions.js";
 
 // Long enough for any profile field, short enough to keep the patterns fast.
 const MAX_ANSWER = 500;
@@ -65,15 +66,35 @@ function vendorNeedsFrom(answer, profile, template) {
   return Object.fromEntries(targets.map((id) => [id, answer.trim().slice(0, 300)]));
 }
 
+const MONEY =
+  /(?:₹|\brs\.?\s*|\binr\s*)\s*\d[\d,.]*(?:\s*(?:lakhs?|lacs?|crores?|cr|k)\b)?|\b\d[\d,.]*\s*(?:lakhs?|lacs?|crores?|cr)\b/i;
+const GUESTS =
+  /(?:\b(?:around|about|roughly|maybe|approximately)\s+)?\b\d[\d,]*(?:\s*(?:-|–|to)\s*\d[\d,]*)?\s*(?:guests?|people|pax|attendees)\b/i;
+
 // Details the user volunteered while answering something else, so the agent can skip those questions.
 function volunteered(field, answer) {
   const extra = {};
   if (field !== "date" && parseEventDate(answer)) extra.date = answer;
-  if (field !== "budget" && /₹|\brs\.?\s*\d|\binr\b|lakh|crore/i.test(answer))
-    extra.budgetText = answer;
-  const guests = answer.match(/\b\d[\d,]*\s*(?:guests?|people|pax|attendees)\b/i);
+  const money = field === "budget" ? null : answer.match(MONEY);
+  if (money) extra.budgetText = money[0];
+  const guests = answer.match(GUESTS);
   if (guests) extra.guestText = guests[0];
   return extra;
+}
+
+const NOT_A_CITY = /^(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i;
+const NAMED = /\b(?:called|named)\s+["“']?(.{2,60}?)(?=["”']|\s+(?:in|on|at|for|with)\b|[.,]|$)/i;
+
+// An opening description: whatever plain patterns can find, and the words themselves as the purpose.
+function openingFrom(text) {
+  const city = text.match(/\b(?:in|at)\s+(\p{Lu}\p{L}+)/u)?.[1];
+  const name = text.match(NAMED)?.[1]?.trim();
+  return {
+    ...volunteered("opening", text),
+    purpose: text,
+    ...(city && !NOT_A_CITY.test(city) ? { city } : {}),
+    ...(name ? { name } : {}),
+  };
 }
 
 /**
@@ -85,6 +106,7 @@ function volunteered(field, answer) {
  */
 export function demoExtract({ field, answer, profile, template }) {
   const text = answer.trim().slice(0, MAX_ANSWER);
+  if (field === "opening") return openingFrom(text);
   const byField = {
     date: { date: text },
     budget: { budgetText: text },
@@ -96,4 +118,40 @@ export function demoExtract({ field, answer, profile, template }) {
   };
   const own = byField[field] ?? { [field]: text };
   return { ...volunteered(field, text), ...own };
+}
+
+const lines = (answer) =>
+  answer
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+/**
+ * Reads an answer the user tapped or picked rather than typed, so no model is needed. A list arrives
+ * one item per line: a must-have like "Food and drinks" stays whole, and a ranking arrives as ids.
+ * @param {{field: string, answer: string, profile: object, template: object}} input The question
+ *   being answered, the answer, and the context.
+ * @returns {object} An object shaped like the extraction schema.
+ */
+export function directExtract({ field, answer, profile, template }) {
+  const text = answer.trim();
+  const items = lines(text);
+  const byField = {
+    date: { date: text },
+    budget: { budgetText: text },
+    priorities: { priorities: items },
+    mustHaves: {
+      mustHaves: items.map((item) => ({
+        text: item,
+        categoryId:
+          categoryOfOption(item, profile, template) ??
+          categoriesMentioned(item, template)[0] ??
+          null,
+      })),
+    },
+    absoluteMustHave: { absoluteMustHave: text },
+    constraints: { constraints: constraintsFrom(items.join("\n")) },
+    vendorNeeds: { vendorNeeds: vendorNeedsFrom(text, profile, template) },
+  };
+  return byField[field] ?? { [field]: text };
 }

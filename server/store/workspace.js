@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { mentionsMoney } from "../core/amount.js";
+import { contingencyOf } from "../core/budgetEngine.js";
 import { buildBudgetState, emptyProfile } from "../core/profile.js";
 import { getTemplate } from "../core/templates.js";
 import { planTimeline } from "../core/timelinePlanner.js";
@@ -28,7 +29,7 @@ export function createEvent(store, { eventType, id = randomUUID().slice(0, 8), p
 
 /**
  * Builds the workspace once intake is complete: groups from the template, the budget, the
- * backward-planned timeline, and a welcome post from the Planner in #announcements.
+ * backward-planned timeline, and a welcome post from the Planner in Announcements.
  * @param {object} store The store.
  * @param {object} event A profile with a confirmed guest count and a date.
  * @param {string} nowIso The current time.
@@ -133,6 +134,7 @@ export function postAgentMessage(
  * @param {string} eventId The event.
  */
 export function deleteEvent(store, eventId) {
+  store.adviceCache.delete(eventId);
   const groupIds = new Set(
     [...store.groups.values()].filter((group) => group.eventId === eventId).map(({ id }) => id),
   );
@@ -142,6 +144,7 @@ export function deleteEvent(store, eventId) {
     [store.users, inEvent],
     [store.tasks, inEvent],
     [store.quotes, inEvent],
+    [store.expenses, inEvent],
     [store.pendingChanges, inEvent],
     [store.groups, inEvent],
     [store.messages, inGroup],
@@ -157,7 +160,7 @@ export function deleteEvent(store, eventId) {
 }
 
 /**
- * Removes a group with its messages, directives and files. Tasks it owned move to #core-team.
+ * Removes a group with its messages, directives and files. Tasks it owned move to Core team.
  * @param {object} store The store.
  * @param {object} group The group.
  * @returns {object[]} The removed file records, so the caller can delete them from disk.
@@ -177,4 +180,39 @@ export function deleteGroup(store, group) {
   }
   store.groups.delete(group.id);
   return files;
+}
+
+/** An event's expenses, oldest first. */
+export const eventExpenses = (store, eventId) =>
+  [...store.expenses.values()].filter((expense) => expense.eventId === eventId);
+
+/**
+ * Records money actually spent. An expense paid from the buffer also uses up the buffer, which
+ * replaces the budget object, so any change still being previewed has to be asked again.
+ * @param {object} store The store.
+ * @param {{eventId: string, description: string, amountMinor: number, categoryId: string | null,
+ *   fromBuffer: boolean, createdById: string}} fields The expense; the caller has validated it.
+ * @param {string} nowIso The current time.
+ * @returns {object} The stored expense.
+ */
+export function addExpense(store, fields, nowIso) {
+  const expense = { id: `x-${randomUUID().slice(0, 8)}`, ...fields, createdAt: nowIso };
+  store.expenses.set(expense.id, expense);
+  if (expense.fromBuffer) adjustBufferSpend(store, expense.eventId, expense.amountMinor);
+  return expense;
+}
+
+/** Removes an expense, giving back to the buffer what it had paid. */
+export function removeExpense(store, expense) {
+  store.expenses.delete(expense.id);
+  if (expense.fromBuffer) adjustBufferSpend(store, expense.eventId, -expense.amountMinor);
+}
+
+function adjustBufferSpend(store, eventId, deltaMinor) {
+  const state = store.budgets.get(eventId);
+  const { reservedMinor, spentMinor } = contingencyOf(state);
+  store.budgets.set(eventId, {
+    ...state,
+    contingency: { reservedMinor, spentMinor: spentMinor + deltaMinor },
+  });
 }

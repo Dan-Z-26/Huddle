@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { allocate, computeBudget } from "../../server/core/budgetEngine.js";
+import { parseAmount } from "../../server/core/amount.js";
+import { parseGuestCount } from "../../server/core/guestCount.js";
+import { allocate, computeBudget, DEFAULT_BUFFER_BPS } from "../../server/core/budgetEngine.js";
+import { shareOfBps } from "../../server/core/money.js";
 import { buildBudgetState } from "../../server/core/profile.js";
 import { planTimeline } from "../../server/core/timelinePlanner.js";
 import { getTemplate, groupsForCategory, listEventTypes } from "../../server/core/templates.js";
@@ -80,7 +83,24 @@ for (const eventType of EVENT_TYPES) {
       assert.ok(template.groups.every(({ kind }) => kind !== "vendor"));
     });
 
-    it("puts every role in #announcements", () => {
+    it("offers usable answer buttons for setup", () => {
+      const { intakeOptions: options, categories } = template;
+      for (const field of ["purpose", "city", "venueType", "attendeeExperience", "constraints"])
+        assert.ok(options[field].length >= 3, field);
+      for (const text of options.guests)
+        assert.equal(parseGuestCount(text).needsConfirmation, false);
+      for (const text of options.budget) assert.ok(parseAmount(text).minor > 0, text);
+      const ids = categories.map(({ id }) => id);
+      for (const { categoryId } of options.mustHaves)
+        assert.ok(ids.includes(categoryId), categoryId);
+    });
+
+    it("gives every group a readable name, with no # or slug showing", () => {
+      for (const { name } of template.groups) assert.match(name, /^[A-Z][^#]*$/);
+      assert.ok(template.groups.every(({ name, slug }) => name !== slug));
+    });
+
+    it("puts every role in Announcements", () => {
       const announcements = template.groups.find(({ slug }) => slug === "announcements");
       for (const { id } of template.roles) assert.ok(announcements.memberRoleIds.includes(id), id);
     });
@@ -247,6 +267,18 @@ describe("groupsForCategory", () => {
   });
 });
 
+describe("usual shares", () => {
+  for (const eventType of EVENT_TYPES) {
+    it(`${eventType} adds up to the whole budget`, () => {
+      const shares = getTemplate(eventType).categories.map(({ typicalBps }) => typicalBps);
+      assert.equal(
+        shares.reduce((sum, share) => sum + share, 0),
+        10000,
+      );
+    });
+  }
+});
+
 describe("opening budget follows the user's ranking", () => {
   for (const eventType of EVENT_TYPES) {
     it(`${eventType} spends each category's allocation, in either ranking order`, () => {
@@ -255,7 +287,8 @@ describe("opening budget follows the user's ranking", () => {
       const ids = template.categories.map(({ id }) => id);
       for (const priorities of [ids, ids.toReversed()]) {
         const profile = { ...profileFor(template, 200, total), priorities };
-        const allocation = allocate(total, priorities);
+        const planned = total - shareOfBps(total, DEFAULT_BUFFER_BPS);
+        const allocation = allocate(planned, template.categories, priorities);
         for (const row of computeBudget(buildBudgetState(profile, template)).categories) {
           const unspent = allocation[row.id] - row.committedMinor;
           assert.ok(unspent >= 0 && unspent < 10000, `${row.id} unspent ${unspent}`);

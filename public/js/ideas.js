@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { announce, clear, el } from "./dom.js";
+import { announce, announceError, clear, el } from "./dom.js";
 import { generation, isCurrent } from "./session.js";
 
 const $ = (id) => document.getElementById(id);
@@ -42,7 +42,7 @@ export function setUpIdeas(eventId) {
       $("ideas").hidden = false;
       $("ideas").focus();
     } catch (err) {
-      announce(err.message);
+      announceError(err.message);
     } finally {
       button.disabled = false;
       button.textContent = "Suggest ideas for this event";

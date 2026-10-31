@@ -44,9 +44,10 @@ export function startLive(ctx) {
     }
     renderTimeline(tasks);
   });
-  const refetchTimeline = once(async () =>
-    renderTimeline((await api.timeline(latest.eventId)).tasks),
-  );
+  const refetchTimeline = once(async () => {
+    // A vendor has no timeline; their own page only needs their deliverables.
+    if (!latest.isVendor) renderTimeline((await api.timeline(latest.eventId)).tasks);
+  });
   const refetchAttention = once(async () =>
     renderAttention((await api.me()).attention, latest.openGroup),
   );

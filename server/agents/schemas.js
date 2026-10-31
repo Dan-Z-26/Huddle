@@ -102,6 +102,19 @@ export const discoveryOutput = z.object({
   extracted: extraction,
   nextField: short(40).optional(),
   nextQuestion: short(300).optional(),
+  options: z
+    .object({
+      name: list,
+      purpose: list,
+      venueType: list,
+      attendeeExperience: list,
+      mustHaves: z
+        .array(z.object({ text: short(120), categoryId: short(60).nullable().optional() }))
+        .max(10)
+        .optional(),
+      constraints: list,
+    })
+    .optional(),
   rationale: short(300),
 });
 
@@ -137,6 +150,10 @@ export const quoteExtraction = z.object({
     fixedText: short(80).optional(),
     taxPercent: z.number().min(0).max(100).optional(),
     includes: z.array(short(120)).max(15).optional(),
+    exclusions: z.array(short(120)).max(15).optional(),
+    minGuests: z.int().min(1).max(100000).optional(),
+    validUntil: short(80).optional(),
+    sources: z.record(short(40), short(160)).optional(),
     mustHaveIdsMet: z.array(short(60)).max(10).optional(),
     answers: z
       .object({
@@ -179,7 +196,26 @@ export const ideasOutput = z.object({
   rationale: short(300),
 });
 
-export const INTENTS = ["budget_change", "vendor_help", "timeline", "ideas", "question"];
+export const INTENTS = [
+  "budget_change",
+  "vendor_help",
+  "timeline",
+  "ideas",
+  "advice",
+  "vendor_brief",
+  "question",
+];
+export const briefOutput = z.object({
+  text: short(1800),
+  deliverables: z.array(short(80)).max(8),
+});
+export const declineOutput = z.object({ text: short(600) });
+
+export const adviceOutput = z.object({
+  items: z.array(z.object({ signalId: short(80), title: short(80), why: short(300) })).max(6),
+  rationale: short(300).optional(),
+});
+
 export const plannerOutput = z.object({
   intent: z.enum(INTENTS),
   categoryId: short(60).nullable().optional(),

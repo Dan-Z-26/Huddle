@@ -2,14 +2,37 @@ import { Router } from "express";
 import { attentionFor } from "../core/directives.js";
 import { canManageGroups, canMarkDirective, canSeeBudget, canView } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
-import { HttpError, readUserId, requireUser, setUserCookie, validate } from "../http.js";
+import {
+  createAiLimiter,
+  HttpError,
+  readSessionId,
+  requireUser,
+  sessionOf,
+  startSession,
+  validate,
+} from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
-import { publicUser } from "./views.js";
-import { viewAs } from "../validation/schemas.js";
+import { noMoneyForVendor, publicUser } from "./views.js";
+import { signIn } from "../validation/schemas.js";
 
-function roleNames(store, eventId) {
-  const { roles } = getTemplate(store.events.get(eventId).eventType);
-  return new Map(roles.map(({ id, name }) => [id, name]));
+// A person's role in words. A vendor isn't one of the template's roles.
+function roleNameOf(store, user) {
+  const template = getTemplate(store.events.get(user.eventId).eventType);
+  if (user.kind === "vendor") {
+    const category = template.categories.find(({ id }) => id === user.categoryIds[0]);
+    return `Vendor, ${category?.name ?? "booked"}`;
+  }
+  return template.roles.find(({ id }) => id === user.roleId)?.name ?? "";
+}
+
+// The demo sign-in lists the people of the event you are in, or the demo event. Whoever came in
+// through a vendor's invite link is a real outsider, so the list is closed to them.
+function signInEvent(req) {
+  const session = sessionOf(req);
+  if (process.env.DEMO_SIGNIN === "off" || session?.invited)
+    throw HttpError(403, "FORBIDDEN", "Sign-in isn't available here.");
+  const { store } = req.app.locals;
+  return (session && store.users.get(session.userId)?.eventId) ?? DEMO_EVENT_ID;
 }
 
 /**
@@ -34,17 +57,23 @@ function attentionView(store, user) {
   );
   const role = store.roleOf(user);
   // Someone removed from a group no longer sees what was pinned there.
-  const visible = directives.filter((directive) =>
-    canView(role, { type: "group", group: store.groups.get(directive.groupId) }),
+  const isVendor = user.kind === "vendor";
+  const visible = directives.filter(
+    (directive) =>
+      canView(role, { type: "group", group: store.groups.get(directive.groupId) }) &&
+      (!isVendor || store.messages.get(directive.messageId)?.createdAt >= user.joinedAt),
   );
   return {
     directives: visible.map((directive) => ({
       id: directive.id,
       groupId: directive.groupId,
       groupName: store.groups.get(directive.groupId)?.name,
-      text: (store.messages.get(directive.messageId)?.text ?? "").slice(0, 140),
+      text: (isVendor ? noMoneyForVendor : String)(
+        store.messages.get(directive.messageId)?.text ?? "",
+      ).slice(0, 140),
     })),
-    tasks: tasks.map(({ id, title, dueDate, ownerGroupId }) => ({
+    // A vendor's work is their deliverables; the team's timeline isn't shared with them.
+    tasks: (user.kind === "vendor" ? [] : tasks).map(({ id, title, dueDate, ownerGroupId }) => ({
       id,
       title,
       dueDate,
@@ -53,27 +82,38 @@ function attentionView(store, user) {
   };
 }
 
-/** Routes for choosing who to view the app as. */
+/** The demo sign-in, and who is signed in. Real authentication is future work. */
 export function sessionRoutes() {
   const router = Router();
+  const signIns = createAiLimiter({ windowMs: 60_000, max: 60 });
 
-  router.get("/users", (req, res) => {
+  router.get("/people", (req, res) => {
     const { store } = req.app.locals;
-    const eventId = store.users.get(readUserId(req))?.eventId ?? DEMO_EVENT_ID;
-    const users = [...store.users.values()].filter(
+    const eventId = signInEvent(req);
+    const people = [...store.users.values()].filter(
       (user) => user.eventId === eventId && user.kind !== "agent",
     );
-    const names = roleNames(store, eventId);
     res.json({
-      users: users.map((user) => ({ ...publicUser(user), roleName: names.get(user.roleId) })),
+      eventName: store.events.get(eventId).name,
+      isDemo: eventId === DEMO_EVENT_ID,
+      people: people.map((user) => ({ ...publicUser(user), roleName: roleNameOf(store, user) })),
     });
   });
 
-  router.post("/view-as", validate(viewAs), (req, res, next) => {
-    const user = req.app.locals.store.users.get(req.valid.body.userId);
-    if (!user || user.kind === "agent") return next(HttpError(404, "NOT_FOUND", "No such user."));
-    setUserCookie(res, user.id);
+  router.post("/session", signIns, validate(signIn), (req, res, next) => {
+    const { store } = req.app.locals;
+    const eventId = signInEvent(req);
+    const user = store.users.get(req.valid.body.userId);
+    if (!user || user.kind === "agent" || user.eventId !== eventId)
+      return next(HttpError(404, "NOT_FOUND", "No such person."));
+    store.sessions.delete(readSessionId(req));
+    startSession(res, store, user.id);
     res.json({ user: publicUser(user) });
+  });
+
+  router.post("/session/logout", (req, res) => {
+    req.app.locals.store.sessions.delete(readSessionId(req));
+    res.status(204).end();
   });
 
   router.get("/me", requireUser, (req, res) => {
@@ -82,8 +122,10 @@ export function sessionRoutes() {
       user: {
         ...publicUser(user),
         eventId: user.eventId,
+        roleName: roleNameOf(store, user),
         ...(user.kind === "core" ? { categoryIds: user.categoryIds } : {}),
       },
+      invited: req.session.invited,
       permissions: permissionsOf(store.roleOf(user)),
       attention: attentionView(store, user),
     });

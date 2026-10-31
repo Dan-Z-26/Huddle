@@ -3,8 +3,8 @@ import { MAX_MINOR } from "./money.js";
 // Only the start of a reply is read: amounts are short, and the patterns stay fast on huge input.
 const MAX_READ = 500;
 
-// Profile text is capped well below this, so nothing real is left unread.
-const MAX_MONEY_SCAN = 2000;
+// Above the longest message or brief, so nothing real is left unread.
+const MAX_MONEY_SCAN = 8000;
 const CURRENCIES = new Map([
   ["₹", "INR"],
   ["rs", "INR"],
@@ -81,6 +81,7 @@ const MONEY_WORDS =
 // Four digits are money unless they look like a year (1900 to 2099).
 const BIG_NUMBER = /\d{5,}|\d{1,3}(?:,\d{2,3})+|\b(?!(?:19|20)\d\d\b)\d{4}\b|\d\s*\/-/;
 const SHORT_AMOUNT = /\b\d+(?:\.\d+)?\s*(?:k|m|mn|cr|l|lac)\b/i;
+const RATE = /\b\d[\d,.]*\s*(?:\/|per|a)\s*(?:plate|head|guest|person|pax|hour|day)\b/i;
 const NEAR_MONEY_WORD =
   /\b(?:budget|cost|costs|spend|spending|price|fee|cap|capped)\b[^.]{0,30}\d/i;
 
@@ -92,7 +93,7 @@ const NEAR_MONEY_WORD =
  * @returns {boolean} True when the text looks like it holds an amount.
  */
 export function mentionsMoney(text) {
-  return [MONEY_WORDS, BIG_NUMBER, SHORT_AMOUNT, NEAR_MONEY_WORD].some((pattern) =>
+  return [MONEY_WORDS, BIG_NUMBER, SHORT_AMOUNT, RATE, NEAR_MONEY_WORD].some((pattern) =>
     pattern.test(String(text ?? "").slice(0, MAX_MONEY_SCAN)),
   );
 }

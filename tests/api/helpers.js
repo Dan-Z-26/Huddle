@@ -54,6 +54,36 @@ export async function assertError(res, status, code) {
 }
 
 /**
+ * A Cookie header signed in as this person, through a real server-side session.
+ * @param {object} store The store.
+ * @param {string} userId The person.
+ * @returns {string} The header value.
+ */
+export const sessionCookie = (store, userId) => `huddle_session=${store.openSession(userId)}`;
+
+const storesByBase = new Map();
+
+/** The same, for a test that only holds the server's base URL. */
+export const cookieAt = (base, userId) => sessionCookie(storesByBase.get(base), userId);
+
+// Most tests are about what comes after approval. The hiring tests clear these and go step by step.
+function approveAllBriefs(store) {
+  for (const { id: categoryId } of store.budgets.get(DEMO_EVENT_ID).categories) {
+    const id = `b-${DEMO_EVENT_ID}-${categoryId}`;
+    store.briefs.set(id, {
+      id,
+      eventId: DEMO_EVENT_ID,
+      categoryId,
+      status: "approved",
+      answers: {},
+      text: "A brief.",
+      deliverables: ["Insurance certificate", "Setup plan"],
+      note: null,
+    });
+  }
+}
+
+/**
  * Serves a store seeded with the demo event, and returns a JSON caller that acts as a given user.
  * @param {import("node:test").TestContext} t
  * @returns {Promise<{store: object, call: Function}>} The store, and `call(path, { as, method, body })`.
@@ -61,14 +91,16 @@ export async function assertError(res, status, code) {
 export async function startDemo(t) {
   const store = createStore();
   seedDemo(store, SEEDED_AT);
+  approveAllBriefs(store);
   const uploadsDir = await mkdtemp(join(tmpdir(), "huddle-test-"));
   t.after(() => rm(uploadsDir, { recursive: true, force: true }));
   const base = await serve(t, { store, uploadsDir });
+  storesByBase.set(base, store);
   const call = (path, { as, method = "GET", body } = {}) =>
     fetch(`${base}/api${path}`, {
       method,
       headers: {
-        ...(as ? { cookie: `huddle_user=${encodeURIComponent(as)}` } : {}),
+        ...(as ? { cookie: sessionCookie(store, as) } : {}),
         ...(body ? { "content-type": "application/json" } : {}),
       },
       body: body ? JSON.stringify(body) : undefined,

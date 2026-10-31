@@ -1,5 +1,10 @@
 // Offline stand-in for the Planner's intent reading: plain keyword rules, checked in this order.
 const RULES = [
+  ["vendor_brief", /\b(brief|hire|hiring|need an? (?:\w+ )?vendor|find an? (?:\w+ )?vendor)\b/i],
+  [
+    "advice",
+    /\b(what (?:should|do) (?:i|we) do|next steps?|what(?:'s| is) next|advice|advise|recommend\w*)\b/i,
+  ],
   ["ideas", /\b(ideas?|inspir\w*|themes?|suggest\w*|brainstorm\w*)\b/i],
   [
     "vendor_help",

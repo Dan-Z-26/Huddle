@@ -28,6 +28,7 @@ export function normaliseQuote(quote, guestCount) {
   const { perGuestMinor, fixedMinor } = quotePricesWithTax(quote);
   const missing = ANSWER_KEYS.filter((key) => quote.answers?.[key] == null);
   if (!quote.perGuestMinor && !quote.fixedMinor) missing.push("price");
+  if (quote.taxStated === false) missing.push("tax");
   return { totalMinor: perGuestMinor * guestCount + fixedMinor, missing };
 }
 

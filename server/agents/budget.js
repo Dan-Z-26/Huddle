@@ -72,7 +72,7 @@ function estimatesOf(events) {
 
 async function askModel(input, generate, nowIso) {
   const { profile, state, actor, template, text } = input;
-  const facts = budgetFacts(state, profile);
+  const facts = budgetFacts(state, profile, input.expenses);
   const demo = async () => budgetOutput.parse(demoBudget({ text, template, facts }));
   const tools = buildTools({ actor, profile, template, state, nowIso }).filter(({ name }) =>
     BUDGET_TOOLS.has(name),
@@ -119,7 +119,8 @@ const refusal = {
  * model reads the request; code parses every amount, applies the events and writes the
  * consequences. It never recommends. The caller stores the events if the user accepts them.
  * @param {{profile: object, state: object, actor: object, text: string, template: object,
- *   nowIso?: string}} input The event, its budget, who asks, and what they said.
+ *   expenses?: object[], nowIso?: string}} input The event, its budget, who asks, what they said,
+ *   and what has been spent.
  * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
  * @returns {Promise<{allowed: boolean, changeEvents: object[], estimates: object[], answer: string,
  *   clarifyingQuestion: string | null, consequences: object | null, consequenceText: string,
@@ -145,7 +146,7 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
     answer: "",
   };
   if (events.length === 0) {
-    const facts = budgetFacts(state, profile).join(" ");
+    const facts = budgetFacts(state, profile, input.expenses).join(" ");
     const answer = questions.length === 0 ? groundedOr(data.answer, `${facts} ${text}`) : "";
     if (answer)
       return {

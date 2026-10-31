@@ -166,7 +166,7 @@ describe("taskFromDirective", () => {
     assert.equal((await run("Do it by 1 January 2027")).dueDate, "2027-01-10T00:00:00.000Z");
   });
 
-  it("owns an unspecific directive in #core-team", async () => {
+  it("owns an unspecific directive in Core team", async () => {
     assert.equal((await run("Please look into this")).ownerGroupSlug, "core-team");
   });
 

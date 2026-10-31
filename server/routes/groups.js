@@ -11,7 +11,6 @@ const MAX_GROUPS = 20;
 const slugOf = (name) =>
   name
     .toLowerCase()
-    .replace(/^#/, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 
@@ -44,7 +43,7 @@ export function groupRoutes() {
       id,
       eventId: event.id,
       slug,
-      name: `#${slug}`,
+      name: req.valid.body.name,
       kind: "category",
       memberRoleIds: membersFor(getTemplate(event.eventType), req.valid.body.memberRoleIds),
       categoryIds: [],
@@ -62,19 +61,21 @@ export function groupRoutes() {
     if (!canManageGroups(store.roleOf(req.user)))
       throw HttpError(403, "FORBIDDEN", "Only the event manager can change groups.");
     const { name, memberRoleIds } = req.valid.body;
-    // #announcements is where everyone is told things, so it keeps its members.
+    // Announcements is where everyone is told things, so it keeps its members.
     if (memberRoleIds && group.kind === "announcements")
-      throw HttpError(400, "BAD_REQUEST", "Everyone is always in #announcements.");
+      throw HttpError(400, "BAD_REQUEST", "Everyone is always in Announcements.");
     if (name) {
       const slug = slugOf(name);
       if (slug.length < 2)
         throw HttpError(400, "BAD_REQUEST", "Please use letters or numbers in the name.");
       // Only the name changes: the id and slug stay, so notices still find the group.
-      group.name = `#${slug}`;
+      group.name = name;
     }
     if (memberRoleIds) {
       const template = getTemplate(store.events.get(group.eventId).eventType);
-      group.memberRoleIds = membersFor(template, memberRoleIds);
+      // The form lists the team's roles; a booked vendor stays in until they are replaced.
+      const vendors = group.memberRoleIds.filter((id) => id.startsWith("vendor-"));
+      group.memberRoleIds = [...membersFor(template, memberRoleIds), ...vendors];
     }
     store.publish({ type: "groups.updated", eventId: group.eventId });
     res.json({ group });

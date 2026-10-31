@@ -84,7 +84,7 @@ export function demoBudget({ text, template, facts = [] }) {
     return {
       proposals: [],
       explanation: "",
-      answer: `Here is where the budget stands.\n${facts.slice(0, 5).join("\n")}`,
+      answer: `Here is where the budget stands.\n${facts.slice(0, 7).join("\n")}`,
       rationale: "I can only show the figures right now.",
     };
   if (!found)

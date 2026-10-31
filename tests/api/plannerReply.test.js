@@ -35,10 +35,10 @@ describe("@huddle reply paths", () => {
     const { call, store } = await startDemo(t);
     await post(call, "@huddle what if we add 50 guests?", MANAGER);
     await settle(store);
-    assert.match(agentTexts(store).at(-1), /Ask Huddle on the budget panel/);
+    assert.match(agentTexts(store).at(-1), /Ask Huddle in the sidebar/);
     await post(call, "@huddle give me ideas", MANAGER);
     await settle(store);
-    assert.match(agentTexts(store).at(-1), /Ask Huddle on the budget panel/);
+    assert.match(agentTexts(store).at(-1), /Ask Huddle in the sidebar/);
   });
 });
 

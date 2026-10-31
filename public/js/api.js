@@ -20,16 +20,14 @@ async function request(path, { method = "GET", body } = {}) {
 }
 
 export const api = {
-  users: () => request("/users"),
-  viewAs: (userId) => request("/view-as", { method: "POST", body: { userId } }),
   me: () => request("/me"),
   eventTypes: () => request("/event-types"),
   createEvent: (eventType) => request("/events", { method: "POST", body: { eventType } }),
   event: (id) => request(`/events/${encodeURIComponent(id)}`),
-  intake: (id, answer) =>
+  intake: (id, answer, mode) =>
     request(`/events/${encodeURIComponent(id)}/intake`, {
       method: "POST",
-      body: answer === undefined ? {} : { answer },
+      body: answer === undefined ? {} : { answer, mode },
     }),
   confirmIntake: (id) =>
     request(`/events/${encodeURIComponent(id)}/intake/confirm`, { method: "POST" }),
@@ -49,8 +47,41 @@ export const api = {
     request(
       `/events/${encodeURIComponent(id)}/comparison?categoryId=${encodeURIComponent(categoryId)}`,
     ),
+  people: () => request("/people"),
+  signIn: (userId) => request("/session", { method: "POST", body: { userId } }),
+  signOut: () => request("/session/logout", { method: "POST" }),
+  hiring: (id) => request(`/events/${encodeURIComponent(id)}/hiring`),
+  createBrief: (id, categoryId, answers) =>
+    request(`/events/${encodeURIComponent(id)}/briefs`, {
+      method: "POST",
+      body: { categoryId, answers },
+    }),
+  sendBrief: (id) => request(`/briefs/${encodeURIComponent(id)}/send`, { method: "POST" }),
+  decideBrief: (id, body) =>
+    request(`/briefs/${encodeURIComponent(id)}/decision`, { method: "POST", body }),
+  declineDraft: (id) =>
+    request(`/quotes/${encodeURIComponent(id)}/decline-draft`, { method: "POST" }),
+  requestRevision: (id) =>
+    request(`/quotes/${encodeURIComponent(id)}/request-revision`, { method: "POST" }),
+  createInvite: (id) => request(`/vendors/${encodeURIComponent(id)}/invite`, { method: "POST" }),
+  revokeInvite: (id) => request(`/vendors/${encodeURIComponent(id)}/invite`, { method: "DELETE" }),
+  vendorHome: () => request("/vendor/home"),
+  setDeliverable: (id, done) =>
+    request(`/deliverables/${encodeURIComponent(id)}`, { method: "PATCH", body: { done } }),
+  advice: (id) => request(`/events/${encodeURIComponent(id)}/advice`, { method: "POST" }),
   ideas: (id) => request(`/events/${encodeURIComponent(id)}/ideas`, { method: "POST" }),
   budget: (id) => request(`/events/${encodeURIComponent(id)}/budget`),
+  expenses: (id) => request(`/events/${encodeURIComponent(id)}/expenses`),
+  addExpense: (id, body) =>
+    request(`/events/${encodeURIComponent(id)}/expenses`, { method: "POST", body }),
+  deleteExpense: (id) => request(`/expenses/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  coverFromBuffer: (id, categoryId) =>
+    request(`/events/${encodeURIComponent(id)}/buffer/cover`, {
+      method: "POST",
+      body: { categoryId },
+    }),
+  setBuffer: (id, percent) =>
+    request(`/events/${encodeURIComponent(id)}/buffer`, { method: "POST", body: { percent } }),
   timeline: (id) => request(`/events/${encodeURIComponent(id)}/timeline`),
   proposeChange: (id, text) =>
     request(`/events/${encodeURIComponent(id)}/changes`, { method: "POST", body: { text } }),

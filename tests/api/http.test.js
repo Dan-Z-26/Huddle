@@ -34,33 +34,42 @@ test("requireUser returns 401 without a usable cookie", async (t) => {
   const rejected = [
     undefined,
     "other=u-manager",
-    "huddle_user=nobody",
-    "huddle_user=",
-    "huddle_user",
+    "huddle_session=nobody",
+    "huddle_session=",
+    "huddle_session",
     ";;;=;=",
-    "huddle_user=%E0%A4%A",
-    "huddle_user=__proto__",
-    "huddle_user=constructor",
+    "huddle_session=%E0%A4%A",
+    "huddle_session=__proto__",
+    "huddle_session=constructor",
     "__proto__=u-manager",
-    "huddle_user=agent-planner",
+    "huddle_session=agent-planner",
   ];
   for (const cookie of rejected) {
     await assertError(await getMe(base, cookie), 401, "UNAUTHENTICATED");
   }
 });
 
-test("requireUser resolves a valid cookie to req.user", async (t) => {
-  const base = await serveWhoAmI(t);
-  const accepted = {
-    "huddle_user=u-manager": "u-manager",
-    "a=1; __proto__=x; huddle_user=u-manager; b=2": "u-manager",
-    "huddle_user=u%20with%20space": "u with space",
-  };
-  for (const [cookie, id] of Object.entries(accepted)) {
+test("requireUser resolves a live session to req.user, and the role comes from the server", async (t) => {
+  const store = storeWithUsers();
+  const base = await serve(t, {
+    store,
+    mount: (app) => app.get("/t/me", requireUser, (req, res) => res.json({ id: req.user.id })),
+  });
+  const session = store.openSession("u-manager");
+  for (const cookie of [
+    `huddle_session=${session}`,
+    `a=1; __proto__=x; huddle_session=${session}; b=2`,
+  ]) {
     const res = await getMe(base, cookie);
     assert.equal(res.status, 200);
-    assert.deepEqual(await res.json(), { id });
+    assert.deepEqual(await res.json(), { id: "u-manager" });
   }
+  // Naming a person in the cookie gets you nowhere: only a session id the server issued counts.
+  await assertError(await getMe(base, "huddle_session=u-manager"), 401, "UNAUTHENTICATED");
+  store.sessions.get(session).startedAt = 0;
+  await assertError(await getMe(base, `huddle_session=${session}`), 401, "UNAUTHENTICATED");
+  const agent = store.openSession("agent-planner");
+  await assertError(await getMe(base, `huddle_session=${agent}`), 401, "UNAUTHENTICATED");
 });
 
 test("validate passes parsed body, params and query through req.valid", async (t) => {

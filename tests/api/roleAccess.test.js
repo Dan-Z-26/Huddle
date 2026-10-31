@@ -29,7 +29,7 @@ for (const { eventType } of listEventTypes()) {
       assert.ok(groups.every(({ kind }) => kind !== "vendor"));
     });
 
-    it("shows core members #announcements, #core-team and only the category groups they own", () => {
+    it("shows core members Announcements, Core team and only the category groups they own", () => {
       for (const member of ofKind(users, "core")) {
         const visible = visibleTo(store.roleOf(member));
         const slugList = visible.map((group) => group.slug);
@@ -68,7 +68,7 @@ for (const { eventType } of listEventTypes()) {
       }
     });
 
-    it("lets core members post in every joined group except #announcements", () => {
+    it("lets core members post in every joined group except Announcements", () => {
       for (const member of ofKind(users, "core")) {
         const role = store.roleOf(member);
         const expected = visibleTo(role).filter(({ kind }) => kind !== "announcements");

@@ -1,0 +1,449 @@
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --wash: #fbf8f9;
+  --blush: #fdf4f7;
+  --pink-soft: #f9e6ee;
+  --pink: #b5175c;
+  --pink-deep: #8c1047;
+  --text: #2b1d25;
+  --muted: #6d5d66;
+  --line: #f0e8ec;
+  --control: #9a8791;
+  --ai: #5b2a6e;
+  --ai-bg: #f5effa;
+  --risk: #b3261e;
+  --risk-bg: #fdecea;
+  --ok: #17663a;
+  --ok-bg: #e9f5ee;
+  --shadow: 0 1px 2px rgb(43 29 37 / 0.04), 0 6px 20px rgb(43 29 37 / 0.05);
+  --shadow-up: 0 2px 4px rgb(43 29 37 / 0.05), 0 12px 32px rgb(43 29 37 / 0.09);
+  --display: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+h1,
+h2,
+h3,
+p,
+ul,
+ol,
+dl,
+dd {
+  margin: 0;
+  padding: 0;
+}
+ul,
+ol {
+  list-style: none;
+}
+:focus-visible {
+  outline: 2px solid var(--pink);
+  outline-offset: 2px;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.skip-link {
+  position: absolute;
+  left: 0.75rem;
+  top: -4rem;
+  z-index: 20;
+  background: var(--pink);
+  color: #fff;
+  padding: 0.6rem 1rem;
+  border-radius: 0.6rem;
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: 0.75rem;
+}
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Layout */
+.app {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (min-width: 52rem) {
+  .app {
+    grid-template-columns: 15.5rem minmax(0, 1fr);
+  }
+  .side {
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+  }
+  .stage {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: clip;
+  }
+  .stage > section:not(.flow),
+  .ask-view {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .plan {
+    grid-column: 2;
+    border-top: 1px solid var(--line);
+  }
+}
+@media (min-width: 76rem) {
+  html {
+    overflow: hidden;
+  }
+  .app {
+    grid-template-columns: 15.5rem minmax(0, 1fr) 21.5rem;
+  }
+  .plan {
+    grid-column: 3;
+    position: sticky;
+    top: 0;
+    height: 100dvh;
+    overflow-y: auto;
+    border-top: 0;
+    border-left: 1px solid var(--line);
+  }
+}
+
+/* Side */
+.side {
+  background: var(--wash);
+  padding: 1.5rem 0.85rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.brand {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--pink-deep);
+  padding-inline: 0.6rem;
+}
+.side-event {
+  padding-inline: 0.6rem;
+}
+.side.is-setup nav,
+.side.is-setup section {
+  display: none;
+}
+.side-event-name {
+  font-family: var(--display);
+  font-size: 1.15rem;
+  line-height: 1.3;
+}
+.side-event-meta {
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.side-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-top: 1.5rem;
+  padding-inline: 0.6rem;
+}
+.side-heading {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-bottom: 0.35rem;
+}
+section > .side-heading {
+  padding-inline: 0.6rem;
+}
+#attention,
+.side nav > .muted {
+  padding-inline: 0.6rem;
+  font-size: 0.85rem;
+}
+.group-list {
+  display: grid;
+  gap: 1px;
+}
+.group-list li:has(> [hidden]) {
+  display: none;
+}
+.group-list button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  font-size: 0.925rem;
+  color: var(--text);
+  background: none;
+  border: 0;
+  border-radius: 0.55rem;
+  padding: 0.42rem 0.6rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.group-list button:hover {
+  background: #f4edf0;
+}
+.group-list button[aria-current="true"] {
+  background: var(--pink-soft);
+  color: var(--pink-deep);
+  font-weight: 600;
+}
+.ask-nav {
+  font-weight: 500;
+}
+.spark {
+  flex: none;
+  color: var(--pink);
+  line-height: 1;
+}
+.viewer {
+  margin-top: auto;
+  display: grid;
+  justify-items: start;
+  gap: 0.4rem;
+  padding: 0.85rem 0.6rem 0;
+  border-top: 1px solid var(--line);
+}
+.viewer .muted {
+  font-size: 0.8rem;
+}
+
+/* On a phone the groups wrap as chips, so the room isn't pushed off the first screen. */
+@media (max-width: 51.99rem) {
+  .side {
+    gap: 1rem;
+    padding: 1rem;
+  }
+  .brand,
+  .side-event,
+  .side-head,
+  section > .side-heading,
+  #attention,
+  .side nav > .muted,
+  .viewer {
+    padding-inline: 0;
+  }
+  .side-head {
+    margin-top: 0.85rem;
+  }
+  .group-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+  .group-list button {
+    width: auto;
+    padding: 0.3rem 0.7rem;
+    font-size: 0.875rem;
+    background: var(--bg);
+    border: 1px solid var(--line);
+  }
+  .viewer {
+    margin-top: 0;
+  }
+  .messages {
+    max-height: 70dvh;
+  }
+}
+
+/* Controls */
+select,
+textarea,
+input[type="date"],
+input[type="text"] {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--control);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.8rem;
+  width: 100%;
+}
+::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+.button {
+  font: inherit;
+  font-weight: 500;
+  color: var(--pink-deep);
+  background: var(--blush);
+  border: 1px solid var(--pink-soft);
+  border-radius: 0.6rem;
+  padding: 0.5rem 1.1rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.button:hover {
+  background: var(--pink-soft);
+}
+.button.primary {
+  background: var(--pink);
+  border-color: var(--pink);
+  color: #fff;
+}
+.button.primary:hover {
+  background: var(--pink-deep);
+  border-color: var(--pink-deep);
+}
+.button:disabled {
+  opacity: 0.75;
+  cursor: progress;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.chip {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0.35rem 0.9rem;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.chip:hover {
+  background: var(--blush);
+  border-color: var(--pink-soft);
+}
+
+/* Stage */
+.stage {
+  min-width: 0;
+}
+.stage:focus {
+  outline: none;
+}
+/* Padding, not width, centres each page, so its scrollbar stays at the edge of the stage. */
+.stage > section:not(.room, .flow),
+.ask-view {
+  padding: clamp(1.25rem, 4vw, 3rem) max(clamp(1rem, 3vw, 2rem), calc((100% - 48rem) / 2));
+}
+/* Above the message box, so it covers neither that nor the timeline. */
+.toast {
+  position: fixed;
+  z-index: 30;
+  bottom: 7.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  width: max-content;
+  max-width: min(34rem, calc(100vw - 2rem));
+  border-radius: 0.7rem;
+  background: var(--text);
+  color: #fff;
+  font-size: 0.925rem;
+  box-shadow: var(--shadow-up);
+}
+.notice {
+  padding: 0.6rem 1.1rem;
+}
+/* Empty but still in the page: a live region that isn't rendered may not be announced. */
+.toast:has(.notice:empty) {
+  background: none;
+  box-shadow: none;
+}
+.notice:empty {
+  padding: 0;
+}
+.toast-close {
+  flex: none;
+  font: inherit;
+  font-size: 0.85rem;
+  color: #fff;
+  background: none;
+  border: 0;
+  padding: 0.6rem 0.9rem 0.6rem 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.toast-close:focus-visible {
+  outline-color: #fff;
+  outline-offset: -2px;
+}
+
+/* Ask */
+.ask-card {
+  margin-block: clamp(0.5rem, 6vh, 3.5rem) 2.25rem;
+}
+.ask-title {
+  font-family: var(--display);
+  font-size: clamp(1.7rem, 3.5vw, 2.35rem);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.ask-title:focus {
+  outline: none;
+}
+.ask-sub {
+  margin: 0.6rem 0 1.5rem;
+  color: var(--muted);
+  max-width: 34rem;
+}
+.ask-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0.4rem 0.4rem 1rem;
+  border: 1px solid var(--control);
+  border-radius: 0.9rem;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+.ask-bar input {
+  border: 0;
+  padding: 0.5rem 0;
+  font-size: 1.05rem;
+  min-width: 0;
+  flex: 1;
+  background: none;
+}
+.ask-bar input:focus-visible {
+  outline: none;
+}
+.ask-bar:has(input:focus-visible) {
+  outline: 2px solid var(--pink);
+  outline-offset: 1px;
+}
+#ask-suggestions {
+  margin-top: 0.9rem;
+}

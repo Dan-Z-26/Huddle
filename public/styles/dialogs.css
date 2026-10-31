@@ -1,0 +1,96 @@
+/* Brief */
+.brief-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.brief-item dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.brief-item dd {
+  margin-top: 0.1rem;
+  line-height: 1.4;
+  font-size: 0.925rem;
+}
+
+/* Dialog */
+dialog {
+  background: var(--bg);
+  color: var(--text);
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: var(--shadow-up);
+  width: min(30rem, calc(100vw - 2rem));
+  padding: 1.5rem;
+}
+dialog::backdrop {
+  background: rgb(43 29 37 / 0.4);
+}
+.dialog-title {
+  font-family: var(--display);
+  font-size: 1.4rem;
+  font-weight: 400;
+  margin-bottom: 1rem;
+}
+.type-list {
+  border: 0;
+  padding: 0;
+  margin: 0 0 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.type-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.75rem;
+  align-items: start;
+  border: 1px solid var(--control);
+  border-radius: 0.7rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+}
+.type-option:has(input:checked) {
+  border-color: var(--pink);
+  background: var(--blush);
+}
+.type-option input {
+  grid-row: span 2;
+  margin-top: 0.3rem;
+  accent-color: var(--pink);
+}
+.type-option span {
+  font-weight: 500;
+}
+.type-option small {
+  color: var(--muted);
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+/* One entrance, for the thing that just answered you. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(0.5rem);
+  }
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.3;
+  }
+}
+.result {
+  animation: rise 0.35s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

@@ -4,12 +4,17 @@ import { listEventTypes } from "../core/templates.js";
 const id = z.string().min(1).max(80);
 const eventTypes = listEventTypes().map(({ eventType }) => eventType);
 
-export const viewAs = z.object({ body: z.object({ userId: id }) });
+export const signIn = z.object({ body: z.object({ userId: id }) });
 export const createEvent = z.object({ body: z.object({ eventType: z.enum(eventTypes) }) });
 export const eventParam = z.object({ params: z.object({ id }) });
 export const intake = z.object({
   params: z.object({ id }),
-  body: z.object({ answer: z.string().max(2000).optional() }).default({}),
+  body: z
+    .object({
+      answer: z.string().max(2000).optional(),
+      mode: z.enum(["opening", "direct"]).optional(),
+    })
+    .default({}),
 });
 export const patchProfile = z.object({
   params: z.object({ id }),
@@ -35,10 +40,63 @@ export const proposeChange = z.object({
   params: z.object({ id }),
   body: z.object({ text: z.string().trim().min(1).max(1000) }),
 });
+const briefAnswer = z.string().trim().max(500).optional();
+export const createBrief = z.object({
+  params: z.object({ id }),
+  body: z
+    .object({
+      categoryId: id,
+      answers: z
+        .object({
+          scope: briefAnswer,
+          deliverables: briefAnswer,
+          dates: briefAnswer,
+          mustHaves: briefAnswer,
+          judging: briefAnswer,
+        })
+        .strict()
+        .optional(),
+    })
+    .strict(),
+});
+export const briefParam = z.object({ params: z.object({ id }) });
+export const briefDecision = z.object({
+  params: z.object({ id }),
+  body: z.object({ approve: z.boolean(), note: z.string().trim().max(300).optional() }).strict(),
+});
+export const vendorParam = z.object({ params: z.object({ id }) });
+export const patchDeliverable = z.object({
+  params: z.object({ id }),
+  body: z.object({ done: z.boolean() }).strict(),
+});
+export const createExpense = z.object({
+  params: z.object({ id }),
+  body: z
+    .object({
+      description: z.string().trim().min(1).max(200),
+      amount: z.string().trim().min(1).max(80),
+      categoryId: id.optional(),
+      fromBuffer: z.boolean().optional(),
+    })
+    .strict(),
+});
+export const expenseParam = z.object({ params: z.object({ id }) });
+export const coverFromBuffer = z.object({
+  params: z.object({ id }),
+  body: z.object({ categoryId: id }).strict(),
+});
+export const setBuffer = z.object({
+  params: z.object({ id }),
+  body: z.object({ percent: z.int().min(0).max(30) }).strict(),
+});
 export const acceptChange = z.object({
   params: z.object({ id, changeId: id }),
   body: z
-    .object({ cuts: z.array(id).max(20).optional(), raise: z.boolean().optional() })
+    .object({
+      cuts: z.array(id).max(20).optional(),
+      raise: z.boolean().optional(),
+      useBuffer: z.boolean().optional(),
+    })
     .strict()
     .default({}),
 });
@@ -79,6 +137,9 @@ export const confirmQuote = z.object({
     fixedText: amountText.optional(),
     taxPercent: z.number().min(0).max(100).optional(),
     includes: z.array(z.string().trim().max(120)).max(15).optional(),
+    exclusions: z.array(z.string().trim().max(120)).max(15).optional(),
+    minGuests: z.int().min(1).max(100000).optional(),
+    validUntil: z.string().trim().max(80).optional(),
     mustHaveIdsMet: z.array(id).max(10).optional(),
     answers: z
       .object({
@@ -101,7 +162,13 @@ export const pinDirective = z.object({
   body: z.object({ addressedUserIds: z.array(id).max(30).optional() }).default({}),
 });
 const roleIds = z.array(id).max(20);
-const groupName = z.string().trim().min(2).max(30);
+// Shown to people and quoted in AI prompts, so plain words only.
+const groupName = z
+  .string()
+  .trim()
+  .min(2)
+  .max(30)
+  .regex(/^[\p{L}\p{N}][\p{L}\p{N} &'’/-]*$/u, "Please use letters, numbers, spaces, & or -.");
 export const createGroup = z.object({
   params: z.object({ id }),
   body: z.object({ name: groupName, memberRoleIds: roleIds }),

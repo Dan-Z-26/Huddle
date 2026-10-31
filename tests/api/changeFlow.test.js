@@ -40,7 +40,7 @@ describe("budget scoping", () => {
       `/events/${ID}/budget`,
       `/events/${ID}/timeline`,
       "/me",
-      "/users",
+      "/people",
       ...groups.map(({ id }) => `/groups/${id}/messages`),
     ];
     for (const path of paths) {

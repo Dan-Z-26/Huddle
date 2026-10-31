@@ -3,6 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { buildRfq, extractQuote, quoteFromExtracted } from "../agents/vendor.js";
 import { describeChange } from "../agents/budget.js";
+import { computeBudget } from "../core/budgetEngine.js";
+import { quoteWarnings, scoreReasons } from "../core/hiring.js";
+import { wholeMoney } from "../core/money.js";
 import { scoreQuotes } from "../core/quoteScoring.js";
 import { canPost } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
@@ -12,6 +15,7 @@ import { postAgentMessage } from "../store/workspace.js";
 import { MAX_FILE_BYTES } from "../validation/uploads.js";
 import * as schemas from "../validation/schemas.js";
 import { storePending } from "./budget.js";
+import { briefOf } from "./hiringSupport.js";
 import {
   categoryGroup,
   eventQuotes,
@@ -85,6 +89,8 @@ export function vendorRoutes({ ai }) {
       const template = getTemplate(event.eventType);
       const body = req.valid.body;
       requireCategory(req, template, body.categoryId);
+      if (briefOf(store, event.id, body.categoryId)?.status !== "approved")
+        throw HttpError(400, "BAD_REQUEST", "Get this category's brief approved first.");
       if (eventQuotes(store, event.id).length >= MAX_QUOTES_PER_EVENT)
         throw HttpError(400, "BAD_REQUEST", "This event has as many quotes as the demo allows.");
 
@@ -164,7 +170,13 @@ export function vendorRoutes({ ai }) {
     });
     if (!quote.perGuestMinor && !quote.fixedMinor)
       throw HttpError(400, "BAD_REQUEST", warnings.at(-1) ?? "Please enter a price.");
-    const saved = { ...quote, id: existing.id, eventId: existing.eventId, status: "confirmed" };
+    const saved = {
+      ...quote,
+      id: existing.id,
+      eventId: existing.eventId,
+      status: "confirmed",
+      sources: existing.sources ?? {},
+    };
     store.quotes.set(saved.id, saved);
     res.json({ quote: saved, warnings });
   });
@@ -178,16 +190,40 @@ export function vendorRoutes({ ai }) {
     const quotes = eventQuotes(store, event.id);
     const scored = scoreQuotes(quotes, {
       guestCount: state.guestCount,
-      priorities: event.priorities,
+      // Only the manager's score reflects the ranking: rank plus amount would reveal the total.
+      priorities: req.user.kind === "manager" ? event.priorities : [],
       mustHaves: event.mustHaves,
       categoryId,
       absoluteMustHaveId: event.absoluteMustHaveId,
     });
     const byId = new Map(quotes.map((quote) => [quote.id, quote]));
+    const planMinor = computeBudget(state).categories.find(
+      ({ id }) => id === categoryId,
+    ).committedMinor;
+    const money = (minor) => wholeMoney(minor, state.currency);
+    const cheapest = Math.min(...scored.map(({ totalMinor }) => totalMinor));
     const rows = scored
       .map((row) => {
-        const { status, includes, answers, mustHaveIdsMet } = byId.get(row.quoteId);
-        return { ...row, status, includes, answers, mustHaveIdsMet };
+        const quote = byId.get(row.quoteId);
+        const { status, includes, answers, mustHaveIdsMet } = quote;
+        return {
+          ...row,
+          status,
+          includes,
+          answers,
+          mustHaveIdsMet,
+          reasons: scoreReasons(row, {
+            cheapestMinor: cheapest,
+            mustHaveCount: event.mustHaves.filter((item) => item.categoryId === categoryId).length,
+            taxStated: quote.taxStated,
+          }),
+          warnings: quoteWarnings(quote, {
+            guestCount: state.guestCount,
+            totalMinor: row.totalMinor,
+            planMinor,
+            money,
+          }),
+        };
       })
       .sort((a, b) => b.score - a.score);
     res.json({ rows });

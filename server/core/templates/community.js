@@ -9,6 +9,7 @@ const categories = [
       capacityDriver("ground-hire", "Ground hire by capacity", 8000),
       driver("permits", "Permits and licences", "fixed", 2000),
     ],
+    2000,
   ),
   category(
     "food",
@@ -18,6 +19,7 @@ const categories = [
       driver("meal", "Meal per attendee", "perGuest", 9000),
       driver("food-stalls", "Stalls and serving", "fixed", 1000),
     ],
+    2800,
   ),
   category(
     "av-stage",
@@ -27,12 +29,14 @@ const categories = [
       driver("stage", "Stage and sound", "fixed", 7000),
       driver("av-operator", "Operator hours", "perUnit", 3000, { units: 6 }),
     ],
+    1800,
   ),
   category(
     "photo-video",
     "Photo & video",
     ["Volunteer photos", "Hired photographer"],
     [driver("coverage-hours", "Coverage hours", "perUnit", 10000, { units: 4 })],
+    500,
   ),
   category(
     "logistics-safety",
@@ -42,6 +46,7 @@ const categories = [
       driver("safety-staff", "Safety and first-aid staff", "perUnit", 7000, { units: 8 }),
       driver("barricades", "Barricades and toilets", "fixed", 3000),
     ],
+    1300,
   ),
   category(
     "outreach",
@@ -51,12 +56,14 @@ const categories = [
       driver("posters", "Posters and flyers", "perUnit", 6000, { units: 200 }),
       driver("local-ads", "Local media", "fixed", 4000),
     ],
+    700,
   ),
   category(
     "activities",
     "Activities",
     ["Open games", "Hosted activities"],
     [driver("activity-kits", "Activity kits", "fixed", 10000)],
+    900,
   ),
 ];
 
@@ -85,13 +92,46 @@ export const community = defineTemplate({
     "volunteer-lead": "Ravi Kulkarni",
   },
   categoryGroups: [
-    { slug: "food", categoryIds: ["food"] },
-    { slug: "av-stage", categoryIds: ["av-stage"] },
-    { slug: "photo-video", categoryIds: ["photo-video"] },
+    { slug: "food", name: "Food", categoryIds: ["food"] },
+    { slug: "av-stage", name: "AV & stage", categoryIds: ["av-stage"] },
+    { slug: "photo-video", name: "Photo & video", categoryIds: ["photo-video"] },
     {
       slug: "venue-logistics",
+      name: "Venue & logistics",
       categoryIds: ["venue-permits", "logistics-safety"],
     },
   ],
   milestones: scaledMilestones(67),
+  intakeOptions: {
+    purpose: [
+      "Raise funds for a cause",
+      "Celebrate a festival",
+      "Bring neighbours together",
+      "Share skills or knowledge",
+    ],
+    venueType: ["Community hall", "Park or open ground", "School", "Society clubhouse", "Street"],
+    guests: ["50", "100", "250", "500", "1000"],
+    budget: ["₹25,000", "₹50,000", "₹1 lakh", "₹3 lakh", "₹5 lakh"],
+    attendeeExperience: [
+      "Part of the community",
+      "Glad they came",
+      "Keen to help next time",
+      "Clear on the cause",
+    ],
+    mustHaves: [
+      { text: "Permits in place", categoryId: "venue-permits" },
+      { text: "Food for everyone", categoryId: "food" },
+      { text: "A stage with sound", categoryId: "av-stage" },
+      { text: "First aid and safety", categoryId: "logistics-safety" },
+      { text: "Activities for children", categoryId: "activities" },
+      { text: "Local promotion", categoryId: "outreach" },
+    ],
+    constraints: [
+      "Wheelchair access",
+      "Vegetarian food",
+      "Noise limits",
+      "Police or civic permission",
+      "Free entry",
+    ],
+  },
 });

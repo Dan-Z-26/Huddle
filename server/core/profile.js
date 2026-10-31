@@ -1,4 +1,4 @@
-import { allocate, categoryCost, stepFor } from "./budgetEngine.js";
+import { allocate, categoryCost, DEFAULT_BUFFER_BPS, stepFor } from "./budgetEngine.js";
 import { divFloor, shareOfBps } from "./money.js";
 import { normalisePriorities } from "./priorities.js";
 
@@ -69,6 +69,7 @@ function resolveCategory(category, allocationMinor, guests) {
   const resolved = {
     id: category.id,
     name: category.name,
+    typicalBps: category.typicalBps,
     locked: false,
     tiers: category.tiers.map((tier) => ({
       id: tier.id,
@@ -85,7 +86,8 @@ function resolveCategory(category, allocationMinor, guests) {
 }
 
 /**
- * Builds the opening budget from a confirmed profile and its event template's shares.
+ * Builds the opening budget from a confirmed profile: the buffer is set aside, and the rest is split
+ * by the event type's usual shares and the user's ranking.
  * @param {object} profile EventProfile with a confirmed guest count.
  * @param {object} template Result of getTemplate.
  * @returns {object} BudgetState with drivers of source "user" and no quotes.
@@ -98,11 +100,17 @@ export function buildBudgetState(profile, template) {
   }
   const totalMinor = profile.budget.totalMinor;
   const categoryIds = template.categories.map((category) => category.id);
-  const allocation = allocate(totalMinor, normalisePriorities(profile.priorities, categoryIds));
+  const reservedMinor = shareOfBps(totalMinor, DEFAULT_BUFFER_BPS);
+  const allocation = allocate(
+    totalMinor - reservedMinor,
+    template.categories,
+    normalisePriorities(profile.priorities, categoryIds),
+  );
   return {
     guestCount: guests,
     totalMinor,
     currency: profile.budget.currency ?? "INR",
+    contingency: { reservedMinor, spentMinor: 0 },
     categories: template.categories.map((category) =>
       resolveCategory(category, allocation[category.id] ?? 0, guests),
     ),

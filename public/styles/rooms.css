@@ -1,0 +1,205 @@
+/* Rooms */
+.room {
+  display: flex;
+  flex-direction: column;
+}
+.room-head {
+  flex: none;
+  padding: 1.35rem clamp(1rem, 3vw, 2rem) 1rem;
+  border-bottom: 1px solid var(--line);
+}
+.vendors .room-head,
+.timeline .room-head,
+.budget-page .room-head {
+  padding-inline: 0;
+}
+.room-title {
+  font-family: var(--display);
+  font-size: 1.55rem;
+  font-weight: 400;
+  line-height: 1.25;
+}
+.room-title:focus {
+  outline: none;
+}
+
+/* Messages: padding, not width, centres the column, so the scrollbar stays at the room's edge. */
+.messages {
+  flex: 1 1 auto;
+  min-height: 8rem;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 1.25rem max(clamp(1rem, 3vw, 2rem), calc((100% - 46rem) / 2)) 0.5rem;
+}
+.messages:focus-visible {
+  outline-offset: -2px;
+}
+.messages > :first-child {
+  margin-top: auto;
+}
+.messages > .empty {
+  margin-block: auto;
+  text-align: center;
+}
+.day {
+  align-self: center;
+  margin-block: 1.25rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.message {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.7rem;
+  margin-top: 1.1rem;
+}
+.message.is-cont {
+  margin-top: 0.3rem;
+}
+.message.is-cont .avatar {
+  visibility: hidden;
+  height: 0;
+}
+.message.is-cont .byline {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.avatar {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  background: var(--pink-soft);
+  color: var(--pink-deep);
+}
+.message.ai .avatar {
+  background: var(--ai-bg);
+  color: var(--ai);
+  font-size: 0.9rem;
+}
+.byline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  margin-bottom: 0.2rem;
+}
+.byline strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.byline time {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.ai-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--ai);
+  background: var(--ai-bg);
+  border-radius: 0.3rem;
+  padding: 0 0.35rem;
+}
+.message-text {
+  width: fit-content;
+  max-width: min(36rem, 100%);
+  padding: 0.5rem 0.8rem;
+  border-radius: 0.2rem 0.85rem 0.85rem 0.85rem;
+  background: var(--wash);
+  white-space: pre-wrap;
+}
+.message.is-cont .message-text {
+  border-radius: 0.85rem;
+}
+.message.ai .message-text {
+  background: var(--ai-bg);
+}
+/* Your own messages sit on the right, with no avatar. */
+.message.mine .message-actions {
+  right: auto;
+  left: 0;
+}
+.message.mine {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: end;
+}
+.message.mine .avatar {
+  display: none;
+}
+.message.mine .message-body {
+  display: grid;
+  justify-items: end;
+  max-width: min(36rem, 100%);
+}
+.message.mine .byline strong {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.message.mine .message-text {
+  background: var(--pink-soft);
+  border-radius: 0.85rem 0.2rem 0.85rem 0.85rem;
+}
+.message.mine.is-cont .message-text {
+  border-radius: 0.85rem;
+}
+/* Automatic notices are a quiet line in the flow, not someone speaking. */
+.message.system {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  text-align: center;
+  margin-top: 1rem;
+}
+.message.system .avatar {
+  display: none;
+}
+.message.system .byline {
+  justify-content: center;
+  margin-bottom: 0;
+}
+.message.system .byline strong {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.message.system .ai-badge {
+  color: var(--muted);
+  background: none;
+  font-weight: 400;
+  font-size: 0.8rem;
+  padding: 0;
+}
+.message.system .message-text {
+  background: none;
+  padding: 0.05rem 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+  max-width: 34rem;
+}
+.why {
+  margin-top: 0.2rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.why summary {
+  cursor: pointer;
+  padding-block: 0.15rem;
+}
+.why p {
+  max-width: 34rem;
+}
+.room-foot {
+  flex: none;
+  text-align: center;
+  padding: 0.9rem 1rem 1.25rem;
+}

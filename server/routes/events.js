@@ -2,20 +2,24 @@ import { Router } from "express";
 import { missingProfileFields } from "../core/profile.js";
 import { canPost } from "../core/permissions.js";
 import { getTemplate, listEventTypes } from "../core/templates.js";
+import { advise } from "../agents/advisor.js";
 import { generateIdeas } from "../agents/ideas.js";
+import { planningSignals } from "../core/signals.js";
 import { nextStep } from "../agents/discovery.js";
 import {
   createAiLimiter,
   HttpError,
   managerOnly,
   ownEvent,
+  requireBudget,
   requireUser,
-  setUserCookie,
+  startSession,
   validate,
 } from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
-import { createEvent, createWorkspace, deleteEvent } from "../store/workspace.js";
+import { createEvent, createWorkspace, deleteEvent, eventExpenses } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
+import { eventQuotes } from "./vendorSupport.js";
 import { profileFor, publicUser } from "./views.js";
 
 const MAX_EVENTS = 50;
@@ -41,25 +45,36 @@ export function eventRoutes({ ai }) {
     }
     const { event, users } = createEvent(store, { eventType: req.valid.body.eventType });
     const manager = users.find(({ kind }) => kind === "manager");
-    setUserCookie(res, manager.id);
+    startSession(res, store, manager.id);
     res.status(201).json({ event: profileFor(event, store.roleOf(manager)) });
   });
 
   router.get("/events/:id", requireUser, validate(schemas.eventParam), (req, res) => {
     const { store } = req.app.locals;
-    const event = ownEvent(req);
+    const event = ownEvent(req, { vendorsToo: true });
     const template = getTemplate(event.eventType);
-    const members = [...store.users.values()].filter(({ eventId }) => eventId === event.id);
+    const isVendor = req.user.kind === "vendor";
+    const groups = groupsFor(store, req.user);
+    // A vendor sees the people in their own group, and nothing of how the team is organised.
+    const inGroup = new Set(groups.flatMap(({ memberRoleIds }) => memberRoleIds));
+    const members = [...store.users.values()].filter(
+      ({ eventId, roleId, kind }) =>
+        eventId === event.id && (!isVendor || kind === "agent" || inGroup.has(roleId)),
+    );
     res.json({
       event: profileFor(event, store.roleOf(req.user)),
       template: {
         label: template.label,
-        categories: template.categories.map(({ id, name }) => ({ id, name })),
-        roles: template.roles
-          .filter(({ kind }) => kind !== "agent")
-          .map(({ id, name, kind }) => ({ id, name, kind })),
+        categories: template.categories
+          .filter(({ id }) => !isVendor || req.user.categoryIds.includes(id))
+          .map(({ id, name }) => ({ id, name })),
+        roles: isVendor
+          ? []
+          : template.roles
+              .filter(({ kind }) => kind !== "agent")
+              .map(({ id, name, kind }) => ({ id, name, kind })),
       },
-      groups: groupsFor(store, req.user),
+      groups,
       members: members.map(publicUser),
     });
   });
@@ -70,26 +85,40 @@ export function eventRoutes({ ai }) {
     res.json({ event: profileFor(event, req.app.locals.store.roleOf(req.user)) });
   });
 
-  router.post("/events/:id/intake", requireUser, ai, validate(schemas.intake), async (req, res) => {
-    const { store } = req.app.locals;
-    const event = managerOnly(req);
-    if (event.intakeStatus !== "in_progress")
-      throw HttpError(400, "BAD_REQUEST", "Intake is already finished.");
-    const template = getTemplate(event.eventType);
-    const step = await nextStep({ profile: event, template, answer: req.valid.body.answer });
-    // The model call takes time: another answer or the confirm may have got in first.
-    if (store.events.get(event.id) !== event || event.intakeStatus !== "in_progress")
-      throw HttpError(400, "BAD_REQUEST", "Please answer that again.");
-    store.events.set(event.id, step.profile);
-    res.json({
-      nextQuestion: step.nextQuestion,
-      feedback: step.feedback,
-      field: step.field,
-      profile: profileFor(step.profile, store.roleOf(req.user)),
-      complete: step.complete,
-      rationale: step.rationale,
-    });
-  });
+  // A tapped answer and the first question use no model, so they don't use up the AI budget.
+  const aiIfTyped = (req, res, next) =>
+    req.body?.mode === "direct" || req.body?.answer === undefined ? next() : ai(req, res, next);
+
+  router.post(
+    "/events/:id/intake",
+    requireUser,
+    aiIfTyped,
+    validate(schemas.intake),
+    async (req, res) => {
+      const { store } = req.app.locals;
+      const event = managerOnly(req);
+      if (event.intakeStatus !== "in_progress")
+        throw HttpError(400, "BAD_REQUEST", "Intake is already finished.");
+      const template = getTemplate(event.eventType);
+      const { answer, mode } = req.valid.body;
+      const step = await nextStep({ profile: event, template, answer, mode });
+      // The model call takes time: another answer or the confirm may have got in first.
+      if (store.events.get(event.id) !== event || event.intakeStatus !== "in_progress")
+        throw HttpError(400, "BAD_REQUEST", "Please answer that again.");
+      store.events.set(event.id, step.profile);
+      res.json({
+        nextQuestion: step.nextQuestion,
+        feedback: step.feedback,
+        field: step.field,
+        options: step.options,
+        remaining: step.remaining,
+        heard: step.heard,
+        profile: profileFor(step.profile, store.roleOf(req.user)),
+        complete: step.complete,
+        rationale: step.rationale,
+      });
+    },
+  );
 
   router.post(
     "/events/:id/intake/confirm",
@@ -102,11 +131,40 @@ export function eventRoutes({ ai }) {
         throw HttpError(400, "BAD_REQUEST", "Intake is already finished.");
       if (missingProfileFields(event).length > 0)
         throw HttpError(400, "BAD_REQUEST", "There are still questions to answer.");
+      delete event.suggestedOptions;
       createWorkspace(store, event, new Date().toISOString());
       res.json({
         event: profileFor(event, store.roleOf(req.user)),
         groups: groupsFor(store, req.user),
       });
+    },
+  );
+
+  router.post(
+    "/events/:id/advice",
+    requireUser,
+    ai,
+    validate(schemas.eventParam),
+    async (req, res) => {
+      const { store } = req.app.locals;
+      const event = managerOnly(req);
+      const state = requireBudget(store, event);
+      const nowIso = new Date().toISOString();
+      const input = {
+        profile: event,
+        state,
+        expenses: eventExpenses(store, event.id),
+        tasks: store.tasksForEvent(event.id),
+        quotes: eventQuotes(store, event.id),
+        nowIso,
+      };
+      // The same signals give the same advice, so opening the page again costs no model call.
+      const key = JSON.stringify(planningSignals(input));
+      const cached = store.adviceCache.get(event.id);
+      if (cached?.key === key) return res.json(cached.advice);
+      const advice = await advise(input);
+      if (!advice.offline) store.adviceCache.set(event.id, { key, advice });
+      return res.json(advice);
     },
   );
 

@@ -1,3 +1,4 @@
+import { contingencyOf } from "./budgetEngine.js";
 import { MAX_GUESTS, MAX_MINOR } from "./money.js";
 import { quotePricesWithTax } from "./quoteScoring.js";
 
@@ -198,6 +199,23 @@ function applyBudgetTotal(state, event) {
   return applied({ ...state, totalMinor: event.toMinor });
 }
 
+// Drawing on the buffer lowers what is set aside, which frees that money for the plan.
+function applyContingencyDraw(state, event) {
+  const { availableMinor, reservedMinor, spentMinor } = contingencyOf(state);
+  if (!isAmount(event.amountMinor)) return rejected("amountMinor must be a non-negative integer");
+  if (event.amountMinor > availableMinor) return rejected("the buffer doesn't hold that much");
+  const contingency = { reservedMinor: reservedMinor - event.amountMinor, spentMinor };
+  return applied({ ...state, contingency });
+}
+
+function applyContingencySet(state, event) {
+  const { spentMinor } = contingencyOf(state);
+  if (!isAmount(event.toMinor)) return rejected("toMinor must be a non-negative integer");
+  if (event.toMinor < spentMinor) return rejected("that is less than the buffer has already paid");
+  if (event.toMinor > state.totalMinor) return rejected("the buffer can't exceed the budget");
+  return applied({ ...state, contingency: { reservedMinor: event.toMinor, spentMinor } });
+}
+
 const HANDLERS = new Map([
   ["guest_count", applyGuestCount],
   ["line_item_add", applyLineItemAdd],
@@ -206,6 +224,8 @@ const HANDLERS = new Map([
   ["category_amount", applyCategoryAmount],
   ["quote_accepted", applyQuoteAccepted],
   ["budget_total", applyBudgetTotal],
+  ["contingency_draw", applyContingencyDraw],
+  ["contingency_set", applyContingencySet],
 ]);
 
 /**

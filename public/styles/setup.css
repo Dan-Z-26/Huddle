@@ -1,0 +1,198 @@
+/* Ideas */
+.ideas-get {
+  margin-top: 0.85rem;
+}
+.ideas-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.idea {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  transition: box-shadow 0.15s ease;
+}
+.idea:hover {
+  box-shadow: var(--shadow-up);
+}
+.idea-title {
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+/* Intake */
+.intake {
+  width: 100%;
+}
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+.progress-label strong {
+  font-weight: 500;
+}
+.progress-label span {
+  color: var(--muted);
+}
+.intake progress {
+  height: 0.3rem;
+}
+.ask {
+  margin: clamp(2rem, 7vh, 3.5rem) 0 1.5rem;
+}
+.question {
+  font-family: var(--display);
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  line-height: 1.2;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  max-width: 38rem;
+}
+.feedback {
+  font-weight: 500;
+  color: var(--risk);
+  margin-bottom: 0.6rem;
+}
+.heard {
+  color: var(--ok);
+  font-size: 0.925rem;
+  margin-bottom: 0.6rem;
+}
+.feedback:empty,
+.heard:empty {
+  margin: 0;
+}
+.hint {
+  margin-top: 0.6rem;
+  color: var(--muted);
+  max-width: 36rem;
+}
+.hint:empty {
+  margin: 0;
+}
+.choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.choices:not(:empty) {
+  margin-bottom: 1.25rem;
+}
+.choice {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--control);
+  border-radius: 0.7rem;
+  padding: 0.6rem 1rem;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+.choice:hover {
+  background: var(--blush);
+  border-color: var(--pink);
+}
+.choice[aria-pressed="true"] {
+  background: var(--pink-soft);
+  border-color: var(--pink);
+  color: var(--pink-deep);
+  font-weight: 500;
+}
+.choice[aria-pressed="true"]::before {
+  content: "✓ ";
+}
+.choice:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+.answer {
+  display: grid;
+  gap: 0.75rem;
+}
+.answer textarea {
+  display: block;
+  font-size: 1.05rem;
+  resize: none;
+  border-radius: 0.8rem;
+  padding: 0.7rem 0.95rem;
+}
+.date-pick input {
+  width: min(16rem, 100%);
+  font-size: 1.05rem;
+  padding: 0.7rem 0.95rem;
+  border-radius: 0.8rem;
+  cursor: pointer;
+}
+.answer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+.answer-side {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+}
+.done {
+  display: grid;
+  justify-items: start;
+  gap: 1rem;
+}
+.picker-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+.picker-list button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  text-align: left;
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--control);
+  border-radius: 0.7rem;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+}
+.picker-list button:hover {
+  background: var(--blush);
+  border-color: var(--pink);
+}
+.picker-list button[aria-pressed="true"] {
+  border-color: var(--pink);
+  background: var(--blush);
+  font-weight: 500;
+}
+.rank {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.78rem;
+  border: 1px dashed var(--control);
+  color: var(--muted);
+}
+[aria-pressed="true"] .rank {
+  background: var(--pink);
+  border: 1px solid var(--pink);
+  color: #fff;
+  font-weight: 700;
+}

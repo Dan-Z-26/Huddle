@@ -158,58 +158,64 @@ describe("buildBudgetState", () => {
   it("resolves tier shares against the category allocation", () => {
     const [venue] = buildBudgetState(profile, template).categories;
     assert.deepEqual(venue.tiers, [
-      { id: "small", label: "small", minMinor: 800 },
-      { id: "big", label: "big", minMinor: 3200 },
+      { id: "small", label: "small", minMinor: 553 },
+      { id: "big", label: "big", minMinor: 2215 },
     ]);
   });
 
   it("makes step shares relative to the step holding the confirmed count", () => {
     const [venue] = buildBudgetState(profile, template).categories;
-    // Venue allocation is 4000, so the hall's part is 2800 at the 300 step.
+    // 10% is set aside. Of the 9000 left, the top rank gets 160/520: 2769, so the hall's part is
+    // 1938 at the 300 step.
     assert.deepEqual(venue.drivers[0].steps, [
-      { upToGuests: 100, amountMinor: 1400 },
-      { upToGuests: 300, amountMinor: 2800 },
-      { upToGuests: 500, amountMinor: 5600 },
+      { upToGuests: 100, amountMinor: 969 },
+      { upToGuests: 300, amountMinor: 1938 },
+      { upToGuests: 500, amountMinor: 3876 },
     ]);
   });
 
   it("uses the last step when the count is above every step", () => {
     const guests = { confirmed: 900 };
     const [venue] = buildBudgetState({ ...profile, guests }, template).categories;
-    assert.equal(venue.drivers[0].steps.at(-1).amountMinor, 2800);
+    assert.equal(venue.drivers[0].steps.at(-1).amountMinor, 1938);
   });
 
   it("sends the perGuest floor leftover to the first fixed driver", () => {
     const guests = { confirmed: 7 };
     const food = buildBudgetState({ ...profile, guests }, template).categories[1];
-    // Allocation 3000: plate part 2400, so 342 per guest (2394), leaving 606 on setup.
-    assert.equal(food.drivers[0].unitMinor, 342);
-    assert.equal(food.drivers[1].unitMinor, 606);
+    // Allocation 2423: plate part 1938, so 276 per guest (1932), leaving 491 on setup.
+    assert.equal(food.drivers[0].unitMinor, 276);
+    assert.equal(food.drivers[1].unitMinor, 491);
   });
 
   it("leaves the leftover in remaining when a category has no fixed driver", () => {
     const guests = { confirmed: 7 };
     const state = buildBudgetState({ ...profile, guests }, template);
     const gifts = computeBudget(state).categories[2];
-    // Allocation 2000 / 7 guests is 285 each, 1995 in all.
-    assert.equal(gifts.committedMinor, 1995);
+    // Allocation 2077 / 7 guests is 296 each, 2072 in all.
+    assert.equal(gifts.committedMinor, 2072);
     assert.ok(computeBudget(state).remainingMinor > 0);
   });
 
   it("prices perUnit drivers from their share", () => {
     const crew = buildBudgetState(profile, template).categories[3];
-    assert.equal(crew.drivers[0].unitMinor, 333);
+    assert.equal(crew.drivers[0].unitMinor, 577);
     assert.equal(crew.drivers[0].units, 3);
   });
 
-  it("gives unranked categories nothing, and empty priorities spend nothing", () => {
-    const state = buildBudgetState({ ...profile, priorities: ["food"] }, template);
-    const budget = computeBudget(state);
-    assert.equal(budget.categories[0].committedMinor, 0);
-    assert.equal(budget.categories[1].committedMinor, 10000);
+  it("gives unranked categories a smaller share, and funds everything with no ranking at all", () => {
+    const budget = computeBudget(buildBudgetState({ ...profile, priorities: ["food"] }, template));
+    const [venue, food] = budget.categories;
+    assert.ok(venue.committedMinor > 0);
+    assert.ok(food.committedMinor > venue.committedMinor);
     const none = computeBudget(buildBudgetState({ ...profile, priorities: [] }, template));
-    assert.equal(none.committedMinor, 0);
-    assert.equal(none.remainingMinor, 10000);
+    assert.ok(none.categories.every(({ committedMinor }) => committedMinor > 0));
+  });
+
+  it("sets the buffer aside before planning", () => {
+    const budget = computeBudget(buildBudgetState(profile, template));
+    assert.equal(budget.contingency.reservedMinor, 1000);
+    assert.ok(budget.committedMinor <= 9000);
   });
 
   it("does not mutate its inputs", () => {
@@ -238,11 +244,11 @@ describe("buildBudgetState: rankings and counts that could lose money", () => {
       ),
     );
 
-  it("gives unknown or repeated ranks no share, so the total is still fully allocated", () => {
+  it("gives unknown or repeated ranks no share, so all but the buffer is still allocated", () => {
     const committed = (priorities) =>
       build(priorities).categories.map(({ committedMinor }) => committedMinor);
-    assert.deepEqual(committed(["a", "b"]), [600, 300]);
-    assert.deepEqual(committed(["ghost", "a", "a", "b"]), [600, 300]);
+    assert.deepEqual(committed(["a", "b"]), [498, 312]);
+    assert.deepEqual(committed(["ghost", "a", "a", "b"]), [498, 312]);
   });
 
   it("refuses a fractional or text guest count", () => {

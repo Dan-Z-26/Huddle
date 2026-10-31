@@ -27,6 +27,7 @@ function drawGroups(groups, activeId, onOpen, unread) {
           {
             type: "button",
             "aria-current": String(group.id === activeId),
+            "data-focus-key": `group:${group.id}`,
             onclick: () => onOpen(group),
           },
           group.name,
@@ -46,6 +47,8 @@ function drawGroups(groups, activeId, onOpen, unread) {
 export function renderAttention(attention, openGroup) {
   keepFocus(() => drawAttention(attention, openGroup));
 }
+
+const MAX_ATTENTION = 5;
 
 function drawAttention({ directives, tasks }, openGroup) {
   const box = document.getElementById("attention");
@@ -68,9 +71,15 @@ function drawAttention({ directives, tasks }, openGroup) {
       el("li", { text: `${title}, due ${formatShortDate(dueDate)}` }),
     ),
   ];
+  const more = items.length - MAX_ATTENTION;
   box.append(
     items.length
-      ? el("ul", { class: "attention-list" }, ...items)
+      ? el(
+          "ul",
+          { class: "attention-list" },
+          ...items.slice(0, MAX_ATTENTION),
+          more > 0 ? el("li", { class: "muted", text: `and ${more} more on the timeline` }) : null,
+        )
       : el("p", { text: "Nothing is waiting for you." }),
   );
 }

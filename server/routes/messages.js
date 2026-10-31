@@ -8,9 +8,11 @@ import { addMessage } from "../store/workspace.js";
 import { detectFileType, MAX_FILE_BYTES, MAX_FILES } from "../validation/uploads.js";
 import { fileParam, groupMessages, postMessage } from "../validation/schemas.js";
 import { replyAsPlanner } from "./plannerReply.js";
-import { directiveView, messageView } from "./views.js";
+import { directiveView, messageView, redactForVendor } from "./views.js";
 
 const HUDDLE = /@huddle\b/i;
+const MAX_VENDOR_MESSAGES = 50;
+const MAX_VENDOR_SCAN = 100;
 const upload = multer({
   storage: multer.memoryStorage(),
   // Browsers send file names as UTF-8; the default would read them as Latin-1.
@@ -33,7 +35,7 @@ export function messageRoutes({ ai, chat }) {
   const router = Router();
   // Only a message that calls the Planner uses the AI budget.
   const aiIfMentioned = (req, res, next) =>
-    HUDDLE.test(req.body?.text ?? "") ? ai(req, res, next) : next();
+    HUDDLE.test(req.body?.text ?? "") && req.user.kind !== "vendor" ? ai(req, res, next) : next();
 
   router.get("/groups/:id/messages", requireUser, validate(groupMessages), (req, res) => {
     const { store } = req.app.locals;
@@ -42,15 +44,23 @@ export function messageRoutes({ ai, chat }) {
       throw HttpError(403, "FORBIDDEN", "You are not in this group.");
     const { before, limit } = req.valid.query;
     const page = store.messagesForGroup(group.id, { before, limit });
+    // A vendor joins at acceptance: what the team said before that stays with the team.
+    const isVendor = req.user.kind === "vendor";
+    const visible = ({ createdAt }) => !isVendor || createdAt >= req.user.joinedAt;
+    const shown = (message) =>
+      isVendor
+        ? redactForVendor(messageView(store, message), req.user.id)
+        : messageView(store, message);
     const pinned = [...store.directives.values()]
       .filter(({ groupId }) => groupId === group.id)
+      .filter((directive) => visible(store.messages.get(directive.messageId) ?? {}))
       .map((directive) => ({
         ...directiveView(store, directive),
-        text: store.messages.get(directive.messageId)?.text ?? "",
+        text: shown(store.messages.get(directive.messageId) ?? { text: "" }).text ?? "",
       }));
     res.json({
-      messages: page.messages.map((m) => messageView(store, m)),
-      nextBefore: page.nextBefore,
+      messages: page.messages.filter(visible).map(shown),
+      nextBefore: isVendor ? null : page.nextBefore,
       pinned,
     });
   });
@@ -67,6 +77,18 @@ export function messageRoutes({ ai, chat }) {
       const group = groupOf(req, req.valid.params.id);
       if (!canPost(store.roleOf(req.user), group))
         throw HttpError(403, "FORBIDDEN", "You can't post in this group.");
+      // Old messages make way for new ones, so one vendor can't push out the team's history.
+      if (
+        req.user.kind === "vendor" &&
+        store
+          .messagesForGroup(group.id, { limit: MAX_VENDOR_SCAN })
+          .messages.filter(({ authorId }) => authorId === req.user.id).length >= MAX_VENDOR_MESSAGES
+      )
+        throw HttpError(
+          429,
+          "RATE_LIMITED",
+          "That's a lot of messages. Please ask the team to reply.",
+        );
       const text = (req.valid.body.text ?? "").trim();
       const files = req.files ?? [];
       if (!text && files.length === 0)
@@ -102,10 +124,15 @@ export function messageRoutes({ ai, chat }) {
         createdAt: nowIso,
         rationale: null,
       });
-      res.status(201).json({ message: messageView(store, message) });
+      res.status(201).json({
+        message:
+          req.user.kind === "vendor"
+            ? redactForVendor(messageView(store, message), req.user.id)
+            : messageView(store, message),
+      });
       // Human messages go only to the group they were posted in. Only an @huddle mention brings
       // in the Planner, and its reply is posted in the same group.
-      if (HUDDLE.test(text)) {
+      if (HUDDLE.test(text) && req.user.kind !== "vendor") {
         const work = replyAsPlanner({
           store,
           event: store.events.get(group.eventId),
@@ -132,6 +159,9 @@ export function messageRoutes({ ai, chat }) {
       throw HttpError(404, "NOT_FOUND", "No such file.");
     if (!canView(store.roleOf(req.user), { type: "file", group }))
       throw HttpError(403, "FORBIDDEN", "You are not in the group this file was posted in.");
+    // Rival quotes and budgets can live in this group's files, so a vendor gets only their own.
+    if (req.user.kind === "vendor" && record.uploadedBy !== req.user.id)
+      throw HttpError(403, "FORBIDDEN", "This file is for the event team.");
     const bytes = await readUpload(uploadsDir, record).catch(() => {
       throw HttpError(404, "NOT_FOUND", "No such file.");
     });

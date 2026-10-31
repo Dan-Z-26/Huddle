@@ -19,10 +19,30 @@ export function el(tag, props = {}, ...children) {
 
 export const clear = (node) => node.replaceChildren();
 
-/** Shows a short status message. The region stays in the page so screen readers announce it. */
-export function announce(text) {
-  document.getElementById("notice").textContent = text;
+let noticeTimer = null;
+
+/**
+ * Shows a short status message for a few seconds. The region stays in the page so screen readers
+ * announce it.
+ * @param {string} text The message, or "" to clear it.
+ * @param {{keep?: boolean}} [options] `keep` leaves it up until dismissed.
+ */
+export function announce(text, { keep = false } = {}) {
+  const notice = document.getElementById("notice");
+  notice.textContent = text;
+  document.getElementById("notice-close").hidden = !keep;
+  clearTimeout(noticeTimer);
+  if (text && !keep) noticeTimer = setTimeout(() => announce(""), 8000);
 }
+
+/** Shows an error, which stays until dismissed so nobody has to read it against a clock. */
+export const announceError = (text) => announce(text, { keep: true });
+
+/** Under 100 KB in KB, otherwise in MB. */
+export const formatSize = (bytes) =>
+  bytes < 1024 * 100
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / 1048576).toFixed(1)} MB`;
 
 export const initials = (name) =>
   name
@@ -39,7 +59,15 @@ export const formatShortDate = (iso) =>
   new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" });
 
 export const formatTime = (iso) =>
-  new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
+  new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" });
+
+/** "Today", "Yesterday", or the date, for the line between one day's messages and the next. */
+export function formatDay(iso) {
+  const day = new Date(iso).toDateString();
+  if (day === new Date().toDateString()) return "Today";
+  if (day === new Date(Date.now() - 86400000).toDateString()) return "Yesterday";
+  return new Date(iso).toLocaleDateString("en-IN", { dateStyle: "long" });
+}
 
 export const formatMoney = (minor, currency = "INR") =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(

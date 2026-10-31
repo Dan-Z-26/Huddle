@@ -4,6 +4,54 @@ import { canSeeBudget } from "../core/permissions.js";
 
 const HIDDEN = "(contains an amount; visible to the event manager)";
 const noMoney = (text) => (mentionsMoney(text) ? HIDDEN : text);
+const VENDOR_HIDDEN = "(contains an amount; not shared outside the team)";
+export const noMoneyForVendor = (text) => (mentionsMoney(text ?? "") ? VENDOR_HIDDEN : text);
+
+/**
+ * What a vendor may see of a message: no amounts, none of the AI's reasoning, and no one else's
+ * attachments, whose names can say as much as their contents. Everything sent to a vendor, in a
+ * page or live, passes through here.
+ * @param {object} message A message as sent to a group member.
+ * @param {string} vendorId The vendor it is going to.
+ * @returns {object} The redacted copy.
+ */
+export function redactForVendor(message, vendorId) {
+  return {
+    ...message,
+    text: noMoneyForVendor(message.text),
+    rationale: null,
+    files: message.authorId === vendorId ? message.files : [],
+  };
+}
+
+/** Redacts the payload of a live event on its way to a vendor. */
+export function redactEventForVendor(event, vendorId) {
+  return {
+    ...event,
+    ...(event.message ? { message: redactForVendor(event.message, vendorId) } : {}),
+    ...(event.directive?.text
+      ? { directive: { ...event.directive, text: noMoneyForVendor(event.directive.text) } }
+      : {}),
+  };
+}
+
+// The basics of the event and nothing of the plan: no budget, ranking, or other categories' needs.
+function vendorProfile(event) {
+  return {
+    id: event.id,
+    eventType: event.eventType,
+    name: noMoney(event.name),
+    date: event.date,
+    city: noMoney(event.city),
+    venueType: noMoney(event.venueType),
+    guests: { confirmed: event.guests?.confirmed ?? null },
+    mustHaves: [],
+    constraints: {},
+    vendorNeeds: {},
+    skippedFields: [],
+    intakeStatus: event.intakeStatus,
+  };
+}
 
 /** What a client may know about a person. */
 export const publicUser = ({ id, name, roleId, kind }) => ({ id, name, roleId, kind });
@@ -18,6 +66,7 @@ export const publicUser = ({ id, name, roleId, kind }) => ({ id, name, roleId, k
  */
 export function profileFor(event, role) {
   if (canSeeBudget(role, "total")) return event;
+  if (role.kind === "vendor") return vendorProfile(event);
   const rest = { ...event };
   delete rest.budget;
   delete rest.priorities;

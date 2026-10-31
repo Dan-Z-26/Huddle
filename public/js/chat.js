@@ -1,6 +1,17 @@
 import { api } from "./api.js";
-import { announce, clear, el, formatTime, initials, keepFocus } from "./dom.js";
+import {
+  announce,
+  announceError,
+  clear,
+  el,
+  formatDay,
+  formatSize,
+  formatTime,
+  initials,
+  keepFocus,
+} from "./dom.js";
 import { isCurrent, generation } from "./session.js";
+import { setUpComposer } from "./composer.js";
 import { openPin } from "./pin.js";
 
 const $ = (id) => document.getElementById(id);
@@ -10,15 +21,13 @@ const ABOUT = {
   category: "A working room for the people who own this area.",
 };
 const BADGE = { agent: "AI", system: "Automatic notice" };
-const kb = (bytes) =>
-  bytes < 1024 * 100
-    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
-    : `${(bytes / 1048576).toFixed(1)} MB`;
+const SAME_BREATH_MS = 5 * 60_000;
 
 // The group on screen, and what is drawn for it. Live events update these in place.
 let current = null;
 const rows = new Map();
 const pinned = new Map();
+let last = null;
 
 const nameOf = (id) => current?.members.find((member) => member.id === id)?.name ?? "Someone";
 
@@ -62,17 +71,51 @@ async function acknowledge(id) {
     await api.ack(id);
     announce("Acknowledged. Thank you.");
   } catch (err) {
-    announce(err.message);
+    announceError(err.message);
   }
 }
 
-function messageRow(message) {
+// A follow-up from the same person, moments later, drops the repeated name and avatar.
+function continues(message) {
+  return (
+    last?.authorId === message.authorId &&
+    message.authorKind === "human" &&
+    new Date(message.createdAt) - new Date(last.createdAt) < SAME_BREATH_MS
+  );
+}
+
+function appendRow(log, message) {
+  const day = formatDay(message.createdAt);
+  const newDay = !last || formatDay(last.createdAt) !== day;
+  if (newDay) log.append(el("p", { class: "day", text: day }));
+  log.append(messageRow(message, !newDay && continues(message)));
+  last = message;
+}
+
+function pinActions(message) {
+  const suggested = message.suggestDirective;
+  return el(
+    "div",
+    { class: `message-actions${suggested ? " is-suggested" : ""}` },
+    suggested ? el("span", { class: "tag note", text: "Huddle suggests pinning this" }) : null,
+    el("button", {
+      type: "button",
+      class: "link-button",
+      text: "Pin as directive",
+      "aria-label": `Pin as directive: ${message.text.slice(0, 40)}`,
+      "data-focus-key": `pin:${message.id}`,
+      onclick: () => openPin(message, current, () => afterPin(message.id)),
+    }),
+  );
+}
+
+function messageRow(message, cont = false) {
   const badge = BADGE[message.authorKind];
   const name = current.members.find((member) => member.id === message.authorId)?.name ?? "Huddle";
   const byline = el("div", { class: "byline" }, el("strong", { text: name }));
   if (badge) byline.append(el("span", { class: "ai-badge", text: badge }));
   byline.append(el("time", { datetime: message.createdAt, text: formatTime(message.createdAt) }));
-  const body = [byline, el("p", { text: message.text })];
+  const body = [byline, el("p", { class: "message-text", text: message.text })];
   if (message.files?.length) {
     body.push(
       el(
@@ -85,7 +128,7 @@ function messageRow(message) {
             el("a", {
               href: `/api/files/${encodeURIComponent(file.id)}`,
               download: "",
-              text: `${file.name} (${kb(file.size)})`,
+              text: `${file.name} (${formatSize(file.size)})`,
             }),
           ),
         ),
@@ -93,24 +136,7 @@ function messageRow(message) {
     );
   }
   if (message.directive) body.push(directiveCard(message.directive, `row:${message.id}`));
-  else if (current.isManager && message.authorKind === "human") {
-    const suggested = message.suggestDirective;
-    body.push(
-      el(
-        "div",
-        { class: "message-actions" },
-        suggested ? el("span", { class: "tag note", text: "Huddle suggests pinning this" }) : null,
-        el("button", {
-          type: "button",
-          class: "link-button",
-          text: "Pin as directive",
-          "aria-label": `Pin as directive: ${message.text.slice(0, 40)}`,
-          "data-focus-key": `pin:${message.id}`,
-          onclick: () => openPin(message, current, afterPin),
-        }),
-      ),
-    );
-  }
+  else if (current.isManager && message.authorKind === "human") body.push(pinActions(message));
   if (message.rationale)
     body.push(
       el(
@@ -120,19 +146,25 @@ function messageRow(message) {
         el("p", { text: message.rationale }),
       ),
     );
-  const kind = message.authorKind === "system" ? " system" : badge ? " ai" : "";
+  const isAi = message.authorKind === "agent";
+  const kind = message.authorKind === "system" ? " system" : isAi ? " ai" : "";
+  const mine = message.authorId === current.me.id ? " mine" : "";
   const row = el(
     "article",
-    { class: `message${kind}` },
-    el("span", { class: "avatar", "aria-hidden": "true", text: initials(name) }),
-    el("div", {}, ...body),
+    { class: `message${kind}${mine}${cont ? " is-cont" : ""}` },
+    el("span", { class: "avatar", "aria-hidden": "true", text: isAi ? "✦" : initials(name) }),
+    el("div", { class: "message-body" }, ...body),
   );
-  rows.set(message.id, { row, message });
+  rows.set(message.id, { row, message, cont });
   return row;
 }
 
-function afterPin() {
+function afterPin(messageId) {
   announce("Pinned. Everyone it names has been asked to tap Got it.");
+  // The Pin button is about to go, so focus moves to the message it belonged to.
+  const row = rows.get(messageId)?.row;
+  row?.setAttribute("tabindex", "-1");
+  row?.focus();
 }
 
 function renderPinned() {
@@ -161,18 +193,22 @@ export function addLiveMessage(message) {
   const log = $("messages");
   log.querySelector(".empty")?.remove();
   log.querySelector(".thinking")?.remove();
-  log.append(messageRow(message));
+  const nearEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 120;
+  appendRow(log, message);
+  if (nearEnd) log.scrollTop = log.scrollHeight;
   if (message.directive)
     pinned.set(message.directive.id, { directive: message.directive, text: message.text });
   renderPinned();
   return true;
 }
 
-/** Redraws one message, for example when the Planner suggests pinning it. */
+/** Updates one message when the Planner suggests pinning it. Only its actions change, so the log isn't re-read. */
 export function updateLiveMessage(message) {
   const known = rows.get(message.id);
   if (!current || !known || message.groupId !== current.group.id) return;
-  known.row.replaceWith(messageRow(message));
+  known.message = message;
+  const old = known.row.querySelector(".message-actions");
+  if (old) keepFocus(() => old.replaceWith(pinActions(message)));
 }
 
 // Only the card changes, so an acknowledgement isn't announced as a whole new message.
@@ -198,68 +234,6 @@ export function updateLiveDirective(directive) {
   renderPinned();
 }
 
-function setUpComposer(group) {
-  const form = $("composer");
-  const note = $("composer-note");
-  form.hidden = !group.canPost;
-  note.hidden = group.canPost;
-  note.textContent =
-    group.kind === "announcements"
-      ? "Only the event manager and AI members post in #announcements."
-      : "You can read this room. Posting here is for the people who own this area.";
-  const text = $("composer-text");
-  const files = $("composer-files");
-  const send = $("composer-send");
-  text.onkeydown = (e) => {
-    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      form.requestSubmit();
-    }
-  };
-  form.onsubmit = async (e) => {
-    e.preventDefault();
-    const body = text.value.trim();
-    const status = $("composer-status");
-    if (send.getAttribute("aria-disabled") === "true") return;
-    if (!body && files.files.length === 0) {
-      status.textContent = "Write a message or attach a file first.";
-      return;
-    }
-    if (files.files.length > 3) {
-      status.textContent = "Please attach up to 3 files.";
-      return;
-    }
-    const data = new FormData();
-    if (body) data.set("text", body);
-    for (const file of files.files) data.append("files", file);
-    // aria-disabled, not disabled, so focus stays on the button while it works.
-    send.setAttribute("aria-disabled", "true");
-    send.textContent = files.files.length ? "Uploading…" : "Sending…";
-    status.textContent = files.files.length
-      ? `Uploading ${files.files.length === 1 ? "1 file" : `${files.files.length} files`}…`
-      : "Sending…";
-    try {
-      const { message } = await api.postMessage(group.id, data);
-      text.value = "";
-      files.value = "";
-      status.textContent = "Message sent.";
-      addLiveMessage(message);
-      if (/@huddle\b/i.test(message.text)) {
-        const waiting = el("p", { class: "muted thinking", text: "Huddle is working on that…" });
-        $("messages").append(waiting);
-        // If no reply comes, don't leave this standing.
-        setTimeout(() => waiting.remove(), 45_000);
-      }
-      $("messages").scrollTop = $("messages").scrollHeight;
-    } catch (err) {
-      status.textContent = err.message;
-    } finally {
-      send.removeAttribute("aria-disabled");
-      send.textContent = "Send";
-    }
-  };
-}
-
 /**
  * Shows one group: its pinned directives, recent messages and composer. The log is swapped whole,
  * so a full render stays silent and screen readers announce only messages that arrive later.
@@ -278,17 +252,27 @@ export async function showGroup(group, members, who, isStillWanted) {
     current = { group, members, ...who };
     rows.clear();
     pinned.clear();
+    last = null;
     // Filled before it is put in the page, so a screen reader doesn't read the whole history aloud.
     const fresh = $("messages").cloneNode(false);
     if (messages.length === 0)
-      fresh.append(el("p", { class: "muted empty", text: "No messages yet." }));
-    fresh.append(...messages.map(messageRow));
+      fresh.append(
+        el("p", {
+          class: "muted empty",
+          text: group.canPost
+            ? "No messages yet. Say hello, or ask Huddle for a hand."
+            : "No messages yet.",
+        }),
+      );
+    for (const message of messages) appendRow(fresh, message);
+    const hadFocus = document.activeElement === $("messages");
     $("messages").replaceWith(fresh);
+    if (hadFocus) fresh.focus();
     for (const directive of pins) pinned.set(directive.id, { directive, text: directive.text });
     renderPinned();
-    setUpComposer(group);
+    setUpComposer(group, addLiveMessage, who.me.kind === "vendor");
     fresh.scrollTop = fresh.scrollHeight;
   } catch (err) {
-    announce(err.message);
+    announceError(err.message);
   }
 }

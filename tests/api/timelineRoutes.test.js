@@ -106,7 +106,7 @@ describe("task status", () => {
     const res = await setStatus(call, task.id, "done", PR_HEAD);
     assert.equal(res.status, 200);
     const { tasks } = await res.json();
-    assert.equal(tasks.find(({ id }) => id === task.id).ownerGroupName, "#pr-media");
+    assert.equal(tasks.find(({ id }) => id === task.id).ownerGroupName, "PR & media");
     assert.equal(store.tasks.get(task.id).status, "done");
   });
 
@@ -170,7 +170,7 @@ describe("digest", () => {
     assert.doesNotMatch(text, /₹/);
   });
 
-  it("is stored in #announcements, where core members can read it", async (t) => {
+  it("is stored in Announcements, where core members can read it", async (t) => {
     const { call } = await startDemo(t);
     const { message } = await (
       await call(`/events/${ID}/digest`, { as: MANAGER, method: "POST" })

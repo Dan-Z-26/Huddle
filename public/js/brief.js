@@ -42,29 +42,25 @@ function valueOf(field, profile, categories, canSeeBudget) {
   return canSeeBudget ? "" : "Visible to the event manager";
 }
 
-/** Draws the event brief: every intake answer so far, and what is still to do. */
+/** Draws the event brief: every answer so far. What isn't answered yet stays off the page. */
 export function renderBrief(profile, template, canSeeBudget) {
   const list = document.getElementById("plan-summary");
   clear(list);
   let answered = 0;
   for (const field of FIELD_ORDER) {
     const value = valueOf(field, profile, template.categories, canSeeBudget);
-    if (value) answered += 1;
+    if (!value) continue;
+    answered += 1;
     list.append(
       el(
         "div",
-        { class: `brief-item ${value ? "is-answered" : "todo"}` },
-        el(
-          "dt",
-          {},
-          el("span", { class: "tick", "aria-hidden": "true" }),
-          FIELD_META[field].title,
-          el("span", { class: "sr-only", text: value ? " (answered)" : " (to do)" }),
-        ),
-        el("dd", { text: value || "Not answered yet" }),
+        { class: "brief-item" },
+        el("dt", { text: FIELD_META[field].title }),
+        el("dd", { text: value }),
       ),
     );
   }
-  document.getElementById("brief-progress").textContent =
-    `${answered} of ${FIELD_ORDER.length} answered`;
+  document.getElementById("brief-progress").textContent = answered
+    ? `${answered} of ${FIELD_ORDER.length} answered`
+    : "Your answers will appear here as you go.";
 }

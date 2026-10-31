@@ -1,4 +1,5 @@
 import { canView } from "./core/permissions.js";
+import { redactEventForVendor } from "./routes/views.js";
 
 const HEARTBEAT_MS = 25_000;
 const MAX_CLIENTS = 200;
@@ -54,9 +55,10 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
      * Opens a stream for one person.
      * @param {import("express").Response} res The response to stream on.
      * @param {object} user The person.
+     * @param {string} [sessionId] Their session: the stream ends with it.
      * @returns {boolean} False when there are too many connections, in total or for this person.
      */
-    add(res, user) {
+    add(res, user, sessionId) {
       const mine = [...clients].filter((client) => client.userId === user.id).length;
       if (clients.size >= MAX_CLIENTS || mine >= MAX_PER_USER) return false;
       res.writeHead(200, {
@@ -66,7 +68,7 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
         "X-Accel-Buffering": "no",
       });
       res.write("retry: 3000\n\n");
-      const client = { res, userId: user.id };
+      const client = { res, userId: user.id, sessionId };
       clients.add(client);
       res.on("close", () => clients.delete(client));
       return true;
@@ -77,10 +79,20 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
      * @param {{type: string, eventId: string}} event The event, with its payload.
      */
     send(store, event) {
-      const data = `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
+      const frame = (payload) => `event: ${payload.type}\ndata: ${JSON.stringify(payload)}\n\n`;
+      const data = frame(event);
       for (const client of clients) {
+        if (client.sessionId && !store.sessions.has(client.sessionId)) {
+          client.res.end();
+          clients.delete(client);
+          continue;
+        }
         const user = store.users.get(client.userId);
-        if (user?.eventId === event.eventId && mayReceive(store, user, event)) write(client, data);
+        if (user?.eventId === event.eventId && mayReceive(store, user, event))
+          write(
+            client,
+            user.kind === "vendor" ? frame(redactEventForVendor(event, user.id)) : data,
+          );
       }
     },
     size: () => clients.size,

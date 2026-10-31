@@ -1,4 +1,7 @@
+import { randomUUID } from "node:crypto";
+
 const DEFAULT_PAGE_SIZE = 50;
+const MAX_SESSIONS = 5000;
 const MAX_PAGE_SIZE = 100;
 
 /**
@@ -80,6 +83,25 @@ export function createStore() {
     quotes: new Map(),
     tasks: new Map(),
     budgets: new Map(),
+    expenses: new Map(),
+    adviceCache: new Map(),
+    sessions: new Map(),
+    briefs: new Map(),
+    deliverables: new Map(),
+    invites: new Map(),
+    /**
+     * Starts a server-side session: the cookie only ever holds this random id.
+     * @param {string} userId The person.
+     * @param {{invited?: boolean}} [options] `invited` came through a vendor's invite link.
+     * @returns {string} The session id.
+     */
+    openSession(userId, { invited = false } = {}) {
+      const id = randomUUID();
+      this.sessions.set(id, { userId, invited, startedAt: Date.now() });
+      if (this.sessions.size > MAX_SESSIONS)
+        this.sessions.delete(this.sessions.keys().next().value);
+      return id;
+    },
     pendingChanges: new Map(),
     digests: new Map(),
     /** Tells open streams about a change; the app replaces this with its hub. */

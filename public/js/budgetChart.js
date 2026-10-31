@@ -1,18 +1,20 @@
 import { clear, el, formatMoney } from "./dom.js";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
-// Google's accent colours, led by the app's pink. Every slice also carries its row number.
+// Checked for colour-blind separation in this order, led by the app's own accent. Each slice also
+// carries its row number, in whichever ink is readable on it.
 const COLORS = [
-  "#d81b60",
-  "#1967d2",
-  "#b45309",
-  "#188038",
-  "#a142f4",
-  "#c5221f",
-  "#0e7490",
-  "#b06000",
+  ["#b5175c", "#fff"],
+  ["#eda100", "#2b1d25"],
+  ["#6250d6", "#fff"],
+  ["#008300", "#fff"],
+  ["#e87ba4", "#2b1d25"],
+  ["#2a78d6", "#fff"],
+  ["#eb6834", "#2b1d25"],
+  ["#1baf7a", "#2b1d25"],
 ];
-const SPARE = "#9aa0a6";
+const SPARE = ["#9a8791", "#2b1d25"];
+const BUFFER = ["#6d5d66", "#fff"];
 const RADIUS = 80;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 const MIN_LABEL_SHARE = 4;
@@ -20,7 +22,8 @@ const MIN_LABEL_SHARE = 4;
 const colors = new Map();
 
 /** The colour a category has in the chart, so other parts of the page can match it. */
-export const colorOf = (id) => colors.get(id) ?? SPARE;
+export const colorOf = (id) => (colors.get(id) ?? SPARE)[0];
+const inkOf = (id) => (colors.get(id) ?? SPARE)[1];
 
 function svg(tag, attrs = {}) {
   const node = document.createElementNS(SVG_NS, tag);
@@ -37,13 +40,17 @@ function amountText({ committedMinor, lowMinor, highMinor }, currency) {
 }
 
 function summaryText(budget) {
-  const { totalMinor, remainingMinor, currency, guestCount } = budget;
+  const { totalMinor, remainingMinor, currency, guestCount, contingency } = budget;
   if (totalMinor === undefined)
     return `Your areas, for ${guestCount} guests. The total is visible to the event manager.`;
+  const buffer = contingency?.reservedMinor
+    ? ` ${formatMoney(contingency.availableMinor, currency)} left in the buffer.`
+    : "";
   if (remainingMinor < 0)
-    return `${formatMoney(-remainingMinor, currency)} over budget, for ${guestCount} guests.`;
-  if (isTiny(remainingMinor, totalMinor)) return `Fully allocated, for ${guestCount} guests.`;
-  return `${formatMoney(remainingMinor, currency)} not yet committed, for ${guestCount} guests.`;
+    return `${formatMoney(-remainingMinor, currency)} over budget, for ${guestCount} guests.${buffer}`;
+  if (isTiny(remainingMinor, totalMinor))
+    return `Fully allocated, for ${guestCount} guests.${buffer}`;
+  return `${formatMoney(remainingMinor, currency)} not yet committed, for ${guestCount} guests.${buffer}`;
 }
 
 function slicesOf(budget) {
@@ -51,17 +58,33 @@ function slicesOf(budget) {
   for (const { id } of ordered) {
     if (!colors.has(id)) colors.set(id, COLORS[colors.size % COLORS.length]);
   }
+  colors.set("buffer", BUFFER);
   const shown = ordered.map((category) => ({
     ...category,
     amount: category.committedMinor,
     color: colorOf(category.id),
+    ink: inkOf(category.id),
   }));
+  const { contingency, currency } = budget;
+  if (contingency?.reservedMinor > 0)
+    shown.push({
+      id: "buffer",
+      name: "Contingency buffer",
+      amount: contingency.reservedMinor,
+      color: BUFFER[0],
+      ink: BUFFER[1],
+      spare: true,
+      tierLabel: contingency.spentMinor
+        ? `${formatMoney(contingency.spentMinor, currency)} used`
+        : "For sudden expenses",
+    });
   if (budget.remainingMinor > 0 && !isTiny(budget.remainingMinor, budget.totalMinor))
     shown.push({
       id: "spare",
       name: "Not committed",
       amount: budget.remainingMinor,
-      color: SPARE,
+      color: SPARE[0],
+      ink: SPARE[1],
       spare: true,
     });
   const total = shown.reduce((sum, { amount }) => sum + amount, 0);
@@ -132,10 +155,11 @@ function drawDonut(slices, total, budget, preview) {
       circle = svg("circle", { cx: 100, cy: 100, r: RADIUS, class: "donut-slice" });
       circle.style.strokeDasharray = `0 ${CIRCUMFERENCE}`;
       circle.style.strokeDashoffset = `${-used * CIRCUMFERENCE}`;
-      circle.setAttribute("stroke", slice.color);
       donut.append(circle);
       circles.set(slice.id, circle);
     }
+    // Set every time: a category's colour can change when a different person is viewing.
+    circle.setAttribute("stroke", slice.color);
     circle.onmouseenter = () => focusSlice(slice.id, slices, budget, defaults);
     circle.onmouseleave = () => focusSlice(null, slices, budget, defaults);
     const fraction = total ? slice.amount / total : 0;
@@ -157,6 +181,7 @@ function drawDonut(slices, total, budget, preview) {
     number.setAttribute("x", 100 + RADIUS * Math.cos(angle - Math.PI / 2));
     number.setAttribute("y", 100 + RADIUS * Math.sin(angle - Math.PI / 2));
     number.textContent = slice.number;
+    number.style.fill = slice.ink;
     number.style.opacity = slice.share >= MIN_LABEL_SHARE ? "1" : "0";
     used += fraction;
   }
@@ -186,6 +211,7 @@ function drawRows(slices, budget, defaults) {
   for (const slice of slices) {
     const number = el("span", { class: "row-num", "aria-hidden": "true", text: slice.number });
     number.style.setProperty("--dot", slice.color);
+    number.style.setProperty("--dot-ink", slice.ink);
     const name = el(
       "button",
       {

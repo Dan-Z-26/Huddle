@@ -1,4 +1,5 @@
 import { computeBudget } from "../core/budgetEngine.js";
+import { expenseSummary } from "../core/expenses.js";
 import { wholeMoney } from "../core/money.js";
 import { rankOf } from "../core/priorities.js";
 import {
@@ -9,6 +10,9 @@ import {
 } from "../llm/index.js";
 import { groundedOr } from "./grounded.js";
 import { insightOutput } from "./schemas.js";
+
+// Dividing a budget per guest leaves a little over; that isn't money anyone can plan with.
+const PETTY_MINOR = 100000;
 
 const SYSTEM = agentPrompt({
   role:
@@ -39,22 +43,28 @@ const SYSTEM = agentPrompt({
  * anything it says is checked against it.
  * @param {object} state BudgetState.
  * @param {object} profile EventProfile.
+ * @param {object[]} [expenses] Money actually spent.
  * @returns {string[]} One fact per line.
  */
-export function budgetFacts(state, profile) {
+export function budgetFacts(state, profile, expenses = []) {
   const budget = computeBudget(state);
+  const spending = expenseSummary(state, expenses);
   const money = (minor) => wholeMoney(minor, state.currency);
   const perGuest = state.guestCount ? Math.round(budget.committedMinor / state.guestCount) : 0;
   const position =
     budget.remainingMinor < 0
       ? `Over budget by ${money(-budget.remainingMinor)}`
-      : `Not yet committed: ${money(budget.remainingMinor)}`;
+      : budget.remainingMinor < PETTY_MINOR
+        ? "Fully allocated"
+        : `Not yet committed: ${money(budget.remainingMinor)}`;
   const lines = [
     `Guests: ${state.guestCount}`,
     `Total budget: ${money(budget.totalMinor)}`,
     `Committed so far: ${money(budget.committedMinor)}`,
     position,
     `Committed cost per guest: ${money(perGuest)}`,
+    `Contingency buffer: ${money(budget.contingency.reservedMinor)} set aside, ${money(budget.contingency.spentMinor)} already paid from it, ${money(budget.contingency.availableMinor)} left`,
+    `Spent so far: ${money(spending.spentMinor)}`,
   ];
   for (const category of budget.categories) {
     const { drivers } = state.categories.find(({ id }) => id === category.id);
@@ -64,9 +74,10 @@ export function budgetFacts(state, profile) {
       category.lowMinor === category.highMinor
         ? ""
         : ` (estimated range ${money(category.lowMinor)} to ${money(category.highMinor)})`;
+    const { spentMinor } = spending.categories.find(({ id }) => id === category.id);
     lines.push(
       `${category.name} [${category.id}]: ${money(category.committedMinor)}${range}, ` +
-        `${rank ? `priority #${rank}` : "not ranked"}, items: ${items}`,
+        `${money(spentMinor)} spent, ${rank ? `priority #${rank}` : "not ranked"}, items: ${items}`,
     );
   }
   return lines;

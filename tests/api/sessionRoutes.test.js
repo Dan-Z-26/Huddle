@@ -7,22 +7,21 @@ const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
 const PR_HEAD = `user-pr-head@${ID}`;
 
-describe("the view-as list", () => {
+describe("the demo sign-in list", () => {
   const ids = async (call, as) =>
-    (await (await call("/users", { as })).json()).users.map(({ id }) => id);
+    (await (await call("/people", { as })).json()).people.map(({ id }) => id);
 
-  it("follows the caller's event, and falls back to the demo for a stale cookie", async (t) => {
+  it("follows the caller's event, and shows the demo to anyone else", async (t) => {
     const { call, store } = await startDemo(t);
     addEvent(store);
     assert.ok((await ids(call, "user-manager@other")).every((id) => id.endsWith("@other")));
-    assert.ok((await ids(call, "nobody")).every((id) => id.endsWith(`@${ID}`)));
     assert.ok((await ids(call)).every((id) => id.endsWith(`@${ID}`)));
   });
 
   it("names each role", async (t) => {
     const { call } = await startDemo(t);
-    const { users } = await (await call("/users")).json();
-    assert.ok(users.every(({ roleName }) => typeof roleName === "string" && roleName));
+    const { people } = await (await call("/people")).json();
+    assert.ok(people.every(({ roleName }) => typeof roleName === "string" && roleName));
   });
 });
 

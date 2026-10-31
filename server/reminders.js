@@ -49,5 +49,27 @@ export async function runReminders(store, nowIso, { slaMinutes = 120, generate }
       console.error(`Reminder failed with ${err.name}`);
     }
   }
-  return posted;
+  return posted + remindAboutVendorTasks(store, nowIso);
+}
+
+// Anything overdue on a booking is reminded once, in the group that owns it. No model needed.
+function remindAboutVendorTasks(store, nowIso) {
+  const today = nowIso.slice(0, 10);
+  const late = [...store.tasks.values()]
+    .filter(
+      ({ source, status, dueDate, remindedAt }) =>
+        source === "vendor" && status !== "done" && !remindedAt && dueDate.slice(0, 10) < today,
+    )
+    .slice(0, MAX_PER_RUN);
+  for (const task of late) {
+    task.remindedAt = nowIso;
+    if (store.groups.has(task.ownerGroupId))
+      postAgentMessage(store, {
+        groupId: task.ownerGroupId,
+        authorId: `agent-timeline@${task.eventId}`,
+        text: `Reminder: "${task.title}" is overdue.`,
+        nowIso,
+      });
+  }
+  return late.length;
 }

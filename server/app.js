@@ -3,6 +3,9 @@ import express from "express";
 import helmet from "helmet";
 import { createAiLimiter, errorHandler, HttpError } from "./http.js";
 import { budgetRoutes } from "./routes/budget.js";
+import { expenseRoutes } from "./routes/expenses.js";
+import { hiringRoutes } from "./routes/hiring.js";
+import { joinRoute, vendorAccessRoutes } from "./routes/vendorAccess.js";
 import { directiveRoutes } from "./routes/directives.js";
 import { groupRoutes } from "./routes/groups.js";
 import { eventRoutes } from "./routes/events.js";
@@ -71,6 +74,9 @@ export function createApp({ store, uploadsDir = DEFAULT_UPLOADS }) {
     streamRoutes(),
     eventRoutes({ ai }),
     budgetRoutes({ ai }),
+    expenseRoutes({ ai }),
+    hiringRoutes({ ai }),
+    vendorAccessRoutes(),
     timelineRoutes({ ai }),
     vendorRoutes({ ai }),
     groupRoutes(),
@@ -78,6 +84,7 @@ export function createApp({ store, uploadsDir = DEFAULT_UPLOADS }) {
     messageRoutes({ ai, chat }),
   );
   app.use("/api", (_req, _res, next) => next(HttpError(404, "NOT_FOUND", "Not found.")));
+  app.use(joinRoute());
   app.use(express.static(PUBLIC_DIR));
   app.use(errorHandler);
 

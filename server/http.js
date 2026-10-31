@@ -1,18 +1,23 @@
 import rateLimit from "express-rate-limit";
 
-export const USER_COOKIE = "huddle_user";
+export const SESSION_COOKIE = "huddle_session";
+const SESSION_MS = 24 * 3_600_000;
 
 /**
- * Sets the "View as" cookie. Lax is enough: no GET route changes state, so cross-site POSTs stay blocked.
+ * Signs a person in: a new server-side session, with only its random id in the cookie. Lax is
+ * enough: no GET route changes state except a vendor's invite link, which is meant to be followed.
  * @param {import("express").Response} res The response.
- * @param {string} userId The seeded user to view as.
+ * @param {object} store The store.
+ * @param {string} userId The person.
+ * @param {{invited?: boolean}} [options] Passed on to `store.openSession`.
  */
-export function setUserCookie(res, userId) {
-  res.cookie(USER_COOKIE, userId, {
+export function startSession(res, store, userId, options) {
+  res.cookie(SESSION_COOKIE, store.openSession(userId, options), {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
+    maxAge: SESSION_MS,
   });
 }
 
@@ -32,10 +37,10 @@ export function HttpError(status, code, message) {
  * @param {string} [header] Raw Cookie header.
  * @returns {string | undefined} Decoded value, or undefined if absent or badly encoded.
  */
-function readUserCookie(header = "") {
+function readSessionCookie(header = "") {
   for (const pair of header.split(";")) {
     const eq = pair.indexOf("=");
-    if (eq !== -1 && pair.slice(0, eq).trim() === USER_COOKIE) {
+    if (eq !== -1 && pair.slice(0, eq).trim() === SESSION_COOKIE) {
       try {
         return decodeURIComponent(pair.slice(eq + 1).trim());
       } catch {
@@ -47,35 +52,59 @@ function readUserCookie(header = "") {
 }
 
 /**
- * Reads the "View as" cookie from a request.
+ * Reads the session id from a request.
  * @param {import("express").Request} req The request.
- * @returns {string | undefined} The user id the cookie names, if any.
+ * @returns {string | undefined} The id the cookie holds, if any.
  */
-export const readUserId = (req) => readUserCookie(req.headers.cookie);
+export const readSessionId = (req) => readSessionCookie(req.headers.cookie);
 
 /**
- * Resolves the "View as" cookie to a seeded user and sets `req.user`; otherwise responds 401.
- * AI members are refused because the cookie is client-controlled and agents may post anywhere.
+ * The live session behind a request, if any. The role always comes from the session's user, so a
+ * client can never choose or upgrade it.
+ * @param {import("express").Request} req The request.
+ * @returns {{id: string, userId: string, invited: boolean, startedAt: number} | null} The session.
+ */
+export function sessionOf(req) {
+  const { store } = req.app.locals;
+  const id = readSessionId(req);
+  const session = id === undefined ? undefined : store.sessions.get(id);
+  if (!session) return null;
+  if (Date.now() - session.startedAt > SESSION_MS) {
+    store.sessions.delete(id);
+    return null;
+  }
+  return { id, ...session };
+}
+
+/**
+ * Resolves the session to a person and sets `req.user`; otherwise responds 401.
  * @type {import("express").RequestHandler}
  */
 export function requireUser(req, _res, next) {
-  const user = req.app.locals.store.users.get(readUserId(req));
+  const session = sessionOf(req);
+  const user = session && req.app.locals.store.users.get(session.userId);
   if (!user || user.kind === "agent") {
-    return next(HttpError(401, "UNAUTHENTICATED", "Choose a user to view as first."));
+    return next(HttpError(401, "UNAUTHENTICATED", "Please sign in first."));
   }
   req.user = user;
+  req.session = session;
   next();
 }
 
 /**
- * Route rule: every route with an event :id first checks it is the user's own event.
+ * Route rule: every route with an event :id first checks it is the user's own event. Vendors are
+ * refused by default: only the few routes meant for them pass `vendorsToo`.
  * @param {import("express").Request} req The request.
+ * @param {{vendorsToo?: boolean}} [options] Lets a vendor through.
  * @returns {object} The event.
- * @throws {Error} 404 for a missing event or another event's id, so the two look the same.
+ * @throws {Error} 404 for a missing event or another event's id, so the two look the same; 403 for
+ *   a vendor.
  */
-export function ownEvent(req) {
+export function ownEvent(req, { vendorsToo = false } = {}) {
   const event = req.app.locals.store.events.get(req.params.id);
   if (!event || event.id !== req.user.eventId) throw HttpError(404, "NOT_FOUND", "No such event.");
+  if (req.user.kind === "vendor" && !vendorsToo)
+    throw HttpError(403, "FORBIDDEN", "This is for the event team.");
   return event;
 }
 

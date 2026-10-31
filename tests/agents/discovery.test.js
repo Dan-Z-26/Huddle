@@ -285,3 +285,175 @@ describe("nextStep: very long answers", () => {
     assert.equal(typeof step.nextQuestion, "string");
   });
 });
+
+describe("nextStep: the opening description", () => {
+  const opening = (answer, deps = { generate: demoGenerate }) =>
+    nextStep({ profile: start(), template, answer, mode: "opening", nowIso: NOW }, deps);
+
+  it("fills what it can offline and asks only what is left", async () => {
+    const step = await opening(
+      "A launch called Nova X1 in Pune on 12 March 2027 for 200 guests, budget ₹16 lakh",
+    );
+    assert.equal(step.profile.name, "Nova X1");
+    assert.equal(step.profile.city, "Pune");
+    assert.equal(step.profile.date, "2027-03-12T00:00:00.000Z");
+    assert.equal(step.profile.guests.confirmed, 200);
+    assert.equal(step.profile.budget.totalMinor, 160000000);
+    assert.ok(step.heard.includes("date"));
+    assert.equal(step.remaining, missingProfileFields(step.profile).length);
+    assert.equal(step.feedback, "");
+  });
+
+  it("stays quiet about a date it can't use, and asks for it in its turn", async () => {
+    const step = await opening("A launch in Pune on 12 March");
+    assert.equal(step.profile.date, "");
+    assert.equal(step.feedback, "");
+    assert.ok(missingProfileFields(step.profile).includes("date"));
+  });
+
+  it("keeps a fuzzy guest count unconfirmed, and offers the suggestion as a button", async () => {
+    const step = await opening("A launch for around 200 people");
+    assert.equal(step.profile.guests.confirmed, null);
+    assert.deepEqual(
+      (
+        await nextStep({
+          profile: {
+            ...step.profile,
+            name: "N",
+            date: "2027-03-12T00:00:00.000Z",
+            city: "P",
+            venueType: "V",
+          },
+          template,
+          nowIso: NOW,
+        })
+      ).options,
+      ["Yes, plan for 210"],
+    );
+  });
+
+  it("stores the model's buttons for this event, dropping any with a figure", async () => {
+    const step = await opening("A launch for dentists", {
+      generate: async () => ({
+        data: {
+          extracted: { purpose: "A launch for dentists" },
+          options: {
+            venueType: ["Dental college hall", "Hotel ballroom", "₹5 lakh ballroom"],
+            mustHaves: [
+              { text: "Hands-on demo", categoryId: "av" },
+              { text: "Press corner", categoryId: "made-up" },
+            ],
+            attendeeExperience: ["Only one"],
+          },
+          rationale: "ok",
+        },
+      }),
+    });
+    assert.deepEqual(step.profile.suggestedOptions.venueType, [
+      "Dental college hall",
+      "Hotel ballroom",
+    ]);
+    assert.deepEqual(step.profile.suggestedOptions.mustHaves, [
+      { text: "Hands-on demo", categoryId: "av" },
+      { text: "Press corner", categoryId: null },
+    ]);
+    assert.equal(step.profile.suggestedOptions.attendeeExperience, undefined);
+  });
+
+  it("uses the description as the purpose when the model doesn't lift one out", async () => {
+    const step = await opening("A beach clean-up for students", {
+      generate: async () => ({ data: { extracted: {}, rationale: "ok" } }),
+    });
+    assert.equal(step.profile.purpose, "A beach clean-up for students");
+    assert.equal(step.field, "name");
+  });
+
+  it("offers the model's titles for the name", async () => {
+    const step = await opening("A beach clean-up", {
+      generate: async () => ({
+        data: {
+          extracted: {},
+          options: { name: ["Clean Beach Day", "Tide Turners"] },
+          rationale: "ok",
+        },
+      }),
+    });
+    assert.deepEqual(step.options, ["Clean Beach Day", "Tide Turners"]);
+  });
+
+  it("never takes a budget or date the description doesn't contain", async () => {
+    const step = await opening("A launch for dentists", {
+      generate: async () => ({
+        data: {
+          extracted: { budgetText: "₹99 lakh", date: "1 January 2030" },
+          rationale: "ok",
+        },
+      }),
+    });
+    assert.equal(step.profile.budget.totalMinor, 0);
+    assert.equal(step.profile.date, "");
+  });
+});
+
+describe("nextStep: a tapped answer", () => {
+  const failing = {
+    generate: async () => {
+      throw new Error("a tapped answer must not call the model");
+    },
+  };
+  const at = (fields) => ({
+    ...start(),
+    name: "Nova",
+    purpose: "Launch",
+    date: "2027-03-12T00:00:00.000Z",
+    city: "Pune",
+    venueType: "Hotel",
+    guests: { min: 200, max: 200, suggested: 200, confirmed: 200 },
+    budget: { totalMinor: 160000000, currency: "INR" },
+    priorities: ["reveal"],
+    attendeeExperience: "Proud",
+    ...fields,
+  });
+  const tap = (profile, answer, deps = failing) =>
+    nextStep({ profile, template, answer, mode: "direct", nowIso: NOW }, deps);
+
+  it("takes a ranking as ids, without confusing similar category names", async () => {
+    const step = await tap({ ...at({}), priorities: [] }, "av\nreveal\ndecor");
+    assert.deepEqual(step.profile.priorities, ["av", "reveal", "decor"]);
+  });
+
+  it("keeps a tapped must-have whole and takes its category from the button", async () => {
+    const step = await tap(at({}), "A live product demo\nFood and drinks all evening");
+    assert.deepEqual(
+      step.profile.mustHaves.map(({ text, categoryId }) => [text, categoryId]),
+      [
+        ["A live product demo", "av"],
+        ["Food and drinks all evening", "food-beverage"],
+      ],
+    );
+  });
+
+  it("reads a date from the calendar and a budget from a button, still in code", async () => {
+    const dated = await tap({ ...at({}), date: "" }, "2027-05-01");
+    assert.equal(dated.profile.date, "2027-05-01T00:00:00.000Z");
+    const past = await tap({ ...at({}), date: "" }, "2020-05-01");
+    assert.equal(past.profile.date, "");
+    assert.match(past.feedback, /already passed/);
+    const budget = await tap({ ...at({}), budget: { totalMinor: 0, currency: "INR" } }, "₹10 lakh");
+    assert.equal(budget.profile.budget.totalMinor, 100000000);
+  });
+
+  it("offers the event's own must-haves for the one that matters most", async () => {
+    const step = await tap(at({}), "A live product demo\nA press corner");
+    assert.equal(step.field, "absoluteMustHave");
+    assert.deepEqual(step.options, ["A live product demo", "A press corner"]);
+  });
+
+  it("doesn't mistake a must-have like No alcohol for a skip", async () => {
+    const step = await tap(at({}), "No alcohol");
+    assert.equal(step.profile.mustHaves[0].text, "No alcohol");
+    assert.ok(!step.profile.skippedFields.includes("mustHaves"));
+    const skipped = await tap(at({}), "Skip for now");
+    assert.ok(skipped.profile.skippedFields.includes("mustHaves"));
+  });
+});

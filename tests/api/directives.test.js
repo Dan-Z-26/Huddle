@@ -124,7 +124,7 @@ describe("acknowledging", () => {
     assert.match(history.pinned[0].text, /Send specs/);
     const me = await (await call("/me", { as: DESIGNER })).json();
     assert.equal(me.attention.directives[0].id, directive.id);
-    assert.match(me.attention.directives[0].groupName, /stage-decor/);
+    assert.match(me.attention.directives[0].groupName, /Stage & décor/);
     await ack(call, directive.id, DESIGNER);
     const after = await (await call("/me", { as: DESIGNER })).json();
     assert.deepEqual(after.attention.directives, []);

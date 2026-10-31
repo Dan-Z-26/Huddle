@@ -6,7 +6,7 @@ export function streamRoutes() {
   const router = Router();
 
   router.get("/stream", requireUser, (req, res, next) => {
-    if (!req.app.locals.hub.add(res, req.user))
+    if (!req.app.locals.hub.add(res, req.user, req.session.id))
       return next(HttpError(429, "RATE_LIMITED", "Too many open connections."));
   });
 

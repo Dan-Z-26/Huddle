@@ -47,7 +47,8 @@ function optionLine(option, nameOf, mustHaves, currency) {
  */
 export function consequenceText(consequences, { profile, template, currency }) {
   const nameOf = (id) => template.categories.find((category) => category.id === id)?.name ?? id;
-  const { shortfall, surplusMinor, deltas, options, increaseBudget } = consequences;
+  const { shortfall, surplusMinor, deltas, options, increaseBudget, bufferAvailableMinor } =
+    consequences;
   const lines = [];
   if (deltas.length) lines.push(`Costs change: ${changeLine(deltas, nameOf, currency)}.`);
   if (shortfall.highMinor === 0) {
@@ -55,6 +56,10 @@ export function consequenceText(consequences, { profile, template, currency }) {
     return lines.join("\n");
   }
   lines.push(`You are ${range(shortfall.lowMinor, shortfall.highMinor, currency)} over budget.`);
+  if (bufferAvailableMinor > 0)
+    lines.push(
+      `Your contingency buffer holds ${wholeMoney(bufferAvailableMinor, currency)}, which could go towards this.`,
+    );
   for (const option of options) lines.push(optionLine(option, nameOf, profile.mustHaves, currency));
   if (increaseBudget) {
     lines.push(

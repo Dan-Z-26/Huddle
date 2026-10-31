@@ -10,61 +10,58 @@ import {
 } from "../../server/core/budgetEngine.js";
 import { category, estimated, fixed, minorValues, perGuest } from "./fixtures.js";
 
-const sumOf = (allocation) => Object.values(allocation).reduce((sum, minor) => sum + minor, 0);
 const same = (minor) => ({ committedMinor: minor, lowMinor: minor, highMinor: minor });
 
 describe("allocate", () => {
-  it("weights by rank using the plan's 4/3/2/1 shares", () => {
-    assert.deepEqual(allocate(1000, ["a", "b", "c", "d"]), { a: 400, b: 300, c: 200, d: 100 });
+  const cats = (...pairs) => pairs.map(([id, typicalBps]) => ({ id, typicalBps }));
+  const even = cats(["a", 2500], ["b", 2500], ["c", 2500], ["d", 2500]);
+
+  it("gives more to what is ranked higher, from the same starting share", () => {
+    const split = allocate(1000000, even, ["c", "a", "d", "b"]);
+    assert.ok(split.c > split.a && split.a > split.d && split.d > split.b);
   });
 
-  it("sums exactly with 1000 paise over 3 categories", () => {
-    assert.deepEqual(allocate(1000, ["a", "b", "c"]), { a: 500, b: 333, c: 167 });
+  it("starts from the event type's usual shares, not an even split", () => {
+    const split = allocate(1000000, cats(["food", 4000], ["cake", 1000]), ["cake", "food"]);
+    // Cake is ranked first, but food usually costs far more.
+    assert.ok(split.food > split.cake);
+    assert.ok(split.cake > 1000000 * 0.2, "ranking first still lifts it above its usual 20%");
   });
 
-  it("sums exactly with 1000 paise over 7 categories", () => {
-    assert.deepEqual(allocate(1000, ["a", "b", "c", "d", "e", "f", "g"]), {
-      a: 250,
-      b: 214,
-      c: 179,
-      d: 143,
-      e: 107,
-      f: 71,
-      g: 36,
-    });
+  it("never leaves an unranked category at zero", () => {
+    const split = allocate(1000000, even, ["a"]);
+    assert.ok(split.b > 0 && split.c > 0 && split.d > 0);
+    assert.ok(split.a > split.b);
   });
 
-  it("always sums exactly and gives only integers", () => {
-    const ids = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k"];
-    for (let count = 1; count <= ids.length; count += 1) {
-      for (const total of [0, 1, 7, 99, 1000, 160000000, 333333333, 100000000001]) {
-        const allocation = allocate(total, ids.slice(0, count));
-        assert.equal(sumOf(allocation), total);
-        assert.ok(Object.values(allocation).every(Number.isSafeInteger));
-      }
+  it("works with nothing ranked, on usual shares alone", () => {
+    assert.deepEqual(allocate(1000, cats(["a", 3000], ["b", 1000]), []), { a: 750, b: 250 });
+  });
+
+  it("sums exactly, even at the largest budget", () => {
+    for (const total of [0, 1, 7, 999, 1000001, 5e10]) {
+      const split = allocate(total, even, ["a", "b", "c", "d"]);
+      assert.equal(
+        Object.values(split).reduce((sum, minor) => sum + minor, 0),
+        total,
+      );
     }
   });
 
-  it("gives ties in the remainder to the higher rank", () => {
-    assert.deepEqual(allocate(1, ["a", "b"]), { a: 1, b: 0 });
+  it("ignores repeated and unknown ranks", () => {
+    assert.deepEqual(
+      allocate(1000, even, ["a", "ghost", "a", "b"]),
+      allocate(1000, even, ["a", "b"]),
+    );
   });
 
-  it("returns nothing for empty priorities", () => {
-    assert.deepEqual(allocate(1000, []), {});
+  it("has no share to give when there are no categories", () => {
+    assert.deepEqual(allocate(1000, [], ["a"]), {});
   });
 
-  it("gives a single category the whole total", () => {
-    assert.deepEqual(allocate(1000, ["a"]), { a: 1000 });
-  });
-
-  it("handles a zero total and ignores duplicates", () => {
-    assert.deepEqual(allocate(0, ["a", "b"]), { a: 0, b: 0 });
-    assert.deepEqual(allocate(300, ["a", "b", "a"]), { a: 200, b: 100 });
-  });
-
-  it("rejects negative and fractional totals", () => {
-    assert.throws(() => allocate(-1, ["a"]), RangeError);
-    assert.throws(() => allocate(10.5, ["a"]), RangeError);
+  it("rejects a negative or fractional total", () => {
+    assert.throws(() => allocate(-1, even, []), RangeError);
+    assert.throws(() => allocate(10.5, even, []), RangeError);
   });
 });
 
@@ -176,6 +173,7 @@ describe("computeBudget", () => {
       lowMinor: 400,
       highMinor: 500,
       totalMinor: 1000,
+      contingency: { reservedMinor: 0, spentMinor: 0, availableMinor: 0 },
       remainingMinor: 700,
     });
   });

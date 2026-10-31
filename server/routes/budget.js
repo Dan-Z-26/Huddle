@@ -6,12 +6,14 @@ import { computeBudget, tierForCost } from "../core/budgetEngine.js";
 import { computeConsequences, resolutionEvents } from "../core/consequences.js";
 import { canSeeBudget } from "../core/permissions.js";
 import { rankOf } from "../core/priorities.js";
-import { getTemplate } from "../core/templates.js";
+import { getTemplate, groupsForCategory } from "../core/templates.js";
 import { flagAtRisk } from "../core/timelinePlanner.js";
 import { HttpError, managerOnly, ownEvent, requireBudget, requireUser, validate } from "../http.js";
-import { postAgentMessage } from "../store/workspace.js";
+import { eventExpenses, postAgentMessage } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
+import { bookVendor, vendorsOf } from "./hiringSupport.js";
 import { saveTasks, timelineView } from "./timeline.js";
+import { directiveView, groupPeople } from "./views.js";
 
 const MAX_PENDING_PER_EVENT = 100;
 
@@ -21,13 +23,15 @@ function budgetFor(event, state, role) {
   const categories = computed.categories
     .filter(({ id }) => canSeeBudget(role, { categoryId: id }))
     .map((category) => {
-      const { tiers, locked } = state.categories.find(({ id }) => id === category.id);
+      const { tiers, locked, typicalBps } = state.categories.find(({ id }) => id === category.id);
       const tier = tierForCost(tiers, category.committedMinor);
       return {
         ...category,
         locked,
         // Only the manager: rank plus a category's amount would reveal the total.
-        ...(canSeeBudget(role, "total") ? { rank: rankOf(event.priorities, category.id) } : {}),
+        ...(canSeeBudget(role, "total")
+          ? { rank: rankOf(event.priorities, category.id), typicalBps }
+          : {}),
         // With nothing allocated, every tier "fits", so naming one would mislead.
         tierLabel: category.committedMinor > 0 ? (tier?.label ?? null) : null,
       };
@@ -42,7 +46,7 @@ const pendingOf = (store, eventId) =>
 // Each affected group gets a notice worded from only the facts it may see.
 async function postNotices({ store, event, template, before, after, deltas, nowIso }) {
   const guests = { before: before.guestCount, after: after.guestCount };
-  // A category whose group was removed is told to #core-team instead, so nobody is left out.
+  // A category whose group was removed is told to Core team instead, so nobody is left out.
   const merged = new Map();
   for (const { slug, categoryIds } of noticeTargets({
     deltas,
@@ -51,11 +55,18 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
     const to = store.groups.has(`g-${event.id}-${slug}`) ? slug : "core-team";
     merged.set(to, [...new Set([...(merged.get(to) ?? []), ...categoryIds])]);
   }
+  // A booked vendor hears about a new guest count even if their own price didn't move.
+  if (guests.before !== guests.after)
+    for (const { categoryIds } of vendorsOf(store, event.id)) {
+      const [slug] = groupsForCategory(template.categoryGroupMap, categoryIds[0]);
+      merged.set(slug, [...new Set([...(merged.get(slug) ?? []), categoryIds[0]])]);
+    }
   const targets = [...merged].map(([slug, categoryIds]) => ({ slug, categoryIds }));
   const posted = await Promise.all(
     targets.map(async ({ slug, categoryIds }) => {
       const group = store.groups.get(`g-${event.id}-${slug}`);
       if (!group) return null;
+      const vendors = groupPeople(store, group).filter(({ kind }) => kind === "vendor");
       const facts = noticeFacts({
         guests,
         deltas,
@@ -63,11 +74,14 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
         groupSlug: slug,
         template,
         currency: after.currency,
+        hideCosts: vendors.length > 0,
+        memberRoleIds: group.memberRoleIds,
       });
+      if (facts.length === 0) return null;
       // The change is already applied, so a failed notice must not report the change as failed.
       try {
         const { wording, rationale } = await word({ facts, groupName: group.name });
-        return postAgentMessage(store, {
+        const message = postAgentMessage(store, {
           groupId: group.id,
           authorId: `agent-budget@${event.id}`,
           authorKind: "system",
@@ -75,6 +89,10 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
           rationale,
           nowIso,
         });
+        // Someone booked by this very change has nothing to catch up on.
+        const existing = vendors.filter(({ joinedAt }) => joinedAt !== nowIso);
+        if (existing.length) askVendorsToAcknowledge(store, event, message, existing, nowIso);
+        return message;
       } catch (err) {
         console.error(`Notice failed with ${err.name}`);
         return null;
@@ -82,6 +100,28 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
     }),
   );
   return posted.filter(Boolean);
+}
+
+// A booked vendor has to confirm they saw a change, the same way the team confirms a directive.
+function askVendorsToAcknowledge(store, event, message, vendors, nowIso) {
+  const directive = {
+    id: `d-${randomUUID().slice(0, 8)}`,
+    messageId: message.id,
+    groupId: message.groupId,
+    addressedUserIds: vendors.map(({ id }) => id),
+    acks: [],
+    createdAt: nowIso,
+    remindedAt: null,
+    taskId: null,
+  };
+  store.directives.set(directive.id, directive);
+  store.publish({
+    type: "directive.updated",
+    eventId: event.id,
+    groupId: message.groupId,
+    directive: { ...directiveView(store, directive), text: message.text },
+  });
+  store.publish({ type: "attention.updated", eventId: event.id });
 }
 
 /**
@@ -135,6 +175,7 @@ export function budgetRoutes({ ai }) {
         actor: store.roleOf(req.user),
         text: req.valid.body.text,
         template: getTemplate(event.eventType),
+        expenses: eventExpenses(store, event.id),
       });
       // Only a change that applies cleanly can be accepted later.
       const applies =
@@ -205,11 +246,15 @@ export function budgetRoutes({ ai }) {
       }
       event.budget = { ...event.budget, totalMinor: after.totalMinor };
       saveTasks(store, flagAtRisk(store.tasksForEvent(event.id), nowIso));
+      const template = getTemplate(event.eventType);
+      for (const { type, quoteId } of allEvents)
+        if (type === "quote_accepted")
+          bookVendor({ store, event, template, quote: store.quotes.get(quoteId), nowIso });
 
       const notices = await postNotices({
         store,
         event,
-        template: getTemplate(event.eventType),
+        template,
         before,
         after,
         deltas,

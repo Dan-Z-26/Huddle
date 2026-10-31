@@ -223,7 +223,17 @@ Vegetarian and Jain menus available`;
     await extractQuote({ ...input, file }, { generate, cache });
     await extractQuote({ ...input, file }, { generate, cache });
     assert.equal(calls.length, 1);
-    await extractQuote({ ...input, file: { ...file, id: "f10" } }, { generate, cache });
+    // The same bytes under a new upload aren't read again, and keep their own file id.
+    const again = await extractQuote(
+      { ...input, file: { ...file, id: "f10" } },
+      { generate, cache },
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(again.extractedQuote.sourceFileId, "f10");
+    await extractQuote(
+      { ...input, file: { ...file, id: "f11", buffer: Buffer.from("other") } },
+      { generate, cache },
+    );
     assert.equal(calls.length, 2);
   });
 

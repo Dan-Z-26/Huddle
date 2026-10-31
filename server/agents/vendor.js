@@ -3,6 +3,7 @@ import { parseAmount } from "../core/amount.js";
 import { generate as realGenerate, generateOrDemo, wrapUntrusted } from "../llm/index.js";
 import { groundedOr, isGrounded } from "./grounded.js";
 import { quoteExtraction, rfqOutput } from "./schemas.js";
+import { seededReading } from "./sampleQuotes.js";
 import { demoQuoteFromFile, demoQuoteFromText } from "./vendorDemo.js";
 import { QUOTE_SYSTEM, RFQ_SYSTEM } from "./vendorPrompts.js";
 
@@ -161,6 +162,14 @@ export function quoteFromExtracted(extracted, { categoryId, profile, fileId }) {
       perGuestMinor,
       fixedMinor,
       taxBps: Math.round((extracted.taxPercent ?? 0) * 100),
+      // Silence about tax is a hidden cost, so it is told apart from a stated zero.
+      taxStated: extracted.taxPercent != null,
+      exclusions: (extracted.exclusions ?? []).map((item) => clean(item, 120)).filter(Boolean),
+      minGuests: extracted.minGuests ?? null,
+      validUntil: clean(extracted.validUntil, 80),
+      sources: Object.fromEntries(
+        Object.entries(extracted.sources ?? {}).map(([key, text]) => [key, clean(text, 160)]),
+      ),
       includes: (extracted.includes ?? []).map((item) => clean(item, 120)).filter(Boolean),
       mustHaveIdsMet: (extracted.mustHaveIdsMet ?? []).filter((id) => mustHaveIds.has(id)),
       answers: Object.fromEntries(
@@ -194,15 +203,24 @@ export async function extractQuote(
 ) {
   categoryOf(template, categoryId);
   const body = text.slice(0, MAX_QUOTE_TEXT);
-  const key = file ? `file:${file.id}` : `text:${hash(`${profile.id}:${categoryId}:${body}`)}`;
-  if (cache.has(key)) return structuredClone(cache.get(key));
+  // By the file's content, so the same file is only ever read once, whoever uploads it again.
+  const key = file
+    ? `file:${profile.id}:${categoryId}:${hash(file.buffer)}`
+    : `text:${hash(`${profile.id}:${categoryId}:${body}`)}`;
+  if (cache.has(key)) {
+    const known = structuredClone(cache.get(key));
+    if (file) known.extractedQuote.sourceFileId = file.id;
+    return known;
+  }
 
   const mustHaves = profile.mustHaves
     .filter((item) => item.categoryId === categoryId)
     .map(({ id, text: label }) => ({ id, text: label }));
   const demo = async () =>
     quoteExtraction.parse({
-      extracted: file ? demoQuoteFromFile() : demoQuoteFromText(body),
+      extracted: file
+        ? (seededReading(file.buffer) ?? demoQuoteFromFile())
+        : demoQuoteFromText(body),
       rationale: file
         ? "This is a sample result, because no AI key is set."
         : "I read the quote with simple rules.",

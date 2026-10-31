@@ -1,5 +1,6 @@
 import { api } from "./api.js";
-import { announce, clear, el, formatMoney } from "./dom.js";
+import { announce, announceError, clear, el, formatMoney } from "./dom.js";
+import { setUpHiring } from "./hiring.js";
 import { openConfirm } from "./quoteConfirm.js";
 import { generation, isCurrent } from "./session.js";
 
@@ -10,6 +11,7 @@ const FIELD_LABEL = {
   cancellationTerms: "cancellation terms",
   dietary: "dietary handling",
   price: "a price",
+  tax: "taxes",
 };
 const STATUS = {
   extracted: "Read from the quote. Check it first",
@@ -40,15 +42,77 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
   };
   const missingText = (fields) => fields.map((field) => FIELD_LABEL[field] ?? field).join(", ");
 
+  let booked = false;
+  let refreshNow = async () => {};
+  const hiring = setUpHiring({
+    event,
+    isManager,
+    category,
+    onSelect: (id) => {
+      select.value = id;
+      select.onchange();
+      $("vendor-category").focus();
+    },
+    onChanged: () => refreshNow(),
+  });
+
   async function refresh() {
     const started = generation();
-    const [{ quotes }, { rows }] = await Promise.all([
+    const [row, { quotes }, { rows }] = await Promise.all([
+      hiring.refresh(),
       api.quotes(event.id, category()),
       api.comparison(event.id, category()),
     ]);
     if (!isCurrent(started)) return;
+    booked = Boolean(row.vendor);
+    renderSamples(row);
     renderQuotes(quotes);
     renderComparison(rows);
+  }
+  refreshNow = refresh;
+
+  // The demo's sample quotes go through the same upload as any file the lead would pick.
+  function renderSamples({ samples, brief }) {
+    const box = $("sample-quotes");
+    clear(box);
+    box.hidden = !samples.length || brief?.status !== "approved";
+    for (const { file, vendorName } of samples)
+      box.append(
+        el("button", {
+          type: "button",
+          class: "chip",
+          text: `Use sample: ${vendorName}`,
+          onclick: (e) =>
+            guarded(e.target, "Reading…", async () => {
+              const bytes = await (await fetch(`/samples/${file}`)).blob();
+              const form = new FormData();
+              form.set("categoryId", category());
+              form.set("file", new File([bytes], file, { type: "application/pdf" }));
+              await addQuote(form);
+            }),
+        }),
+      );
+  }
+
+  async function addQuote(form) {
+    const started = generation();
+    const result = await api.addQuote(event.id, form);
+    if (!isCurrent(started)) return;
+    await refresh();
+    if (result.quote.status === "extracted") {
+      openConfirm(result.quote, {
+        warnings: [
+          ...(result.offline
+            ? [
+                "No AI was reachable, so this came from a stored reading. Please check every figure.",
+              ]
+            : []),
+          ...result.warnings,
+        ],
+        mustHaves: mustHaves(),
+        onConfirmed: refresh,
+      });
+    } else announce("Quote added.");
   }
 
   function quoteCard(quote) {
@@ -79,14 +143,29 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
           type: "button",
           class: "button primary",
           text: "See what accepting does",
-          "aria-label": `See what accepting the ${quote.vendorName} quote does`,
-          onclick: async () => {
-            try {
+          "aria-label": `See what accepting does: ${quote.vendorName}`,
+          onclick: (e) =>
+            guarded(e.target, "Working it out…", async () => {
               showProposal(`Accept the ${quote.vendorName} quote`, await api.acceptQuote(quote.id));
-            } catch (err) {
-              announce(err.message);
-            }
-          },
+            }),
+        }),
+      );
+    const declined = el("p", { class: "brief-text", hidden: true });
+    if (booked && quote.status === "confirmed")
+      actions.push(
+        el("button", {
+          type: "button",
+          class: "button",
+          text: "Draft a polite decline",
+          "aria-label": `Draft a polite decline for ${quote.vendorName}`,
+          onclick: (e) =>
+            guarded(e.target, "Drafting…", async () => {
+              const { text } = await api.declineDraft(quote.id);
+              declined.textContent = text;
+              declined.hidden = false;
+              await navigator.clipboard?.writeText(text).catch(() => {});
+              announce(`Decline for ${quote.vendorName} drafted. It's ready to copy.`);
+            }),
         }),
       );
     const total = quote.totalMinor ? formatMoney(quote.totalMinor) : "No price yet";
@@ -107,6 +186,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
         ? el("p", { class: "muted", text: `Not answered yet: ${missingText(quote.missing)}` })
         : null,
       el("div", { class: "quote-actions" }, ...actions),
+      declined,
     );
   }
 
@@ -129,6 +209,8 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
     clear(body);
     for (const row of rows) {
       const gaps = [
+        ...row.reasons,
+        ...row.warnings,
         ...row.riskFlags.map(gapText),
         ...(row.missing.length ? [`Not answered: ${missingText(row.missing)}`] : []),
       ];
@@ -140,7 +222,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
           el("td", { class: "num", text: formatMoney(row.totalMinor) }),
           el("td", { class: "num", text: `${row.mustHaveFit}%` }),
           el("td", { class: "num" }, el("strong", { text: String(row.score) })),
-          el("td", { text: gaps.length ? gaps.join("; ") : "Nothing missing" }),
+          el("td", { class: "compare-notes" }, ...gaps.map((text) => el("span", { text }))),
         ),
       );
     }
@@ -154,10 +236,12 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
     try {
       await work();
     } catch (err) {
-      announce(err.message);
+      announceError(err.message);
     } finally {
       button.disabled = false;
       button.textContent = label;
+      if (document.activeElement === document.body && !$("confirm-dialog").open)
+        (button.offsetParent ? button : $("vendors-title")).focus();
     }
   }
 
@@ -209,31 +293,15 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
       if ($(id).value.trim()) form.set(name, $(id).value.trim());
     guarded($("quote-send"), file ? `Uploading and reading ${file.name}…` : "Adding…", async () => {
       announce(file ? `Uploading and reading ${file.name}.` : "Adding the quote.");
-      const started = generation();
-      const result = await api.addQuote(event.id, form);
-      if (!isCurrent(started)) return;
+      await addQuote(form);
       $("quote-form").reset();
-      await refresh();
-      if (result.quote.status === "extracted") {
-        openConfirm(result.quote, {
-          warnings: [
-            ...(result.offline
-              ? [
-                  "No AI was reachable, so this is a sample reading, not your quote. Please check every figure.",
-                ]
-              : []),
-            ...result.warnings,
-          ],
-          mustHaves: mustHaves(),
-          onConfirmed: refresh,
-        });
-      } else announce("Quote added.");
     });
   };
 
   select.onchange = () => {
     $("rfq-result").hidden = true;
-    refresh().catch((err) => announce(err.message));
+    $("invite-link-box").hidden = true;
+    refresh().catch((err) => announceError(err.message));
   };
   return refresh;
 }

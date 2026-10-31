@@ -76,7 +76,11 @@ export function timelineRoutes({ ai }) {
     if (!task || task.eventId !== req.user.eventId)
       throw HttpError(404, "NOT_FOUND", "No such task.");
     const group = store.groups.get(task.ownerGroupId);
-    if (!group || !canView(store.roleOf(req.user), { type: "group", group }))
+    if (
+      req.user.kind === "vendor" ||
+      !group ||
+      !canView(store.roleOf(req.user), { type: "group", group })
+    )
       throw HttpError(403, "FORBIDDEN", "Only people in the owner group can update this task.");
     const [updated] = flagAtRisk(
       [{ ...task, status: req.valid.body.status }],

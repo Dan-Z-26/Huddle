@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
-import { assertError, startDemo } from "./helpers.js";
+import { assertError, startDemo, cookieAt } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
@@ -20,7 +20,7 @@ async function withFiles(base, slug, as, files, text = "") {
   for (const [name, buffer] of files) form.append("files", new Blob([buffer]), name);
   return fetch(`${base}/api${g(slug)}`, {
     method: "POST",
-    headers: { cookie: `huddle_user=${encodeURIComponent(as)}` },
+    headers: { cookie: cookieAt(base, as) },
     body: form,
   });
 }
@@ -49,7 +49,10 @@ describe("posting", () => {
     assert.equal((await post(call, "announcements", "Welcome all", MANAGER)).status, 201);
     await assertError(await post(call, "food-beverage", "hi", DESIGNER), 403, "FORBIDDEN");
     assert.equal((await post(call, "stage-decor", "Stage check", LEAD)).status, 201);
-    assert.equal((await post(call, "food-beverage", "Menu tasting", LEAD)).status, 201);
+    assert.equal(
+      (await post(call, "food-beverage", "Menu tasting", `user-fb-lead@${ID}`)).status,
+      201,
+    );
     await assertError(await post(call, "core-team", "hi", null), 401, "UNAUTHENTICATED");
   });
 

@@ -53,7 +53,7 @@ export function flagAtRisk(tasks, nowIso) {
 }
 
 /**
- * Moves milestone tasks to a new event date, keeping status and every non-milestone task.
+ * Moves milestone and vendor tasks to a new event date, keeping status and every other task.
  * @param {object[]} tasks Tasks.
  * @param {string} newEventDateIso New event date.
  * @param {string} nowIso Current time.
@@ -63,7 +63,7 @@ export function replanTimeline(tasks, newEventDateIso, nowIso) {
   const eventDay = utcDay(newEventDateIso);
   const today = utcDay(nowIso);
   const moved = tasks.map((task) =>
-    task.source === "milestone"
+    task.source === "milestone" || task.source === "vendor"
       ? { ...task, ...schedule(eventDay, task.daysBefore, today, task.status === "done") }
       : task,
   );

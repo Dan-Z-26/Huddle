@@ -55,7 +55,7 @@ export function setUpGroupsAdmin(context) {
     const name = el("input", {
       type: "text",
       maxlength: "30",
-      value: group.name.replace(/^#/, ""),
+      value: group.name,
       "aria-label": `Name of ${group.name}`,
     });
     const boxes = el(

@@ -11,28 +11,30 @@ const start = startDemo;
 describe("session", () => {
   it("lists the demo people without AI members", async (t) => {
     const { call } = await start(t);
-    const { users } = await (await call("/users")).json();
-    assert.equal(users.length, 4);
+    const { people: users } = await (await call("/people")).json();
+    assert.equal(users.length, 5);
     assert.ok(users.every(({ kind }) => kind !== "agent"));
     assert.ok(users.every((user) => !("categoryIds" in user)));
   });
 
-  it("sets a cookie for a human and refuses AI members and unknown ids", async (t) => {
+  it("signs a human in with a random session id, and refuses AI members and unknown ids", async (t) => {
     const { call } = await start(t);
-    const ok = await call("/view-as", { method: "POST", body: { userId: DESIGNER } });
+    const ok = await call("/session", { method: "POST", body: { userId: DESIGNER } });
     assert.equal(ok.status, 200);
-    assert.match(ok.headers.get("set-cookie"), /huddle_user=.*HttpOnly.*SameSite=Lax/i);
-    const agent = await call("/view-as", {
+    const cookie = ok.headers.get("set-cookie");
+    assert.match(cookie, /huddle_session=.*HttpOnly.*SameSite=Lax/i);
+    assert.ok(!cookie.includes("creative-director"), "the cookie names no person or role");
+    const agent = await call("/session", {
       method: "POST",
       body: { userId: `agent-planner@${DEMO_EVENT_ID}` },
     });
     await assertError(agent, 404, "NOT_FOUND");
     await assertError(
-      await call("/view-as", { method: "POST", body: { userId: "nobody" } }),
+      await call("/session", { method: "POST", body: { userId: "nobody" } }),
       404,
       "NOT_FOUND",
     );
-    await assertError(await call("/view-as", { method: "POST", body: {} }), 400, "BAD_REQUEST");
+    await assertError(await call("/session", { method: "POST", body: {} }), 400, "BAD_REQUEST");
   });
 
   it("needs a user for /me and reports permissions from the server", async (t) => {

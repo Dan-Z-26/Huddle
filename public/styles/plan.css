@@ -1,0 +1,142 @@
+/* Plan */
+.plan {
+  padding: 0.25rem clamp(1rem, 2.5vw, 1.35rem) 1.5rem;
+  background: var(--bg);
+}
+.panel {
+  padding-block: 1.25rem;
+}
+.panel + .panel {
+  border-top: 1px solid var(--line);
+}
+.panel-title {
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+summary.panel-title {
+  cursor: pointer;
+}
+
+/* Donut */
+.chart {
+  position: relative;
+  width: min(15rem, 100%);
+  margin: 1rem auto;
+}
+.donut {
+  display: block;
+  width: 100%;
+  transform: rotate(-90deg);
+}
+.donut circle {
+  fill: none;
+  stroke-width: 26;
+}
+.donut-track {
+  stroke: var(--pink-soft);
+}
+.donut-slice {
+  stroke-linecap: butt;
+  cursor: pointer;
+  transition:
+    stroke-dasharray 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+    stroke-dashoffset 0.7s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s ease,
+    stroke-width 0.2s ease;
+}
+.chart.is-focused .donut-slice {
+  opacity: 0.25;
+}
+.chart.is-focused .donut-slice.is-on {
+  opacity: 1;
+  stroke-width: 32;
+}
+.donut-num {
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.donut-center {
+  position: absolute;
+  inset: 26%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+.donut-center strong {
+  font-size: 1.1rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.donut-center span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.25;
+}
+.chart.is-preview .donut-center span {
+  color: var(--pink-deep);
+  font-weight: 500;
+}
+.budget-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+.budget-table th,
+.budget-table td {
+  padding: 0.35rem 0.25rem;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+}
+.budget-table thead th {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.budget-table tbody tr {
+  border-top: 1px solid var(--line);
+  transition: background-color 0.15s ease;
+}
+.budget-table tbody tr.is-on {
+  background: var(--blush);
+}
+.budget-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.row-name {
+  display: grid;
+  grid-template-columns: 1.35rem minmax(0, 1fr);
+  gap: 0 0.4rem;
+  width: 100%;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.row-num {
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--dot-ink);
+  background: var(--dot);
+}
+.tier {
+  grid-column: 2;
+  color: var(--muted);
+  font-size: 0.78rem;
+}

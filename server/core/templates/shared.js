@@ -1,4 +1,5 @@
 const AGENT_NAMES = ["Planner", "Budget", "Vendor", "Timeline"];
+const CITIES = ["Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Chennai", "Pune", "Kolkata"];
 const agentRole = (name) => ({
   id: `agent-${name.toLowerCase()}`,
   name: `${name} agent`,
@@ -16,12 +17,12 @@ const seedUser = (id, name, role) => ({
 const BASE_MILESTONES = [
   ["brief-signed-off", "Brief signed off", 90, "core-team"],
   ["venue-booked", "Venue booked", 75, "core-team"],
-  ["rfqs-sent", "RFQs sent to vendors", 60, "core-team"],
+  ["rfqs-sent", "Quote requests sent to vendors", 60, "core-team"],
   ["vendors-selected", "Vendors selected", 45, "core-team"],
   ["contracts-signed", "Contracts signed", 30, "core-team"],
   ["final-guest-count", "Final guest count confirmed", 14, "core-team"],
   ["run-of-show", "Run-of-show finalised", 7, "core-team"],
-  ["final-vendor-confirmations", "Final vendor confirmations", 2, "core-team"],
+  ["final-vendor-confirmations", "Vendors reconfirmed", 2, "core-team"],
   ["event-day", "Event day", 0, "announcements"],
 ];
 
@@ -61,13 +62,15 @@ export function capacityDriver(id, label, shareBps) {
  * @param {string} name Display name.
  * @param {[string, string]} tierLabels Lower and upper tier labels.
  * @param {object[]} drivers Template drivers.
+ * @param {number} typicalBps The category's usual share of this event type's budget, a rough guide.
  * @returns {object} Template category.
  */
-export function category(id, name, [lowerTier, upperTier], drivers) {
+export function category(id, name, [lowerTier, upperTier], drivers, typicalBps) {
   const tierId = (label) => label.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return {
     id,
     name,
+    typicalBps,
     tiers: [
       { id: tierId(lowerTier), label: lowerTier, minBps: 2000 },
       { id: tierId(upperTier), label: upperTier, minBps: 8000 },
@@ -96,9 +99,9 @@ function buildGroups(categories, roles, agentRoleIds, categoryGroups) {
   const coreRoles = roles.filter((role) => role.kind === "core");
   const mapped = new Set(categoryGroups.flatMap((group) => group.categoryIds));
   // A category group is a working room for the core roles that own those categories.
-  const categoryGroup = ({ slug, categoryIds }) => ({
+  const categoryGroup = ({ slug, name, categoryIds }) => ({
     slug,
-    name: `#${slug}`,
+    name,
     kind: "category",
     memberRoleIds: [
       ...roleIds("manager"),
@@ -112,14 +115,14 @@ function buildGroups(categories, roles, agentRoleIds, categoryGroups) {
   return [
     {
       slug: "announcements",
-      name: "#announcements",
+      name: "Announcements",
       kind: "announcements",
       memberRoleIds: [...roles.map((role) => role.id), ...agentRoleIds],
       categoryIds: [],
     },
     {
       slug: "core-team",
-      name: "#core-team",
+      name: "Core team",
       kind: "core",
       memberRoleIds: [...roleIds("manager"), ...roleIds("core"), ...agentRoleIds],
       categoryIds: categories.map(({ id }) => id).filter((id) => !mapped.has(id)),
@@ -141,8 +144,9 @@ function buildCategoryGroupMap(categories, groups) {
  * Assembles a full template from an event type's data, deriving group membership and the
  * category-to-group map so the two can never disagree with the roles.
  * @param {{eventType: string, label: string, categories: object[], roles: object[],
- *   people: Record<string, string>, categoryGroups: object[], milestones: object[]}} definition
- *   Event type data; people maps a role id to its seeded person's name.
+ *   people: Record<string, string>, categoryGroups: object[], milestones: object[],
+ *   intakeOptions: object}} definition Event type data; people maps a role id to its seeded
+ *   person's name, and intakeOptions holds the setup's answer buttons.
  * @returns {object} The template returned by getTemplate.
  */
 export function defineTemplate({
@@ -153,6 +157,7 @@ export function defineTemplate({
   people,
   categoryGroups,
   milestones,
+  intakeOptions,
 }) {
   const agentRoles = AGENT_NAMES.map(agentRole);
   const groups = buildGroups(
@@ -169,6 +174,7 @@ export function defineTemplate({
     groups,
     categoryGroupMap: buildCategoryGroupMap(categories, groups),
     milestones,
+    intakeOptions: { city: CITIES, ...intakeOptions },
     seedUsers: [
       ...roles.map((role) => seedUser(`user-${role.id}`, people[role.id], role)),
       ...agentRoles.map((role, index) => seedUser(role.id, AGENT_NAMES[index], role)),

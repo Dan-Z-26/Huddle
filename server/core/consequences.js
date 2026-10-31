@@ -73,38 +73,54 @@ function cutOptions(state, shortfall, profile) {
  * @param {object[]} events Change events.
  * @param {object} profile EventProfile, for priorities and must-haves.
  * @returns {{after: object, deltas: object[], rejected: object[],
- *   shortfall: {lowMinor: number, highMinor: number}, surplusMinor: number, options: object[],
- *   increaseBudget: {lowMinor: number, highMinor: number} | null}} The neutral consequences.
+ *   shortfall: {lowMinor: number, highMinor: number}, surplusMinor: number,
+ *   bufferAvailableMinor: number, options: object[], increaseBudget: {lowMinor: number, highMinor: number} | null}} The neutral consequences.
  */
 export function computeConsequences(state, events, profile) {
   const { state: after, rejected } = applyChangeEvents(state, events);
   const budget = computeBudget(after);
+  // The buffer isn't there to plan with, so it only closes a gap if the manager chooses that.
+  const spendable = budget.totalMinor - budget.contingency.reservedMinor;
   const shortfall = {
-    lowMinor: Math.max(0, budget.lowMinor - budget.totalMinor),
-    highMinor: Math.max(0, budget.highMinor - budget.totalMinor),
+    lowMinor: Math.max(0, budget.lowMinor - spendable),
+    highMinor: Math.max(0, budget.highMinor - spendable),
   };
   return {
     after,
     deltas: committedDeltas(computeBudget(state), budget),
     rejected,
     shortfall,
-    surplusMinor: Math.max(0, budget.totalMinor - budget.highMinor),
+    surplusMinor: Math.max(0, spendable - budget.highMinor),
+    // Resizing the buffer is what opened this gap, so the buffer can't be what closes it.
+    bufferAvailableMinor: events.some(({ type }) => type === "contingency_set")
+      ? 0
+      : budget.contingency.availableMinor,
     options: cutOptions(after, shortfall, profile),
     increaseBudget: shortfall.highMinor === 0 ? null : { ...shortfall },
   };
 }
 
 /**
- * Turns the manager's choice into the extra events that close the gap: the chosen categories are
- * cut in the order given, each only as far as the gap still needs, and `raise` covers what is left.
- * @param {{shortfall: {highMinor: number}, options: object[], after: {totalMinor: number}}} result
- *   Result of computeConsequences.
- * @param {{cuts?: string[], raise?: boolean}} choice Categories to cut, and whether to raise the budget.
+ * Turns the manager's choice into the extra events that close the gap: the buffer goes first if
+ * chosen, then the chosen categories are cut in the order given, each only as far as the gap still
+ * needs, and `raise` covers what is left.
+ * @param {{shortfall: {highMinor: number}, options: object[], after: {totalMinor: number},
+ *   bufferAvailableMinor?: number}} result Result of computeConsequences.
+ * @param {{cuts?: string[], raise?: boolean, useBuffer?: boolean}} choice Categories to cut, and
+ *   whether to raise the budget or draw on the buffer.
  * @returns {{events: object[], remainingMinor: number}} Events to add, and the gap still open.
  */
-export function resolutionEvents({ shortfall, options, after }, { cuts = [], raise = false } = {}) {
+export function resolutionEvents(
+  { shortfall, options, after, bufferAvailableMinor = 0 },
+  { cuts = [], raise = false, useBuffer = false } = {},
+) {
   const events = [];
   let remainingMinor = shortfall.highMinor;
+  if (useBuffer) {
+    const drawn = Math.min(remainingMinor, bufferAvailableMinor);
+    if (drawn > 0) events.push({ type: "contingency_draw", amountMinor: drawn });
+    remainingMinor -= drawn;
+  }
   for (const categoryId of new Set(cuts)) {
     const cut = options.find((option) => option.categoryId === categoryId);
     const chosen = cut?.atHigh ?? cut?.atLow;

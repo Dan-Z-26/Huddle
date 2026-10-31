@@ -6,8 +6,8 @@ All code is ES modules. All money is integer paise (`*Minor`). All dates are ISO
 
 ## Decisions that override the briefs
 
-- **View as uses a cookie, not `X-Demo-User`.** `POST /api/view-as` sets `huddle_user` (HttpOnly, `SameSite=Lax`, `Path=/`). `EventSource`, `<img>` and download links can't send custom headers. A missing or unknown cookie returns 401, and so does an AI member's id, because the cookie is client-controlled and agents may post anywhere. `POST /api/view-as` must refuse agent ids too.
-- **Vendors are not workspace members.** They have no login, groups or view, so there is no vendor role, no vendor-visible group and no redaction. The manager and core team collect quotes and enter or upload them. (Decision 2026-10-31.)
+- **Sign-in uses a server-side session.** `POST /api/session` starts one, and the `huddle_session` cookie (HttpOnly, SameSite=Lax) holds only its random id. The server derives the user and role from it on every route. The demo sign-in is closed to sessions started by a vendor invite link, and by `DEMO_SIGNIN=off`.
+- **Vendors are not users until accepted.** On acceptance a vendor becomes a user of kind `vendor`, in that category's first group only. `ownEvent` refuses them unless a route passes `vendorsToo`, and everything sent to them passes `redactForVendor`: messages from `joinedAt` on, with amounts hidden. The manager and category leads collect quotes and enter or upload them. (Decision of 2026-11-01, replacing 2026-10-31.)
 - **Agents act with the asker's permissions.** A core member's `@huddle` must not reach the total budget or another area's budget: tools are filtered by `canSeeBudget`/`canView`.
 - **Two-stage model calls.** Tool turns without a schema (max 4 tool calls), then one final turn with the schema and no tools.
 - **Nobody commits.** The developer runs all git commits and pushes.
@@ -25,7 +25,7 @@ server/
   http.js         requireUser, validate(schema), HttpError, error handler
   sse.js          Set of clients, broadcast(event), heartbeat
   reminders.js    runReminders(store, nowIso), called by the timer and tests
-  routes/         session, events, budget, timeline, groups, messages, vendors, stream
+  routes/         session, events, budget, expenses, timeline, groups, messages, vendors, hiring, vendorAccess, stream
   store/          index.js (createStore), seed.js
   validation/     schemas.js (requests), uploads.js (signature check)
 ```
@@ -51,10 +51,28 @@ API tests run in demo mode with provider keys removed from `process.env`, so the
   "constraints": { "deadlines": [], "dietary": [], "accessibility": [], "brand": [], "venue": [] },
   "vendorNeeds": { "categoryId": "" },
   "skippedFields": [],
+  "suggestedOptions": { "name": [""], "purpose": [""], "mustHaves": [{ "text": "", "categoryId": null }] }, // optional, during intake only: AI-written answer buttons, never with digits
   "intakeStatus": "in_progress|confirmed" }
 
+// Brief: one per category. status draft -> pending -> approved, or changes back to draft.
+{ "id": "b-<eventId>-<categoryId>", "eventId": "", "categoryId": "", "status": "draft",
+  "answers": { "scope": "", "deliverables": "", "dates": "", "mustHaves": "", "judging": "" },
+  "text": "", "deliverables": [""], "note": null, "createdById": "", "createdAt": "ISO" }
+
+// Vendor: a User with kind "vendor", created only when a quote is accepted. roleId is unique and
+// added to that category's first group only. Sees messages from joinedAt on, with amounts hidden.
+{ "id": "vendor-<quoteId>@<eventId>", "kind": "vendor", "roleId": "vendor-<quoteId>",
+  "categoryIds": [""], "quoteId": "", "joinedAt": "ISO" }
+
+// Expense: money actually spent. A buffer expense draws on the contingency, not a category plan.
+{ "id": "", "eventId": "", "description": "", "amountMinor": 0, "categoryId": null,
+  "fromBuffer": false, "createdById": "", "createdAt": "ISO" }
+
+// BudgetState.contingency: reserved stays out of the categories; available = reserved - spent.
+{ "reservedMinor": 0, "spentMinor": 0 }
+
 // Category
-{ "id": "", "name": "", "locked": false,
+{ "id": "", "name": "", "locked": false, "typicalBps": 0,
   "tiers": [{ "id": "", "label": "", "minMinor": 0 }],
   "drivers": [Driver] }
 
@@ -262,7 +280,9 @@ A driver with source `estimate` adds 0 to `committedMinor`, and its range adds t
 
 **Quote scoring.** Fit is the share of the category's must-haves met, or 100 if it has none. The fit weight runs linearly from 80% at rank 1 to 40% at last rank; a sole ranked category gets 80% and an unranked one 40%. Cost score is `cheapest / total × 100`. `missing` lists null `answers` keys, plus `price` if both prices are 0.
 
-**Templates.** A role is `{ id, name, kind, categoryIds }`. A group is `{ slug, name, kind, memberRoleIds, categoryIds }`. `seedUsers` includes the four AI members (Planner, Budget, Vendor, Timeline) with kind `agent`. The category list and order come from the plan's template table and are for display only: the user does the ranking.
+**Allocation.** `allocate(totalMinor, categories, priorities)` splits by `typicalBps` (the event type's usual share, a rough guide) times a rank multiplier: 160% at rank 1 falling to 100% at the last ranked, 50% if unranked. It sums exactly. `buildBudgetState` first sets aside `DEFAULT_BUFFER_BPS` (10%). `computeBudget` returns `contingency: { reservedMinor, spentMinor, availableMinor }` and `remainingMinor = total - reserved - committed`; shortfall and surplus are measured against `total - reserved`. Accept takes `useBuffer`, which draws first, then `cuts`, then `raise`.
+
+**Templates.** A role is `{ id, name, kind, categoryIds }`. A group is `{ slug, name, kind, memberRoleIds, categoryIds }`. `seedUsers` includes the four AI members (Planner, Budget, Vendor, Timeline) with kind `agent`. `intakeOptions` holds the event type's answer buttons (`purpose`, `city`, `venueType`, `guests`, `budget`, `attendeeExperience`, `constraints` as strings; `mustHaves` as `{ text, categoryId }`). The category list and order come from the plan's template table and are for display only: the user does the ranking.
 
 ## `server/llm/`
 
@@ -332,14 +352,26 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 
 | Route file | Method and path | Body | Response |
 |---|---|---|---|
-| session | `POST /view-as` | `{ userId }` | `{ user }`, sets cookie |
+| session | `GET /people` | | `{ people, eventName, isDemo }`: the people of your event, or the demo |
+| session | `POST /session` | `{ userId }`, same event only | `{ user }`, sets the session cookie |
+| session | `POST /session/logout` | | 204 |
+| hiring | `GET /events/:id/hiring` | manager, or that category's lead | `{ stages, rows: [{ categoryId, name, stage, brief, checklist, vendor, samples }] }`; `stage` comes from `core/hiring.js` |
+| hiring | `POST /events/:id/briefs` * | `{ categoryId, answers? }`; amounts refused | 201 `{ brief }`; never contains money |
+| hiring | `POST /briefs/:id/send` | lead or manager | `{ brief }`, status pending, posted in Core team |
+| hiring | `POST /briefs/:id/decision` | `{ approve, note? }` (manager) | `{ brief }`; quotes are refused until approved |
+| hiring | `GET /briefs/:id/export` | | the brief as a plain-text attachment |
+| hiring | `POST /quotes/:id/decline-draft` * | | `{ text }`, cached on the quote |
+| hiring | `POST /quotes/:id/request-revision` | an accepted quote | 201 `{ message }`, posted in the group |
+| hiring | `POST /vendors/:id/invite`, `DELETE` | manager or that lead | 201 `{ path, expiresAt }` once; only a hash is kept. Delete also ends sessions it started |
+| hiring | `GET /join/:token` | not under /api | signs the vendor in, or redirects to `/?invite=invalid` |
+| hiring | `GET /vendor/home`, `PATCH /deliverables/:id` | that vendor only | their brief and deliverables |
 | session | `GET /me` | | `{ user, permissions, attention }`; `user.categoryIds` for core members |
 | session | `GET /users` | | `{ users: [{ id, name, roleId, roleName, kind }] }`: the humans of the caller's event, or of the demo event with no cookie (public, for the switcher) |
 | events | `POST /events` | `{ eventType }` | `{ event }` |
 | events | `GET /event-types` | | `{ eventTypes: [{ eventType, label }] }` (public) |
 | events | `GET /events/:id` | | `{ event, template: { label, categories }, groups, members }`; `event.budget` and `event.priorities` only for the manager. Others get only their own categories' `vendorNeeds` and must-haves, with amounts typed into shared text masked |
 | events | `PATCH /events/:id/profile` | `name, purpose, city, venueType, attendeeExperience` only (manager) | `{ event }` |
-| events | `POST /events/:id/intake` * | `{ answer }` | `{ nextQuestion, feedback, field, profile, complete, rationale }` |
+| events | `POST /events/:id/intake` * | `{ answer?, mode? }`; `mode` is `opening` (a free description: extract everything and suggest answer buttons) or `direct` (a tapped or picked answer: no model call) | `{ nextQuestion, feedback, field, options, remaining, heard, profile, complete, rationale }`; `options` are answer buttons for `field`, `heard` the fields an opening filled |
 | events | `POST /events/:id/intake/confirm` | | `{ event, groups }`; creates the workspace |
 | events | `POST /events/:id/ideas` * | | `{ ideas, rationale, offline }` |
 | budget | `GET /events/:id/budget` | | `computeBudget` output plus `guestCount`, `currency` and per-category `tierLabel`, `locked`, and for the manager `rank`; core members get only their categories, with no totals and no rank |
@@ -350,8 +382,14 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 | timeline | `PATCH /tasks/:id` | `{ status }` (members of the owner group) | `{ tasks }` |
 | timeline | `POST /events/:id/digest` * | | `{ message }` |
 | groups | `POST /events/:id/groups` | `{ name, memberRoleIds }` (manager) | `{ group }`; a `category` room with no budget category of its own. The manager and AI members are always in |
-| groups | `PATCH /groups/:id` | `{ name?, memberRoleIds? }` (manager) | `{ group }`; the id and slug never change. #announcements keeps everyone |
-| groups | `DELETE /groups/:id` | (manager) | 204; removes its messages, directives and files, moves its tasks to #core-team. #announcements and #core-team can't be removed |
+| events | `POST /events/:id/advice` * | (manager) | `{ items: [{ signalId, action, title, why }], summary, offline }`; `action` is `ask`, `budget`, `timeline` or `vendors`. Signals come from `core/signals.js`; the model orders and explains them, and the result is cached until the signals change |
+| budget | `GET /events/:id/expenses` | | `{ expenses, summary }`; core members get their own categories only, and no totals, buffer or buffer expenses |
+| budget | `POST /events/:id/expenses` | `{ description, amount, categoryId?, fromBuffer? }` (amount is text, parsed in code; a core member only for a category they own; the buffer is manager-only) | 201 `{ expense }` |
+| budget | `DELETE /expenses/:id` | (manager or whoever added it) | 204; a buffer expense goes back to the buffer |
+| budget | `POST /events/:id/buffer/cover` | `{ categoryId }` (manager) | `{ coveredMinor }`; moves an overspend from the buffer into that category's plan |
+| budget | `POST /events/:id/buffer` * | `{ percent }` 0 to 30 (manager) | a proposal like `POST /events/:id/changes`, applied through accept |
+| groups | `PATCH /groups/:id` | `{ name?, memberRoleIds? }` (manager) | `{ group }`; the id and slug never change. Announcements keeps everyone |
+| groups | `DELETE /groups/:id` | (manager) | 204; removes its messages, directives and files, moves its tasks to Core team. Announcements and Core team can't be removed |
 | messages | `GET /groups/:id/messages?before=&limit=` | | `{ messages, nextBefore, pinned }`; each message has `files` and, if pinned, `directive` with `status`; `pinned` lists the group's directives with their text |
 | messages | `POST /groups/:id/messages` * | JSON `{ text }`, or multipart `text` and up to 3 `files` | `{ message }` (201). `*` applies only when the text contains `@huddle`; the Planner's reply is posted in the same group afterwards |
 | messages | `GET /files/:id` | | file bytes: members of the file's group only, `Content-Type` from the stored type, `nosniff`, `attachment` disposition and a sandbox CSP |

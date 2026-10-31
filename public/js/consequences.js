@@ -1,14 +1,15 @@
 import { api } from "./api.js";
-import { colorOf, renderBudget } from "./budgetChart.js";
-import { announce, clear, el, formatMoney } from "./dom.js";
+import { renderBudget } from "./budgetChart.js";
+import { announce, announceError, clear, el, formatMoney } from "./dom.js";
 import { generation, isCurrent } from "./session.js";
+import { optionCard, plainCard } from "./gapCards.js";
 import { optionCost, planOf, previewOf } from "./gapPlan.js";
 
 const $ = (id) => document.getElementById(id);
 const SUGGESTIONS = [
   "What if 50 more guests come?",
+  "How much have we spent so far?",
   "Move ₹50,000 from gifting to food",
-  "How much are we spending per guest?",
   "Can we afford a live band?",
 ];
 
@@ -27,6 +28,7 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
   let changeId = null;
   let chosen = [];
   let raise = false;
+  let useBuffer = false;
   let result = null;
   const send = $("what-if-send");
   const money = (minor) => formatMoney(minor, currentBudget().currency);
@@ -34,9 +36,9 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
   const mustHaveText = (id) => event.mustHaves.find((item) => item.id === id)?.text ?? id;
 
   function updateChoice() {
-    const { options, shortfall } = result.consequences;
+    const { options, shortfall, bufferAvailableMinor: buffer } = result.consequences;
     const gap = shortfall.highMinor;
-    const plan = planOf(options, gap, chosen);
+    const plan = planOf(options, gap, chosen, useBuffer ? buffer : 0);
     const closed = gap - plan.left + (raise ? plan.left : 0);
     const open = gap - closed;
     $("gap-meter").max = gap;
@@ -46,9 +48,15 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
       : `The ${money(gap)} gap is covered`;
     for (const card of document.querySelectorAll("#options .option")) {
       const { id } = card.dataset;
-      const on = id === "raise" ? raise : chosen.includes(id);
+      const special = { raise, buffer: useBuffer };
+      const on = id in special ? special[id] : chosen.includes(id);
       card.setAttribute("aria-pressed", String(on));
       card.querySelector(".option-state").textContent = on ? "Chosen" : "Choose";
+      if (id === "buffer") {
+        card.querySelector(".option-figures").textContent =
+          `Uses ${money(Math.min(gap, buffer))} of the ${money(buffer)} left. No category changes.`;
+        continue;
+      }
       if (id === "raise") {
         card.querySelector(".option-figures").textContent =
           `Adds ${money(raise ? plan.left : open)} to the total. No category changes.`;
@@ -66,6 +74,7 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
     }
     const names = chosen.map(nameOf);
     const parts = [];
+    if (useBuffer) parts.push("use the buffer");
     if (names.length) parts.push(`cut ${names.join(" and ")}`);
     if (raise) parts.push("raise the budget");
     $("result-apply").textContent = parts.length
@@ -74,86 +83,12 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
     renderBudget(previewOf(result, currentBudget(), plan, raise), { preview: true });
   }
 
-  function optionCard(option) {
-    const { categoryId, rank, atHigh, atLow } = option;
-    const cut = atHigh ?? atLow;
-    const tags = [];
-    if (cut.removedEntirely)
-      tags.push(el("span", { class: "tag warn", text: "Removes it entirely" }));
-    else if (cut.tierBefore && cut.tierBefore.id !== cut.tierAfter?.id)
-      tags.push(
-        el("span", {
-          class: "tag note",
-          text: `${cut.tierBefore.label} to ${cut.tierAfter?.label ?? "below the lowest level"}`,
-        }),
-      );
-    else tags.push(el("span", { class: "tag", text: "Keeps its current level" }));
-    for (const id of cut.mustHaveConflicts)
-      tags.push(el("span", { class: "tag warn", text: `Touches must-have: ${mustHaveText(id)}` }));
-    if (!cut.coversShortfall)
-      tags.push(el("span", { class: "tag note", text: "Can't cover the whole gap alone" }));
-    const note = result.insight?.optionNotes?.[categoryId];
-    const card = el(
-      "button",
-      {
-        type: "button",
-        class: "option",
-        "aria-pressed": "false",
-        onclick: () => {
-          chosen = chosen.includes(categoryId)
-            ? chosen.filter((id) => id !== categoryId)
-            : [...chosen, categoryId];
-          updateChoice();
-        },
-      },
-      el(
-        "span",
-        { class: "option-head" },
-        el("span", { class: "option-dot", "aria-hidden": "true" }),
-        nameOf(categoryId),
-        rank ? el("small", { class: "muted", text: `priority ${rank}` }) : null,
-        el("span", { class: "option-state" }),
-      ),
-      el("span", { class: "option-figures" }),
-      el("span", { class: "option-bar", "aria-hidden": "true" }, el("span")),
-      ...tags,
-      note ? el("span", { class: "option-note", text: note }) : null,
-    );
-    card.dataset.id = categoryId;
-    card.style.setProperty("--dot", colorOf(categoryId));
-    return card;
-  }
-
-  function raiseCard() {
-    const card = el(
-      "button",
-      {
-        type: "button",
-        class: "option",
-        "aria-pressed": "false",
-        onclick: () => {
-          raise = !raise;
-          updateChoice();
-        },
-      },
-      el(
-        "span",
-        { class: "option-head" },
-        el("span", { class: "option-dot", "aria-hidden": "true" }),
-        "Raise the budget",
-        el("span", { class: "option-state" }),
-      ),
-      el("span", { class: "option-figures" }),
-    );
-    card.dataset.id = "raise";
-    return card;
-  }
-
   function show(text, data) {
     result = data;
     changeId = data.changeId;
     chosen = [];
     raise = false;
+    useBuffer = false;
     $("consequences").classList.remove("is-loading");
     $("result-request").textContent = `You asked: ${text}`;
     $("result-title").textContent =
@@ -171,8 +106,42 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
     const list = $("options");
     clear(list);
     if (gap > 0 && changeId) {
-      for (const option of data.consequences.options) list.append(el("li", {}, optionCard(option)));
-      list.append(el("li", {}, raiseCard()));
+      if (data.consequences.bufferAvailableMinor > 0)
+        list.append(
+          el(
+            "li",
+            {},
+            plainCard("buffer", "Use the contingency buffer", () => {
+              useBuffer = !useBuffer;
+              updateChoice();
+            }),
+          ),
+        );
+      for (const option of data.consequences.options) {
+        const toggle = () => {
+          const { categoryId } = option;
+          chosen = chosen.includes(categoryId)
+            ? chosen.filter((id) => id !== categoryId)
+            : [...chosen, categoryId];
+          updateChoice();
+        };
+        const context = {
+          nameOf,
+          mustHaveText,
+          note: result.insight?.optionNotes?.[option.categoryId],
+        };
+        list.append(el("li", {}, optionCard(option, context, toggle)));
+      }
+      list.append(
+        el(
+          "li",
+          {},
+          plainCard("raise", "Raise the budget", () => {
+            raise = !raise;
+            updateChoice();
+          }),
+        ),
+      );
     }
     $("result-apply").hidden = !changeId;
     $("result-discard").textContent = changeId ? "Discard" : "Close";
@@ -201,7 +170,7 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
       $("what-if-text").value = "";
     } catch (err) {
       $("consequences").classList.remove("is-loading");
-      announce(err.message);
+      announceError(err.message);
     } finally {
       send.disabled = false;
       send.textContent = "Ask";
@@ -234,14 +203,21 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
   };
   $("result-apply").onclick = async () => {
     const button = $("result-apply");
+    const label = button.textContent;
     button.disabled = true;
+    button.textContent = "Applying…";
     try {
-      const { noticesPosted } = await api.acceptChange(event.id, changeId, { cuts: chosen, raise });
+      const { noticesPosted } = await api.acceptChange(event.id, changeId, {
+        cuts: chosen,
+        raise,
+        useBuffer,
+      });
       await onApplied(noticesPosted);
     } catch (err) {
-      announce(err.message);
+      announceError(err.message);
     } finally {
       button.disabled = false;
+      button.textContent = label;
     }
   };
   return { show };

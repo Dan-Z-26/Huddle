@@ -9,15 +9,46 @@
       name="description"
       content="Huddle listens, asks and adapts. Budgets, timelines, vendor checklists and ideas for weddings, birthdays, community and corporate events."
     />
-    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/styles/base.css" />
+    <link rel="stylesheet" href="/styles/pages.css" />
+    <link rel="stylesheet" href="/styles/chat.css" />
+    <link rel="stylesheet" href="/styles/vendors.css" />
+    <link rel="stylesheet" href="/styles/setup.css" />
+    <link rel="stylesheet" href="/styles/rooms.css" />
+    <link rel="stylesheet" href="/styles/plan.css" />
+    <link rel="stylesheet" href="/styles/timeline.css" />
+    <link rel="stylesheet" href="/styles/budget.css" />
+    <link rel="stylesheet" href="/styles/dialogs.css" />
     <script type="module" src="/js/main.js"></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to the main content</a>
 
+    <div class="toast">
+      <div id="notice" class="notice" role="status"></div>
+      <button type="button" id="notice-close" class="toast-close" hidden>Dismiss</button>
+    </div>
+    <main id="signin" class="signin" aria-labelledby="signin-title" hidden>
+      <p class="brand">Huddle</p>
+      <h1 id="signin-title" class="signin-title">Who are you today?</h1>
+      <p class="muted">
+        This is a demo, so there's no password. Choose a person to see
+        <span id="signin-event"></span> as they do. What each person can see is decided on the
+        server. Use a separate browser to be two people at once.
+      </p>
+      <ul id="signin-list" class="people"></ul>
+      <div class="signin-more">
+        <button type="button" id="signin-new" class="link-button">Start a new event</button>
+        <button type="button" id="signin-demo" class="link-button" hidden>
+          Open the demo event instead
+        </button>
+      </div>
+    </main>
+
     <div class="app">
       <aside class="side" aria-label="Workspace">
-        <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>Huddle</h1>
+        <h1 class="brand">Huddle</h1>
 
         <div class="side-event">
           <p id="event-title" class="side-event-name"></p>
@@ -25,13 +56,28 @@
         </div>
 
         <nav aria-labelledby="groups-heading">
-          <h2 id="groups-heading" class="side-heading">Groups</h2>
+          <ul class="group-list side-main">
+            <li>
+              <button type="button" id="ask-nav" class="ask-nav" hidden>
+                <span class="spark" aria-hidden="true">✦</span>Ask Huddle
+              </button>
+            </li>
+            <li>
+              <button type="button" id="timeline-nav" hidden>Timeline</button>
+            </li>
+            <li>
+              <button type="button" id="budget-nav" hidden>Budget and expenses</button>
+            </li>
+            <li class="vendors-nav" hidden>
+              <button type="button" id="vendors-nav">Vendors and quotes</button>
+            </li>
+          </ul>
+          <div class="side-head">
+            <h2 id="groups-heading" class="side-heading">Groups</h2>
+            <button type="button" id="manage-groups" class="link-button" hidden>Manage</button>
+          </div>
           <ul id="group-list" class="group-list"></ul>
           <p id="groups-empty" class="muted" hidden>Groups appear after setup.</p>
-          <ul class="group-list vendors-nav" hidden>
-            <li><button type="button" id="vendors-nav">Vendors and quotes</button></li>
-          </ul>
-          <button type="button" id="manage-groups" class="link-button" hidden>Manage groups</button>
         </nav>
 
         <section aria-labelledby="attention-heading">
@@ -40,89 +86,114 @@
         </section>
 
         <div class="viewer">
-          <label for="view-as">Viewing as</label>
-          <select id="view-as"></select>
-          <button type="button" id="view-switch" class="button">Switch view</button>
-          <button type="button" id="new-event" class="button">Start a new event</button>
+          <p class="muted">Signed in as</p>
+          <p id="signed-in" class="signed-in"></p>
+          <button type="button" id="switch-person" class="link-button">Switch person</button>
+          <button type="button" id="new-event" class="link-button">Start a new event</button>
         </div>
       </aside>
 
       <main id="main" class="stage" tabindex="-1">
-        <div id="notice" class="notice" role="status"></div>
-
-        <section id="ask" class="ask-card" aria-labelledby="ask-title" hidden>
-          <h2 id="ask-title" class="ask-title">Ask Huddle about your budget</h2>
-          <form id="what-if" class="ask-bar">
-            <span class="spark" aria-hidden="true"></span>
-            <label for="what-if-text" class="sr-only">Ask a question, or describe a change</label>
-            <input
-              id="what-if-text"
-              type="text"
-              maxlength="1000"
-              required
-              autocomplete="off"
-              placeholder="What if 50 more guests come?"
-            />
-            <button type="submit" id="what-if-send" class="button primary">Ask</button>
-          </form>
-          <div id="ask-suggestions" class="chips" role="group" aria-label="Try one of these"></div>
-          <button type="button" id="ideas-get" class="button ideas-get">
-            Suggest ideas for this event
-          </button>
+        <section id="flow" class="flow" aria-labelledby="flow-heading" hidden>
+          <h2 id="flow-heading" class="sr-only">Timeline at a glance</h2>
+          <div class="flow-head">
+            <p id="flow-summary" class="flow-summary"></p>
+            <p id="flow-progress" class="flow-progress"></p>
+            <button type="button" id="flow-open" class="link-button">See full timeline</button>
+          </div>
+          <ol id="flow-steps" class="flow-steps" aria-label="Milestones up to the event"></ol>
         </section>
 
-        <section
-          id="consequences"
-          class="result"
-          aria-labelledby="result-title"
-          tabindex="-1"
-          hidden
-        >
-          <p id="result-request" class="muted"></p>
-          <h2 id="result-title" class="result-title"></h2>
-          <p id="result-offline" class="offline" hidden>
-            The AI is busy right now, so this used simple rules. The figures are still exact. Try
-            again in a minute for a fuller reading.
-          </p>
-          <p id="result-insight" class="result-insight"></p>
-          <ul id="result-points" class="points"></ul>
-
-          <div id="gap" class="gap" hidden>
-            <div class="gap-head">
-              <h3 id="gap-title" class="gap-title">How do you want to close the gap?</h3>
-              <p id="gap-status" class="muted" role="status"></p>
-            </div>
-            <progress id="gap-meter" aria-labelledby="gap-title"></progress>
-            <p class="muted">
-              Choose one or more. Each is shown in your priority order, and nothing is recommended:
-              the choice is yours.
+        <div id="ask-view" class="ask-view" hidden>
+          <section id="ask" class="ask-card" aria-labelledby="ask-title">
+            <h2 id="ask-title" class="ask-title" tabindex="-1">What would you like to work out?</h2>
+            <p class="ask-sub">
+              Ask about your budget, or try a change before you commit to it. Nothing moves until
+              you apply it.
             </p>
-            <ul id="options" class="options"></ul>
-          </div>
-
-          <p id="result-estimate" class="muted" hidden>
-            This includes an estimated price. It stays labelled as an estimate until a real quote
-            replaces it.
-          </p>
-          <div class="result-actions">
-            <button type="button" id="result-apply" class="button primary">
-              Apply this change
+            <form id="what-if" class="ask-bar">
+              <span class="spark" aria-hidden="true">✦</span>
+              <label for="what-if-text" class="sr-only">Ask a question, or describe a change</label>
+              <input
+                id="what-if-text"
+                type="text"
+                maxlength="1000"
+                required
+                autocomplete="off"
+                placeholder="What if 50 more guests come?"
+              />
+              <button type="submit" id="what-if-send" class="button primary">Ask</button>
+            </form>
+            <div
+              id="ask-suggestions"
+              class="chips"
+              role="group"
+              aria-label="Try one of these"
+            ></div>
+            <button type="button" id="ideas-get" class="link-button ideas-get">
+              Suggest ideas for this event
             </button>
-            <button type="button" id="result-discard" class="button">Discard</button>
-          </div>
-        </section>
+          </section>
 
-        <section id="ideas" class="result" aria-labelledby="ideas-title" tabindex="-1" hidden>
-          <h2 id="ideas-title" class="result-title">Ideas for this event</h2>
-          <p id="ideas-offline" class="offline" hidden>
-            The AI is busy right now, so these came from simple rules. Try again in a minute.
-          </p>
-          <p id="ideas-rationale" class="muted"></p>
-          <ul id="ideas-list" class="ideas-list"></ul>
-          <div class="result-actions">
-            <button type="button" id="ideas-close" class="button">Close</button>
-          </div>
-        </section>
+          <section id="advice" class="advice" aria-labelledby="advice-title" hidden>
+            <h2 id="advice-title" class="advice-title">What I'd do next</h2>
+            <p id="advice-status" class="muted" role="status"></p>
+            <ol id="advice-list" class="advice-list"></ol>
+          </section>
+
+          <section
+            id="consequences"
+            class="result"
+            aria-labelledby="result-title"
+            tabindex="-1"
+            hidden
+          >
+            <p id="result-request" class="muted"></p>
+            <h2 id="result-title" class="result-title"></h2>
+            <p id="result-offline" class="offline" hidden>
+              The AI isn't available right now, so this used simple rules. The figures are still
+              exact.
+            </p>
+            <p id="result-insight" class="result-insight"></p>
+            <ul id="result-points" class="points"></ul>
+
+            <div id="gap" class="gap" hidden>
+              <div class="gap-head">
+                <h3 id="gap-title" class="gap-title">How do you want to close the gap?</h3>
+                <p id="gap-status" class="muted" role="status"></p>
+              </div>
+              <progress id="gap-meter" aria-labelledby="gap-title"></progress>
+              <p class="muted">
+                Choose one or more. Each is shown in your priority order, and nothing is
+                recommended: the choice is yours.
+              </p>
+              <ul id="options" class="options"></ul>
+            </div>
+
+            <p id="result-estimate" class="muted" hidden>
+              This includes an estimated price. It stays labelled as an estimate until a real quote
+              replaces it.
+            </p>
+            <div class="result-actions">
+              <button type="button" id="result-apply" class="button primary">
+                Apply this change
+              </button>
+              <button type="button" id="result-discard" class="button">Discard</button>
+            </div>
+          </section>
+
+          <section id="ideas" class="result" aria-labelledby="ideas-title" tabindex="-1" hidden>
+            <h2 id="ideas-title" class="result-title">Ideas for this event</h2>
+            <p id="ideas-offline" class="offline" hidden>
+              The AI isn't available right now, so these came from simple rules.
+            </p>
+            <p id="ideas-rationale" class="muted"></p>
+            <ul id="ideas-list" class="ideas-list"></ul>
+            <div class="result-actions">
+              <button type="button" id="ideas-close" class="button">Close</button>
+            </div>
+          </section>
+        </div>
 
         <section id="intake" class="intake" aria-label="Event setup" hidden>
           <div class="progress">
@@ -135,10 +206,18 @@
 
           <p id="intake-live" class="sr-only" role="status"></p>
           <div class="ask">
+            <p id="intake-heard" class="heard"></p>
             <p id="intake-feedback" class="feedback"></p>
             <h2 id="intake-question" class="question"></h2>
             <p id="intake-hint" class="hint"></p>
           </div>
+
+          <div
+            id="intake-options"
+            class="choices"
+            role="group"
+            aria-labelledby="intake-question"
+          ></div>
 
           <div id="intake-picker" class="picker" hidden>
             <ul
@@ -148,28 +227,41 @@
             ></ul>
           </div>
 
-          <div id="intake-chips" class="chips"></div>
-
           <form id="intake-form" class="answer">
-            <label id="intake-answer-label" for="intake-answer" class="sr-only">Your answer</label>
-            <textarea
-              id="intake-answer"
-              rows="2"
-              maxlength="2000"
-              required
-              aria-labelledby="intake-question intake-answer-label"
-              aria-describedby="intake-feedback intake-hint intake-keys"
-            ></textarea>
-            <div class="answer-row">
-              <span id="intake-keys" class="muted"
-                >Enter to continue, Shift+Enter for a new line</span
+            <div id="intake-date-wrap" class="date-pick" hidden>
+              <label for="intake-date" class="sr-only">Event date</label>
+              <input id="intake-date" type="date" aria-describedby="intake-feedback intake-hint" />
+            </div>
+            <div id="intake-text-wrap" hidden>
+              <label id="intake-answer-label" for="intake-answer" class="sr-only"
+                >Your answer</label
               >
+              <textarea
+                id="intake-answer"
+                rows="1"
+                maxlength="2000"
+                aria-labelledby="intake-question intake-answer-label"
+                aria-describedby="intake-feedback intake-hint intake-keys"
+              ></textarea>
+              <p id="intake-keys" class="sr-only">
+                Enter continues. Shift and Enter add a new line.
+              </p>
+            </div>
+            <div class="answer-row">
+              <div class="answer-side">
+                <button type="button" id="intake-other" class="link-button" hidden>
+                  Something else
+                </button>
+                <button type="button" id="intake-skip" class="link-button" hidden>
+                  Skip for now
+                </button>
+              </div>
               <button type="submit" id="intake-send" class="button primary">Continue</button>
             </div>
           </form>
 
           <div id="intake-done" class="done" hidden>
-            <p class="muted">Review your event brief, then create the workspace.</p>
+            <p class="muted">Check your event brief, then create the workspace.</p>
             <button type="button" id="intake-confirm" class="button primary">
               Create my workspace
             </button>
@@ -180,16 +272,84 @@
           <header class="room-head">
             <h2 id="vendors-title" class="room-title" tabindex="-1">Vendors and quotes</h2>
             <p class="muted">
-              Vendors don't log in. You collect their quotes and enter them here on their behalf.
+              Vendors are outside businesses. They only join when you accept their quote, and then
+              only in that category's group.
             </p>
           </header>
+
+          <div id="hiring-board-box" class="vendor-step" hidden>
+            <h3>Where each category stands</h3>
+            <ul id="hiring-board" class="board"></ul>
+          </div>
+
           <div class="field">
             <label for="vendor-category">Category</label>
             <select id="vendor-category"></select>
           </div>
 
           <div class="vendor-step">
-            <h3>1. Ask every vendor the same things</h3>
+            <div class="step-head">
+              <h3>1. Write the brief</h3>
+              <span id="brief-status" class="tag note"></span>
+            </div>
+            <p class="muted">
+              Huddle drafts this from your event. It never contains the budget, because it goes
+              outside the team.
+            </p>
+            <p id="brief-note" class="field-error"></p>
+            <form id="brief-form" class="brief-form">
+              <div class="field">
+                <label for="brief-scope">What do you need?</label>
+                <input id="brief-scope" type="text" maxlength="500" />
+              </div>
+              <div class="field">
+                <label for="brief-deliverables">What should they hand over?</label>
+                <input
+                  id="brief-deliverables"
+                  type="text"
+                  maxlength="500"
+                  placeholder="Leave blank and Huddle will suggest them"
+                />
+              </div>
+              <div class="field">
+                <label for="brief-dates">Which dates?</label>
+                <input id="brief-dates" type="text" maxlength="500" />
+              </div>
+              <div class="field">
+                <label for="brief-musthaves">Must-haves</label>
+                <input id="brief-musthaves" type="text" maxlength="500" />
+              </div>
+              <div class="field">
+                <label for="brief-judging">How will you choose?</label>
+                <input id="brief-judging" type="text" maxlength="500" />
+              </div>
+              <button type="submit" id="brief-draft" class="button">Draft the brief</button>
+            </form>
+            <div id="brief-result" class="rfq" hidden>
+              <p id="brief-text" class="brief-text"></p>
+              <div class="quote-actions">
+                <button type="button" id="brief-send" class="button primary">
+                  Send to Core team
+                </button>
+                <button type="button" id="brief-copy" class="button">Copy</button>
+                <a id="brief-export" class="button" download="">Download as text</a>
+              </div>
+              <p id="brief-waiting" class="muted" hidden>Waiting for the event manager.</p>
+              <div id="brief-decide" class="decide" hidden>
+                <div class="field">
+                  <label for="brief-change-note">If it needs changes, what should change?</label>
+                  <input id="brief-change-note" type="text" maxlength="300" />
+                </div>
+                <div class="quote-actions">
+                  <button type="button" id="brief-approve" class="button primary">Approve</button>
+                  <button type="button" id="brief-changes" class="button">Request changes</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="rfq-step" class="vendor-step" hidden>
+            <h3>2. Ask every vendor the same things</h3>
             <p class="muted">
               A checklist for this category and the questions that make quotes comparable.
             </p>
@@ -205,7 +365,7 @@
               hidden
             >
               <p id="rfq-offline" class="offline" hidden>
-                The AI is busy right now, so these are the standard questions only.
+                The AI isn't available right now, so these are the standard questions only.
               </p>
               <h4>Checklist</h4>
               <ul id="rfq-checklist" class="plain-list"></ul>
@@ -216,7 +376,15 @@
           </div>
 
           <div class="vendor-step">
-            <h3>2. Add a quote</h3>
+            <h3>3. Add quotes</h3>
+            <p id="quote-locked" class="muted" hidden>Quotes open once the brief is approved.</p>
+            <div
+              id="sample-quotes"
+              class="chips"
+              role="group"
+              aria-label="Sample quotes"
+              hidden
+            ></div>
             <form id="quote-form" class="quote-form">
               <div class="field">
                 <label for="quote-text">Paste the quote</label>
@@ -274,7 +442,7 @@
           </div>
 
           <div class="vendor-step">
-            <h3>3. Check, compare and choose</h3>
+            <h3>4. Check, compare and choose</h3>
             <ul id="quote-list" class="quote-list"></ul>
             <div id="compare" hidden>
               <h4>Comparison</h4>
@@ -294,7 +462,7 @@
                       <th scope="col" class="num">Total with tax</th>
                       <th scope="col" class="num">Must-haves met</th>
                       <th scope="col" class="num">Score</th>
-                      <th scope="col">Missing or at risk</th>
+                      <th scope="col">Why, and what to watch</th>
                     </tr>
                   </thead>
                   <tbody id="compare-rows"></tbody>
@@ -302,13 +470,130 @@
               </div>
             </div>
           </div>
+
+          <div class="vendor-step">
+            <h3>Hiring checklist</h3>
+            <ul id="hire-checklist" class="hire-checklist"></ul>
+          </div>
+
+          <div id="booked-box" class="vendor-step" hidden>
+            <h3>Booked: <span id="booked-name"></span></h3>
+            <p id="booked-progress" class="muted"></p>
+            <ul id="booked-deliverables" class="plain-list"></ul>
+            <div class="quote-actions">
+              <button type="button" id="revision-ask" class="button">
+                Ask for a revised quote
+              </button>
+            </div>
+            <h4>Let them join</h4>
+            <p id="invite-status" class="muted"></p>
+            <div class="quote-actions">
+              <button type="button" id="invite-create" class="button">Create a link</button>
+              <button type="button" id="invite-revoke" class="button" hidden>Revoke</button>
+            </div>
+            <div id="invite-link-box" class="tool-row" hidden>
+              <label for="invite-link" class="sr-only">Invite link</label>
+              <input id="invite-link" type="text" readonly />
+              <button type="button" id="invite-copy" class="button small">Copy</button>
+            </div>
+            <p class="muted">The link works for 7 days and is shown only once.</p>
+          </div>
+        </section>
+
+        <section id="timeline-view" class="timeline" aria-labelledby="timeline-title" hidden>
+          <header class="room-head">
+            <h2 id="timeline-title" class="room-title" tabindex="-1">Timeline</h2>
+            <p id="timeline-about" class="muted"></p>
+          </header>
+          <div id="timeline-list" class="road-months"></div>
+          <div id="timeline-tools" class="tools" hidden>
+            <form id="reschedule" class="tool-form">
+              <label for="reschedule-date">Move the event date</label>
+              <div class="tool-row">
+                <input id="reschedule-date" type="date" required />
+                <button type="submit" class="button">Move date and replan</button>
+              </div>
+            </form>
+            <button type="button" id="post-digest" class="button">Post today's digest</button>
+          </div>
+        </section>
+
+        <section id="budget-view" class="budget-page" aria-labelledby="budget-title" hidden>
+          <header class="room-head">
+            <h2 id="budget-title" class="room-title" tabindex="-1">Budget and expenses</h2>
+            <p class="muted">What you planned, what you've spent, and what's left for surprises.</p>
+          </header>
+          <dl id="money-stats" class="stats"></dl>
+
+          <section id="buffer-box" class="money-section" aria-labelledby="buffer-title" hidden>
+            <h3 id="buffer-title">Contingency buffer</h3>
+            <p class="muted">
+              Set aside for sudden expenses. It stays out of your category plans until you use it.
+            </p>
+            <p id="buffer-status"></p>
+            <div id="buffer-bar"></div>
+            <form id="buffer-form" class="tool-row">
+              <label for="buffer-percent">Size</label>
+              <select id="buffer-percent">
+                <option value="0">No buffer</option>
+                <option value="5">5%</option>
+                <option value="10">10%</option>
+                <option value="15">15%</option>
+                <option value="20">20%</option>
+              </select>
+              <button type="submit" id="buffer-send" class="button small">See what changes</button>
+            </form>
+          </section>
+
+          <section class="money-section" aria-labelledby="expense-add-title">
+            <h3 id="expense-add-title">Add an expense</h3>
+            <form id="expense-form" class="expense-form">
+              <div class="field">
+                <label for="expense-description">What for</label>
+                <input
+                  id="expense-description"
+                  type="text"
+                  maxlength="200"
+                  required
+                  placeholder="Caterer advance"
+                />
+              </div>
+              <div class="field">
+                <label for="expense-amount">Amount</label>
+                <input
+                  id="expense-amount"
+                  type="text"
+                  maxlength="80"
+                  required
+                  inputmode="text"
+                  placeholder="45,000"
+                />
+              </div>
+              <div class="field">
+                <label for="expense-category">Paid from</label>
+                <select id="expense-category" required></select>
+              </div>
+              <button type="submit" class="button primary">Add</button>
+            </form>
+            <p id="expense-error" class="field-error" role="alert"></p>
+          </section>
+
+          <section class="money-section" aria-labelledby="money-categories-title">
+            <h3 id="money-categories-title">Spending by category</h3>
+            <ul id="money-categories" class="money-list"></ul>
+          </section>
+
+          <section class="money-section" aria-labelledby="expense-list-title">
+            <h3 id="expense-list-title">Recent expenses</h3>
+            <p id="expense-empty" class="muted" hidden>Nothing spent yet.</p>
+            <ul id="expense-list" class="expense-list"></ul>
+          </section>
         </section>
 
         <section id="group-view" class="room" aria-labelledby="group-title" hidden>
           <header class="room-head">
             <h2 id="group-title" class="room-title" tabindex="-1"></h2>
             <p id="group-about" class="muted"></p>
-            <ol id="timeline-strip" class="strip" aria-label="Next on the timeline"></ol>
           </header>
           <section id="pinned" class="pinned" aria-labelledby="pinned-title" hidden>
             <h3 id="pinned-title" class="pinned-title">Pinned directives</h3>
@@ -320,34 +605,55 @@
             role="log"
             aria-live="polite"
             aria-labelledby="group-title"
+            tabindex="0"
           ></div>
           <form id="composer" class="composer" hidden>
             <label for="composer-text" class="sr-only">Message</label>
+            <ul id="composer-picked" class="picked" aria-label="Files to send" hidden></ul>
             <textarea
               id="composer-text"
-              rows="2"
+              rows="1"
               maxlength="4000"
-              placeholder="Write a message. Type @huddle to ask the planner."
               aria-describedby="composer-keys"
             ></textarea>
-            <p id="composer-status" class="muted" role="status"></p>
+            <p id="composer-status" class="composer-status" role="status"></p>
             <p id="composer-keys" class="sr-only">Enter sends. Shift and Enter add a new line.</p>
+            <p id="composer-files-hint" class="sr-only">
+              Attach PDF, PNG, JPG or WEBP. Up to 3 files, 5 MB each. Only this group can open them.
+            </p>
             <div class="composer-row">
-              <div class="attach">
-                <label for="composer-files">Attach files</label>
-                <input
-                  id="composer-files"
-                  type="file"
-                  multiple
-                  accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
-                  aria-describedby="composer-files-hint"
-                />
-                <small id="composer-files-hint" class="muted"
-                  >PDF, PNG, JPG or WEBP. Up to 3 files, 5 MB each. Only this group can open
-                  them.</small
-                >
+              <div class="composer-tools">
+                <span class="attach">
+                  <input
+                    id="composer-files"
+                    class="sr-only"
+                    type="file"
+                    multiple
+                    aria-describedby="composer-files-hint"
+                    accept=".pdf,.png,.jpg,.jpeg,.webp,application/pdf,image/png,image/jpeg,image/webp"
+                  />
+                  <label
+                    for="composer-files"
+                    class="icon-button"
+                    title="Attach PDF, PNG, JPG or WEBP, up to 5 MB each"
+                  >
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        d="M20 11.5l-8.2 8.2a5 5 0 0 1-7.1-7.1l8.5-8.5a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4l7.8-7.8"
+                      />
+                    </svg>
+                    <span class="sr-only">Attach files</span>
+                  </label>
+                </span>
+                <button type="button" id="composer-huddle" class="ask-chip">
+                  <span aria-hidden="true">✦</span> Ask Huddle
+                </button>
               </div>
-              <button type="submit" id="composer-send" class="button primary">Send</button>
+              <button type="submit" id="composer-send" class="send" aria-label="Send message">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 19V5M6 11l6-6 6 6" />
+                </svg>
+              </button>
             </div>
           </form>
           <p id="composer-note" class="muted room-foot" hidden></p>
@@ -374,26 +680,12 @@
           </table>
         </section>
 
-        <section id="timeline-panel" class="panel" aria-labelledby="timeline-heading" hidden>
-          <h2 id="timeline-heading" class="panel-title">Timeline</h2>
-          <ol id="timeline-list" class="strand"></ol>
-          <div id="timeline-tools" class="tools" hidden>
-            <form id="reschedule" class="tool-form">
-              <label for="reschedule-date">Move the event date</label>
-              <input
-                id="reschedule-date"
-                type="text"
-                maxlength="200"
-                required
-                aria-describedby="reschedule-hint"
-              />
-              <small id="reschedule-hint" class="muted"
-                >Include the year, for example 20 March 2027.</small
-              >
-              <button type="submit" class="button">Replan the timeline</button>
-            </form>
-            <button type="button" id="post-digest" class="button">Post today's digest</button>
-          </div>
+        <section id="vendor-panel" class="panel" aria-labelledby="vendor-panel-title" hidden>
+          <h2 id="vendor-panel-title" class="panel-title">What to hand over</h2>
+          <p id="vendor-progress" class="muted"></p>
+          <ul id="vendor-deliverables" class="hire-checklist"></ul>
+          <h3 class="vendor-brief-title">The brief</h3>
+          <p id="vendor-brief" class="brief-text"></p>
         </section>
 
         <details id="brief-details" class="panel">
@@ -498,6 +790,24 @@
             ><input id="confirm-dietary" type="text" maxlength="200" />
           </div>
         </div>
+        <div class="field">
+          <label for="confirm-exclusions">Not included</label>
+          <input id="confirm-exclusions" type="text" maxlength="600" />
+        </div>
+        <div class="field-row two">
+          <div class="field">
+            <label for="confirm-min-guests">Minimum guests</label>
+            <input id="confirm-min-guests" type="text" inputmode="numeric" maxlength="6" />
+          </div>
+          <div class="field">
+            <label for="confirm-valid">Valid until</label>
+            <input id="confirm-valid" type="text" maxlength="80" />
+          </div>
+        </div>
+        <details id="confirm-sources-box" class="typed" hidden>
+          <summary>Where these came from in the document</summary>
+          <ul id="confirm-sources" class="plain-list"></ul>
+        </details>
         <fieldset id="confirm-musts" class="musts">
           <legend>Which of your must-haves does it meet?</legend>
         </fieldset>

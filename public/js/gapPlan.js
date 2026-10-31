@@ -5,17 +5,19 @@ export const optionCost = ({ atHigh, atLow }) => {
   return cut.newTotalMinor + cut.cutMinor;
 };
 
-// Same rule as the server: cuts apply in the order chosen, each only as far as the gap needs.
-export function planOf(options, gapMinor, chosen) {
+// Same rule as the server: the buffer goes first, then cuts in the order chosen, each only as far
+// as the gap still needs.
+export function planOf(options, gapMinor, chosen, bufferMinor = 0) {
   const taken = new Map();
-  let left = gapMinor;
+  const drawn = Math.min(gapMinor, bufferMinor);
+  let left = gapMinor - drawn;
   for (const id of chosen) {
     const option = options.find(({ categoryId }) => categoryId === id);
     const amount = Math.min(left, optionCost(option));
     taken.set(id, amount);
     left -= amount;
   }
-  return { taken, left };
+  return { taken, left, drawn };
 }
 
 export function previewOf(result, current, plan, raise) {
@@ -35,12 +37,19 @@ export function previewOf(result, current, plan, raise) {
   });
   const totalMinor = after.totalMinor + (raise ? plan.left : 0);
   const committedMinor = categories.reduce((sum, item) => sum + item.committedMinor, 0);
+  const drawn = plan.drawn ?? 0;
+  const contingency = {
+    ...after.contingency,
+    reservedMinor: after.contingency.reservedMinor - drawn,
+    availableMinor: after.contingency.availableMinor - drawn,
+  };
   return {
     ...after,
     categories,
     totalMinor,
     committedMinor,
-    remainingMinor: totalMinor - committedMinor,
+    contingency,
+    remainingMinor: totalMinor - contingency.reservedMinor - committedMinor,
     currency: current.currency,
   };
 }

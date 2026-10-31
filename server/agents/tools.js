@@ -25,9 +25,10 @@ function budgetTools({ state, profile }) {
     {
       name: "allocate_budget",
       description:
-        "Split a total across categories by the user's ranking. Amounts are minor units.",
+        "Split a total across this event's categories by their usual shares and the user's " +
+        "ranking. Amounts are minor units.",
       parameters: z.object({ totalMinor: z.int().min(0), priorities: z.array(z.string()).max(20) }),
-      handler: ({ totalMinor, priorities }) => allocate(totalMinor, priorities),
+      handler: ({ totalMinor, priorities }) => allocate(totalMinor, state.categories, priorities),
     },
     {
       name: "apply_change_events",

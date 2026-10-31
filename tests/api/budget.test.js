@@ -112,7 +112,7 @@ describe("timeline", () => {
     assert.ok(tasks.length > 0);
     const dates = tasks.map(({ dueDate }) => dueDate);
     assert.deepEqual(dates, [...dates].sort());
-    assert.ok(tasks.every(({ ownerGroupName }) => ownerGroupName?.startsWith("#")));
+    assert.ok(tasks.every(({ ownerGroupName }) => ownerGroupName?.length > 1));
   });
 
   it("replans when the manager moves the date", async (t) => {
@@ -165,7 +165,7 @@ describe("timeline", () => {
     );
   });
 
-  it("posts the digest in #announcements from the Timeline agent, for the manager only", async (t) => {
+  it("posts the digest in Announcements from the Timeline agent, for the manager only", async (t) => {
     const { call } = await startDemo(t);
     await assertError(
       await call(`/events/${ID}/digest`, { as: DESIGNER, method: "POST" }),

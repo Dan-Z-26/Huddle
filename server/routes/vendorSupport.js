@@ -52,6 +52,9 @@ export function fromFields(body) {
           .split(",")
           .map((item) => item.trim())
           .filter(Boolean),
+    exclusions: body.exclusions,
+    minGuests: body.minGuests,
+    validUntil: body.validUntil,
     mustHaveIdsMet: body.mustHaveIdsMet,
     answers: body.answers,
   };

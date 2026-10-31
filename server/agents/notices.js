@@ -46,11 +46,12 @@ export function noticeTargets({ deltas, categoryGroupMap }) {
  * Whether a group may be told the amounts for these categories: every core member of the group
  * must own all of them. Fails closed for an unknown group.
  */
-function mayShowCosts({ template, groupSlug, categoryIds }) {
-  const group = template.groups.find(({ slug }) => slug === groupSlug);
-  if (!group) return false;
+function mayShowCosts({ template, groupSlug, categoryIds, memberRoleIds }) {
+  const members =
+    memberRoleIds ?? template.groups.find(({ slug }) => slug === groupSlug)?.memberRoleIds;
+  if (!members) return false;
   return template.roles
-    .filter(({ id, kind }) => kind === "core" && group.memberRoleIds.includes(id))
+    .filter(({ id, kind }) => kind === "core" && members.includes(id))
     .every((role) => categoryIds.every((id) => role.categoryIds.includes(id)));
 }
 
@@ -59,15 +60,27 @@ function mayShowCosts({ template, groupSlug, categoryIds }) {
  * the categories that group covers. The total budget and other categories' costs are never
  * included, and amounts are left out when some core member of the group doesn't own the category.
  * @param {{guests: {before: number, after: number} | null, deltas: object[], categoryIds: string[],
- *   groupSlug: string, template: object, currency: string}} input The change, the group and its
- *   categories.
+ *   groupSlug: string, template: object, currency: string, hideCosts?: boolean}} input The change,
+ *   the group and its categories; `hideCosts` is set when a vendor is in the group, and
+ *   `memberRoleIds` gives who is in it now, which the manager may have changed.
  * @returns {string[]} Plain-text facts.
  */
-export function noticeFacts({ guests, deltas, categoryIds, groupSlug, template, currency }) {
+export function noticeFacts({
+  guests,
+  deltas,
+  categoryIds,
+  groupSlug,
+  template,
+  currency,
+  hideCosts = false,
+  memberRoleIds,
+}) {
   const facts = [];
   if (guests && guests.before !== guests.after)
     facts.push(`Guest count is now ${guests.after} (it was ${guests.before}).`);
-  const showCosts = mayShowCosts({ template, groupSlug, categoryIds });
+  // With a vendor in the room, even "this cost changed" says more than they need to know.
+  if (hideCosts) return facts;
+  const showCosts = mayShowCosts({ template, groupSlug, categoryIds, memberRoleIds });
   for (const delta of deltas.filter(({ categoryId }) => categoryIds.includes(categoryId))) {
     const name =
       template.categories.find(({ id }) => id === delta.categoryId)?.name ?? delta.categoryId;
@@ -93,7 +106,10 @@ export async function word({ facts, groupName }, { generate = realGenerate } = {
     wording: plain.slice(0, 400),
     rationale: "These are the changes that affect this group.",
   });
-  const content = [`Group: ${groupName}`, wrapUntrusted("facts", facts.join("\n"))].join("\n");
+  const content = [
+    wrapUntrusted("group", groupName),
+    wrapUntrusted("facts", facts.join("\n")),
+  ].join("\n");
   const { data } = await generateOrDemo(generate, {
     agent: "notices",
     system: SYSTEM,

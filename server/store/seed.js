@@ -1,8 +1,14 @@
-import { createEvent, createWorkspace, postAgentMessage } from "./workspace.js";
+import { addExpense, createEvent, createWorkspace, postAgentMessage } from "./workspace.js";
 
 export const DEMO_EVENT_ID = "demo";
 const DAY_MS = 86400000;
 const DEMO_LEAD_DAYS = 75;
+const DEMO_EXPENSES = [
+  ["Caterer advance", 5000000, "food-beverage", false],
+  ["Stage design deposit", 7500000, "decor", false],
+  ["Press kit printing", 1800000, "pr", false],
+  ["Backup generator, not in any quote", 2500000, null, true],
+];
 
 function demoProfile(nowIso) {
   const date = new Date(Date.parse(nowIso.slice(0, 10)) + DEMO_LEAD_DAYS * DAY_MS).toISOString();
@@ -54,6 +60,19 @@ export function seedDemo(store, nowIso = new Date().toISOString()) {
     profile: demoProfile(nowIso),
   });
   const { groups } = createWorkspace(store, event, nowIso);
+  for (const [description, amountMinor, categoryId, fromBuffer] of DEMO_EXPENSES)
+    addExpense(
+      store,
+      {
+        eventId: DEMO_EVENT_ID,
+        description,
+        amountMinor,
+        categoryId,
+        fromBuffer,
+        createdById: `user-manager@${DEMO_EVENT_ID}`,
+      },
+      nowIso,
+    );
   const bySlug = Object.fromEntries(groups.map((group) => [group.slug, group]));
   const say = (slug, text) =>
     postAgentMessage(store, {
@@ -65,5 +84,9 @@ export function seedDemo(store, nowIso = new Date().toISOString()) {
   say("core-team", "This is the core team room. Budget talk and quote comparisons live here.");
   say("stage-decor", "Stage and décor room. Your must-have: a branded reveal stage.");
   say("food-beverage", "Food and beverage room. Remember the vegetarian options.");
+  const toHire = "When you're ready to hire, ask @huddle to draft a vendor brief.";
+  say("pr-media", `PR and media room. ${toHire}`);
+  say("food-beverage", toHire);
+  say("music-av", `Music and AV room. ${toHire}`);
   return DEMO_EVENT_ID;
 }

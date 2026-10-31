@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
-import { assertError, startDemo } from "./helpers.js";
+import { assertError, startDemo, cookieAt } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`; // owns decor, not food-beverage
-const LEAD = `user-production-lead@${ID}`; // owns food-beverage
+const LEAD = `user-fb-lead@${ID}`; // owns food-beverage
 const PR_HEAD = `user-pr-head@${ID}`;
 const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
 const TEXT =
@@ -22,7 +22,7 @@ async function upload(base, as, fields, file) {
   if (file) form.set("file", new Blob([file.buffer]), file.name);
   return fetch(`${base}/api/events/${ID}/quotes`, {
     method: "POST",
-    headers: { cookie: `huddle_user=${encodeURIComponent(as)}` },
+    headers: { cookie: cookieAt(base, as) },
     body: form,
   });
 }
@@ -197,7 +197,7 @@ describe("uploading a quote file", () => {
     form.set("extra", new Blob([PDF]), "b.pdf");
     const res = await fetch(`${base}/api/events/${ID}/quotes`, {
       method: "POST",
-      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      headers: { cookie: cookieAt(base, MANAGER) },
       body: form,
     });
     await assertError(res, 400, "BAD_REQUEST");
