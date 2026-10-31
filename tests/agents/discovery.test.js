@@ -148,15 +148,15 @@ describe("nextStep: optional fields and bad input", () => {
     const upTo = 2;
     const past = await runIntake([...FULL_INTAKE.slice(0, upTo), "1 January 2020"]);
     assert.equal(past.step.field, "date");
-    assert.match(past.step.nextQuestion, /already passed/);
+    assert.match(past.step.feedback, /already passed/);
     const noYear = await runIntake([...FULL_INTAKE.slice(0, upTo), "12 March"]);
-    assert.match(noYear.step.nextQuestion, /year/);
+    assert.match(noYear.step.feedback, /year/);
   });
 
   it("rejects a budget it can't read", async () => {
     const { step } = await runIntake([...FULL_INTAKE.slice(0, 7), "whatever works"]);
     assert.equal(step.field, "budget");
-    assert.match(step.nextQuestion, /couldn't read that budget/);
+    assert.match(step.feedback, /couldn't read that budget/);
   });
 
   it("only accepts priorities that are real categories", async () => {
@@ -228,7 +228,7 @@ describe("nextStep: with a model", () => {
       { profile: start(), template, answer: "Nova", nowIso: NOW },
       { generate: wrong },
     );
-    assert.match(fixed.nextQuestion, /about, and what do you want it to achieve/);
+    assert.match(fixed.nextQuestion, /about, and what should it achieve/);
   });
 
   it("falls back to the offline reading when the model call fails", async () => {

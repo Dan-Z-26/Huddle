@@ -18,7 +18,8 @@ const LOADERS = {
   gemini: () => import("./providers/gemini.js"),
   anthropic: () => import("./providers/anthropic.js"),
 };
-const DEFAULT_TIMEOUT_MS = 30000;
+// A hung call should reach the fallback model quickly, not leave someone waiting.
+const DEFAULT_TIMEOUT_MS = 12000;
 
 /**
  * Builds the error thrown when a model call fails or keeps returning invalid output.
@@ -46,7 +47,11 @@ function parseJson(text) {
 }
 
 const isRetryable = (err) =>
-  err?.status === 429 || err?.status >= 500 || err?.name === "TimeoutError";
+  err?.status === 429 ||
+  err?.status >= 500 ||
+  err?.name === "TimeoutError" ||
+  err?.name === "AbortError" ||
+  err?.name === "LlmError";
 
 async function finalAnswer({ call, history, schema, jsonSchema }) {
   let problem = "";
@@ -74,8 +79,15 @@ async function toolStage({ call, history, runner }) {
   while (runner.remaining() > 0) {
     const step = await call({ messages: history });
     if (!step.toolCalls?.length) {
-      if (step.text) history.push({ role: "assistant", content: step.text });
-      return;
+      if (step.text) {
+        // A conversation must end on the user's turn before asking for the final answer.
+        history.push({ role: "assistant", content: step.text });
+        history.push({
+          role: "user",
+          content: "Now reply with only JSON that matches the schema.",
+        });
+      }
+      return step.text;
     }
     const calls = step.toolCalls.slice(0, runner.remaining());
     history.push({ role: "assistant", toolCalls: calls, raw: step.raw });
@@ -108,10 +120,14 @@ async function runLive(request, target, providers) {
     });
 
   const history = [...messages];
-  const runner = createToolRunner(tools);
-  if (tools.length) await toolStage({ call, history, runner });
+  const runner = createToolRunner(tools, request.maxToolCalls);
+  const toolText = tools.length ? await toolStage({ call, history, runner }) : undefined;
+  // A model that already answered in the right shape doesn't need asking again: quota is limited.
+  const early = schema && toolText ? schema.safeParse(parseJson(toolText)) : null;
   const jsonSchema = schema ? toJsonSchema(schema) : undefined;
-  const data = await finalAnswer({ call, history, schema, jsonSchema });
+  const data = early?.success
+    ? early.data
+    : await finalAnswer({ call, history, schema, jsonSchema });
   return {
     data,
     toolCalls: runner.calls,
@@ -130,6 +146,7 @@ async function runLive(request, target, providers) {
  * @param {import("zod").ZodType} [request.schema] Shape of the final answer, validated before use.
  * @param {Array<{name: string, description: string, parameters: import("zod").ZodType,
  *   handler: Function}>} [request.tools] Tools the model may call, at most 4 times.
+ * @param {number} [request.maxToolCalls] A lower cap on tool calls, where quota matters.
  * @param {Array<{mime: string, buffer: Buffer, name: string}>} [request.files] Files to read.
  * @param {Function} [request.demo] The agent's offline heuristic, used when no key is set.
  * @param {Record<string, string | undefined>} [request.env] Environment, for tests.
@@ -162,15 +179,18 @@ export async function generate(request) {
  * heuristic instead, so the app keeps working. Other errors still throw.
  * @param {Function} generate The model call, `generate` from this module or a test double.
  * @param {object} request The same request `generate` takes; it must include `schema` and `demo`.
- * @returns {Promise<{data: *, fellBack: boolean}>} The validated answer, and whether it came from the
- *   offline heuristic after a model failure (callers should not cache such an answer).
+ * @returns {Promise<{data: *, fellBack: boolean, offline: boolean, toolCalls: object[]}>} The
+ *   validated answer; the tools it called; whether it
+ *   came from the offline heuristic after a model failure (callers should not cache such an answer);
+ *   and whether no model answered at all, either way, so the UI can say so.
  */
 export async function generateOrDemo(generate, request) {
   try {
-    const { data } = await generate(request);
-    return { data, fellBack: false };
+    const { data, demo = false, toolCalls = [] } = await generate(request);
+    return { data, fellBack: false, offline: demo, toolCalls };
   } catch (err) {
     if (err.name !== "LlmError") throw err;
-    return { data: request.schema.parse(await request.demo()), fellBack: true };
+    const data = request.schema.parse(await request.demo());
+    return { data, fellBack: true, offline: true, toolCalls: [] };
   }
 }

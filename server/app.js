@@ -2,6 +2,10 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import helmet from "helmet";
 import { errorHandler, HttpError } from "./http.js";
+import { budgetRoutes } from "./routes/budget.js";
+import { eventRoutes } from "./routes/events.js";
+import { messageRoutes } from "./routes/messages.js";
+import { sessionRoutes } from "./routes/session.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 
@@ -14,6 +18,8 @@ export function createApp({ store }) {
   const app = express();
   app.disable("x-powered-by");
   app.locals.store = store;
+  // A hop count, never `true`, which would let clients spoof the IP the rate limits key on.
+  app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS) || 0);
 
   app.use(
     helmet({
@@ -25,7 +31,7 @@ export function createApp({ store }) {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
           styleSrc: ["'self'"],
-          imgSrc: ["'self'", "data:"],
+          imgSrc: ["'self'"],
           connectSrc: ["'self'"],
           fontSrc: ["'self'"],
           objectSrc: ["'none'"],
@@ -42,6 +48,7 @@ export function createApp({ store }) {
     next();
   });
 
+  app.use("/api", sessionRoutes(), eventRoutes(), budgetRoutes(), messageRoutes());
   app.use("/api", (_req, _res, next) => next(HttpError(404, "NOT_FOUND", "Not found.")));
   app.use(express.static(PUBLIC_DIR));
   app.use(errorHandler);

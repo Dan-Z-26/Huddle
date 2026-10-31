@@ -1,15 +1,15 @@
-import { formatMoney } from "../core/money.js";
+import { wholeMoney } from "../core/money.js";
 
 const range = (low, high, currency) =>
   low === high
-    ? formatMoney(low, currency)
-    : `${formatMoney(low, currency)} to ${formatMoney(high, currency)}`;
+    ? wholeMoney(low, currency)
+    : `${wholeMoney(low, currency)} to ${wholeMoney(high, currency)}`;
 
 function changeLine(deltas, nameOf, currency) {
   return deltas
     .map(
       (d) =>
-        `${nameOf(d.categoryId)}: ${formatMoney(d.beforeMinor, currency)} to ${formatMoney(d.afterMinor, currency)}`,
+        `${nameOf(d.categoryId)}: ${wholeMoney(d.beforeMinor, currency)} to ${wholeMoney(d.afterMinor, currency)}`,
     )
     .join("; ");
 }
@@ -21,7 +21,7 @@ function optionLine(option, nameOf, mustHaves, currency) {
   const parts = [`If the cut comes from ${name} (${rank}): `];
   if (cut.removedEntirely) parts.push(`${name} is removed entirely.`);
   else {
-    parts.push(`${name} drops ${cut.pctDrop}%, to ${formatMoney(cut.newTotalMinor, currency)}`);
+    parts.push(`${name} drops ${cut.pctDrop}%, to ${wholeMoney(cut.newTotalMinor, currency)}`);
     const changed = cut.tierBefore && cut.tierBefore.id !== cut.tierAfter?.id;
     parts.push(
       changed
@@ -51,7 +51,7 @@ export function consequenceText(consequences, { profile, template, currency }) {
   const lines = [];
   if (deltas.length) lines.push(`Costs change: ${changeLine(deltas, nameOf, currency)}.`);
   if (shortfall.highMinor === 0) {
-    lines.push(`You are within budget, with ${formatMoney(surplusMinor, currency)} to spare.`);
+    lines.push(`You are within budget, with ${wholeMoney(surplusMinor, currency)} to spare.`);
     return lines.join("\n");
   }
   lines.push(`You are ${range(shortfall.lowMinor, shortfall.highMinor, currency)} over budget.`);

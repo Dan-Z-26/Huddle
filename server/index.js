@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { createApp } from "./app.js";
 import { createStore } from "./store/index.js";
+import { seedDemo } from "./store/seed.js";
 
 try {
   process.loadEnvFile(new URL("../.env", import.meta.url));
@@ -11,7 +12,9 @@ try {
 const uploadsDir = new URL("../data/uploads/", import.meta.url);
 
 const port = process.env.PORT || 3000;
-createApp({ store: createStore() }).listen(port, (err) => {
+const store = createStore();
+seedDemo(store);
+createApp({ store }).listen(port, (err) => {
   if (err) throw err;
   // Demo storage is not persistent. This runs only once we hold the port, so a second start on a
   // busy port can't delete the running server's files. Sync on purpose: awaiting fs/promises

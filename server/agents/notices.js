@@ -1,4 +1,4 @@
-import { formatMoney } from "../core/money.js";
+import { wholeMoney } from "../core/money.js";
 import { groupsForCategory } from "../core/templates.js";
 import {
   agentPrompt,
@@ -73,7 +73,7 @@ export function noticeFacts({ guests, deltas, categoryIds, groupSlug, template, 
       template.categories.find(({ id }) => id === delta.categoryId)?.name ?? delta.categoryId;
     facts.push(
       showCosts
-        ? `${name} cost changes from ${formatMoney(delta.beforeMinor, currency)} to ${formatMoney(delta.afterMinor, currency)}.`
+        ? `${name} cost changes from ${wholeMoney(delta.beforeMinor, currency)} to ${wholeMoney(delta.afterMinor, currency)}.`
         : `${name} cost has changed.`,
     );
   }

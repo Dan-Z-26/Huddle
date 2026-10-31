@@ -122,8 +122,13 @@ function chooseQuestion({ working, template, nextField, model, rejected, progres
   }
   const usable = model?.nextField === nextField;
   const question = (usable && groundedOr(model.nextQuestion, "")) || base;
-  if (rejected.length) return `${rejected[0].reason}. ${base}`;
-  return progressed ? question : `I didn't quite catch that. ${base}`;
+  return rejected.length || !progressed ? base : question;
+}
+
+// What to tell the user before repeating a question: why the last answer wasn't used.
+function feedbackFor({ rejected, progressed }) {
+  if (rejected.length) return `${rejected[0].reason}.`;
+  return progressed ? "" : "I didn't quite catch that.";
 }
 
 const valueOf = (profile, key) =>
@@ -136,7 +141,7 @@ const valueOf = (profile, key) =>
  * @param {{profile: object, template: object, answer?: string, nowIso?: string}} input The profile
  *   so far, the event template, the answer (omit it to get the first question) and the current time.
  * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
- * @returns {Promise<{nextQuestion: string, field: string | null, extracted: object, rejected: object[],
+ * @returns {Promise<{nextQuestion: string, feedback: string, field: string | null, extracted: object, rejected: object[],
  *   complete: boolean, rationale: string, profile: object}>} The result.
  */
 export async function nextStep(
@@ -173,7 +178,7 @@ export async function nextStep(
         profile: working,
         accepted,
         rejected,
-      } = applyExtracted(working, model.extracted, { template, nowIso, answer: text }));
+      } = applyExtracted(working, model.extracted, { template, nowIso, answer: text, field }));
       rationale = groundedOr(model.rationale, "", rationale);
     }
   }
@@ -182,6 +187,7 @@ export async function nextStep(
   const missing = missingProfileFields(working);
   const nextField = missing[0] ?? null;
   const complete = nextField === null;
+  const progressed = accepted.length > 0 || answer === undefined;
   const nextQuestion = complete
     ? "That's everything I need. Check the summary and confirm to create your workspace."
     : chooseQuestion({
@@ -190,11 +196,13 @@ export async function nextStep(
         nextField,
         model,
         rejected,
-        progressed: accepted.length > 0 || answer === undefined,
+        progressed,
       });
   const extracted = Object.fromEntries(accepted.map((key) => [key, valueOf(working, key)]));
+  const feedback = complete ? "" : feedbackFor({ rejected, progressed });
   return {
     nextQuestion,
+    feedback,
     field: nextField,
     extracted,
     rejected,

@@ -38,6 +38,8 @@ describe("generateOrDemo", () => {
     assert.deepEqual(await generateOrDemo(generate, { schema, demo }), {
       data: { ok: false },
       fellBack: false,
+      offline: false,
+      toolCalls: [],
     });
   });
 
@@ -48,6 +50,8 @@ describe("generateOrDemo", () => {
     assert.deepEqual(await generateOrDemo(generate, { schema, demo }), {
       data: { ok: true },
       fellBack: true,
+      offline: true,
+      toolCalls: [],
     });
   });
 

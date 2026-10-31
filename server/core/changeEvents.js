@@ -93,6 +93,9 @@ function makeDriver(id, label, pricing) {
 
 function applyGuestCount(state, event) {
   const guestCount = event.to ?? state.guestCount + event.delta;
+  if (Number.isInteger(guestCount) && guestCount > MAX_GUESTS) {
+    return rejected(`guest count can be at most ${MAX_GUESTS}`);
+  }
   if (!isCount(guestCount) || guestCount < 1) {
     return rejected("guest count must be an integer of at least 1");
   }

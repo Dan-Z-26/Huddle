@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>Huddle: plan events with your team</title>
+    <meta
+      name="description"
+      content="Huddle listens, asks and adapts. Budgets, timelines, vendor checklists and ideas for weddings, birthdays, community and corporate events."
+    />
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/js/main.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to the main content</a>
+
+    <div class="app">
+      <aside class="side" aria-label="Workspace">
+        <h1 class="brand"><span class="brand-mark" aria-hidden="true"></span>Huddle</h1>
+
+        <div class="side-event">
+          <p id="event-title" class="side-event-name"></p>
+          <p id="event-countdown" class="side-event-meta"></p>
+        </div>
+
+        <nav aria-labelledby="groups-heading">
+          <h2 id="groups-heading" class="side-heading">Groups</h2>
+          <ul id="group-list" class="group-list"></ul>
+          <p id="groups-empty" class="muted" hidden>Groups appear after setup.</p>
+        </nav>
+
+        <section aria-labelledby="attention-heading">
+          <h2 id="attention-heading" class="side-heading">Needs my attention</h2>
+          <div id="attention" class="muted"></div>
+        </section>
+
+        <div class="viewer">
+          <label for="view-as">Viewing as</label>
+          <select id="view-as"></select>
+          <button type="button" id="new-event" class="button">Start a new event</button>
+        </div>
+      </aside>
+
+      <main id="main" class="stage" tabindex="-1">
+        <div id="notice" class="notice" role="status"></div>
+
+        <section id="ask" class="ask-card" aria-labelledby="ask-title" hidden>
+          <h2 id="ask-title" class="ask-title">Ask Huddle about your budget</h2>
+          <form id="what-if" class="ask-bar">
+            <span class="spark" aria-hidden="true"></span>
+            <label for="what-if-text" class="sr-only">Ask a question, or describe a change</label>
+            <input
+              id="what-if-text"
+              type="text"
+              maxlength="1000"
+              required
+              autocomplete="off"
+              placeholder="What if 50 more guests come?"
+            />
+            <button type="submit" id="what-if-send" class="button primary">Ask</button>
+          </form>
+          <div id="ask-suggestions" class="chips" role="group" aria-label="Try one of these"></div>
+        </section>
+
+        <section
+          id="consequences"
+          class="result"
+          aria-labelledby="result-title"
+          tabindex="-1"
+          hidden
+        >
+          <p id="result-request" class="muted"></p>
+          <h2 id="result-title" class="result-title"></h2>
+          <p id="result-offline" class="offline" hidden>
+            Gemini is busy right now, so this used simple rules. The figures are still exact. Try
+            again in a minute for a fuller reading.
+          </p>
+          <p id="result-insight" class="result-insight"></p>
+          <ul id="result-points" class="points"></ul>
+
+          <div id="gap" class="gap" hidden>
+            <div class="gap-head">
+              <h3 id="gap-title" class="gap-title">How do you want to close the gap?</h3>
+              <p id="gap-status" class="muted" role="status"></p>
+            </div>
+            <progress id="gap-meter" aria-labelledby="gap-title"></progress>
+            <p class="muted">
+              Choose one or more. Each is shown in your priority order, and nothing is recommended:
+              the choice is yours.
+            </p>
+            <ul id="options" class="options"></ul>
+          </div>
+
+          <p id="result-estimate" class="muted" hidden>
+            This includes an estimated price. It stays labelled as an estimate until a real quote
+            replaces it.
+          </p>
+          <div class="result-actions">
+            <button type="button" id="result-apply" class="button primary">
+              Apply this change
+            </button>
+            <button type="button" id="result-discard" class="button">Discard</button>
+          </div>
+        </section>
+
+        <section id="intake" class="intake" aria-label="Event setup" hidden>
+          <div class="progress">
+            <p class="progress-label">
+              <strong id="intake-title"></strong>
+              <span id="intake-count"></span>
+            </p>
+            <progress id="intake-progress" max="1" value="0" aria-label="Setup progress"></progress>
+          </div>
+
+          <p id="intake-live" class="sr-only" role="status"></p>
+          <div class="ask">
+            <p id="intake-feedback" class="feedback"></p>
+            <h2 id="intake-question" class="question"></h2>
+            <p id="intake-hint" class="hint"></p>
+          </div>
+
+          <div id="intake-picker" class="picker" hidden>
+            <ul
+              id="picker-list"
+              class="picker-list"
+              aria-label="Categories, in order of importance"
+            ></ul>
+          </div>
+
+          <div id="intake-chips" class="chips"></div>
+
+          <form id="intake-form" class="answer">
+            <label id="intake-answer-label" for="intake-answer" class="sr-only">Your answer</label>
+            <textarea
+              id="intake-answer"
+              rows="2"
+              maxlength="2000"
+              required
+              aria-labelledby="intake-question intake-answer-label"
+              aria-describedby="intake-feedback intake-hint intake-keys"
+            ></textarea>
+            <div class="answer-row">
+              <span id="intake-keys" class="muted"
+                >Enter to continue, Shift+Enter for a new line</span
+              >
+              <button type="submit" id="intake-send" class="button primary">Continue</button>
+            </div>
+          </form>
+
+          <div id="intake-done" class="done" hidden>
+            <p class="muted">Review your event brief, then create the workspace.</p>
+            <button type="button" id="intake-confirm" class="button primary">
+              Create my workspace
+            </button>
+          </div>
+        </section>
+
+        <section id="group-view" class="room" aria-labelledby="group-title" hidden>
+          <header class="room-head">
+            <h2 id="group-title" class="room-title" tabindex="-1"></h2>
+            <p id="group-about" class="muted"></p>
+            <ol id="timeline-strip" class="strip" aria-label="Next on the timeline"></ol>
+          </header>
+          <div
+            id="messages"
+            class="messages"
+            role="log"
+            aria-live="polite"
+            aria-labelledby="group-title"
+          ></div>
+          <p class="muted room-foot">
+            You can read this room here. Posting arrives in the next release.
+          </p>
+        </section>
+      </main>
+
+      <aside class="plan" aria-label="Event plan">
+        <section id="budget-panel" class="panel" aria-labelledby="budget-heading" hidden>
+          <h2 id="budget-heading" class="panel-title">Budget</h2>
+          <p id="budget-summary" class="muted"></p>
+          <div id="budget-chart" class="chart"></div>
+          <table class="budget-table">
+            <caption class="sr-only">
+              Budget by category
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col">Category</th>
+                <th scope="col" class="num">Amount</th>
+                <th scope="col" class="num">Share</th>
+              </tr>
+            </thead>
+            <tbody id="budget-rows"></tbody>
+          </table>
+        </section>
+
+        <section id="timeline-panel" class="panel" aria-labelledby="timeline-heading" hidden>
+          <h2 id="timeline-heading" class="panel-title">Timeline</h2>
+          <ol id="timeline-list" class="strand"></ol>
+          <div id="timeline-tools" class="tools" hidden>
+            <form id="reschedule" class="tool-form">
+              <label for="reschedule-date">Move the event date</label>
+              <input
+                id="reschedule-date"
+                type="text"
+                maxlength="200"
+                required
+                aria-describedby="reschedule-hint"
+              />
+              <small id="reschedule-hint" class="muted"
+                >Include the year, for example 20 March 2027.</small
+              >
+              <button type="submit" class="button">Replan the timeline</button>
+            </form>
+            <button type="button" id="post-digest" class="button">Post today's digest</button>
+          </div>
+        </section>
+
+        <details id="brief-details" class="panel">
+          <summary class="panel-title">Event brief</summary>
+          <p id="brief-progress" class="muted"></p>
+          <dl id="plan-summary" class="brief-list"></dl>
+        </details>
+      </aside>
+    </div>
+
+    <dialog id="new-event-dialog" aria-labelledby="new-event-title">
+      <form id="new-event-form" method="dialog">
+        <h2 id="new-event-title" class="dialog-title">What are you planning?</h2>
+        <fieldset class="type-list">
+          <legend class="sr-only">Event type</legend>
+        </fieldset>
+        <div class="dialog-actions">
+          <button type="button" id="new-event-cancel" class="button">Cancel</button>
+          <button type="submit" class="button primary">Start planning</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

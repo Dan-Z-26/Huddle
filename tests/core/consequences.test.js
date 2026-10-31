@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { computeConsequences } from "../../server/core/consequences.js";
+import { computeConsequences, resolutionEvents } from "../../server/core/consequences.js";
 import { category, estimated, fixed, minorValues, perGuest, workedExample } from "./fixtures.js";
 
 const to250 = [{ type: "guest_count", to: 250 }];
@@ -364,5 +364,51 @@ describe("computeConsequences: inputs that could skew the numbers", () => {
     assert.equal(result.rejected.length, 1);
     assert.equal(result.after.totalMinor, state.totalMinor);
     assert.deepEqual(result.shortfall, { lowMinor: 12500000, highMinor: 12500000 });
+  });
+});
+
+describe("resolutionEvents", () => {
+  const option = (categoryId, costMinor, gap) => ({
+    categoryId,
+    atHigh: {
+      cutMinor: Math.min(costMinor, gap),
+      newTotalMinor: costMinor - Math.min(costMinor, gap),
+    },
+    atLow: null,
+  });
+  const result = {
+    shortfall: { highMinor: 100 },
+    options: [option("a", 60, 100), option("b", 500, 100)],
+    after: { totalMinor: 1000 },
+  };
+
+  it("cuts in the order chosen, taking only what the gap still needs", () => {
+    const { events, remainingMinor } = resolutionEvents(result, { cuts: ["a", "b"] });
+    assert.deepEqual(
+      events.map(({ category, amountMinor }) => [category, amountMinor]),
+      [
+        ["a", 0],
+        ["b", 460],
+      ],
+    );
+    assert.equal(remainingMinor, 0);
+  });
+
+  it("stops once the gap is closed", () => {
+    const { events } = resolutionEvents(result, { cuts: ["b", "a"] });
+    assert.equal(events.length, 1);
+    assert.equal(events[0].amountMinor, 400);
+  });
+
+  it("raises the budget by only what cuts left open", () => {
+    const { events, remainingMinor } = resolutionEvents(result, { cuts: ["a"], raise: true });
+    assert.equal(events.at(-1).toMinor, 1040);
+    assert.equal(remainingMinor, 0);
+  });
+
+  it("changes nothing without a choice, and ignores unknown or repeated categories", () => {
+    assert.deepEqual(resolutionEvents(result).events, []);
+    assert.equal(resolutionEvents(result).remainingMinor, 100);
+    assert.equal(resolutionEvents(result, { cuts: ["nope", "a", "a"] }).events.length, 1);
   });
 });

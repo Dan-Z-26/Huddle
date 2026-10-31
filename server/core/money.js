@@ -5,6 +5,17 @@ export const MAX_MINOR = 5e10;
 export const MAX_GUESTS = 100000;
 
 /**
+ * Formats money for sentences, rounded to whole rupees. Display only: stored amounts stay exact.
+ * Amounts under one rupee keep their paise, so a real difference never reads as "₹0".
+ * @param {number} minor Amount in minor units (paise).
+ * @param {string} [currency] ISO 4217 code.
+ * @returns {string} For example "₹3,80,952".
+ */
+export function wholeMoney(minor, currency = "INR") {
+  return formatMoney(Math.abs(minor) < 100 ? minor : Math.round(minor / 100) * 100, currency);
+}
+
+/**
  * Formats integer minor units as display money, with en-IN grouping for INR.
  * shortcut: assumes a two-decimal currency, upgrade when a zero-decimal currency is supported.
  * @param {number} minor Amount in minor units (paise).

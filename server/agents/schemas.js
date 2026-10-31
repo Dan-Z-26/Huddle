@@ -29,6 +29,21 @@ export const changeProposal = z.union([
     confidence,
   }),
   z.object({
+    type: z.literal("category_shift"),
+    from: short(60),
+    to: short(60),
+    amountText: short(80),
+    confidence,
+  }),
+  z.object({
+    type: z.literal("category_adjust"),
+    category: short(60),
+    direction: z.enum(["increase", "decrease"]),
+    amountText: short(80).optional(),
+    percent: z.int().min(1).max(100).optional(),
+    confidence,
+  }),
+  z.object({
     type: z.literal("line_item_add"),
     category: short(60),
     label: short(80),
@@ -93,7 +108,16 @@ export const discoveryOutput = z.object({
 export const budgetOutput = z.object({
   proposals: z.array(changeProposal).max(8),
   explanation: short(600),
+  answer: short(800).optional(),
   clarifyingQuestion: short(300).optional(),
+  rationale: short(300),
+});
+
+/** The Budget model's reading of figures that code has already worked out. */
+export const insightOutput = z.object({
+  headline: short(200),
+  insight: short(700),
+  optionNotes: z.array(z.object({ categoryId: short(60), note: short(300) })).max(12),
   rationale: short(300),
 });
 

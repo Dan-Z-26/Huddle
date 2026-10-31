@@ -7,6 +7,7 @@ import {
   generateOrDemo,
   wrapUntrusted,
 } from "../llm/index.js";
+import { budgetFacts, explainChange } from "./budgetInsight.js";
 import { CLARIFY, demoBudget } from "./budgetDemo.js";
 import { toChangeEvents } from "./changeProposals.js";
 import { consequenceText } from "./consequenceText.js";
@@ -26,43 +27,39 @@ const SYSTEM = agentPrompt({
     "understand the request",
     "check the event profile, priorities and must-haves",
     "propose the change(s)",
-    "call compute_consequences to see their effect",
+    "call compute_consequences once if you proposed a change",
     "use only tool results",
     "write the output",
   ],
   rules: [
     "Never do arithmetic and never invent figures. Copy money exactly as the user wrote it into " +
       'amountText or priceText (for example "18 lakh").',
-    "Only when the user does not know a price, give an estimate range in whole rupees " +
+    "When a new item has no price from the user, always give an estimate range in whole rupees " +
       "(lowRupees, highRupees). It is shown as an estimate and never counts as committed.",
     "Use only the category ids, item ids and labels you are given. Set confidence honestly; " +
       "below 0.7 the user is asked instead.",
-    "If the request is unclear, return no proposals and put one short question in " +
-      "clarifyingQuestion.",
+    "The user may ask for a change, explore an idea or ask a plain question. Understand what " +
+      "they mean, in any wording, using the budget figures you are given.",
+    "A question about the current plan (how much, per guest, what is left, can we afford): make " +
+      "no proposals; put a direct answer in answer, quoting exact figures from the budget facts.",
+    "An idea with a cost, such as adding a live band: propose it as line_item_add or " +
+      "line_item_swap, with the user's price or an estimate range, so its effect can be shown.",
+    "Moving money between categories: category_shift. Raising or lowering a category: " +
+      "category_adjust, with percent (half is 50) or amountText as the user said it. Setting a " +
+      "category to a figure: category_amount. For line_item_swap and line_item_remove, use an " +
+      "item label or id from the facts.",
+    "Your final JSON must repeat every proposal, even if you tried it with a tool.",
+    "Examples. 'what if 50 more people come': guest_count delta 50. 'can we afford a live band?': " +
+      "line_item_add in music with an estimate range. 'cut food by 20% and put it into decor': one " +
+      "category_shift or one category_adjust per category, never both for the same money.",
+    "A what-if or an idea is always a proposal, never an answer. Use answer only for facts " +
+      "already in the budget.",
+    "If the request is truly unclear, return no proposals and put one short question in " +
+      "clarifyingQuestion, naming the real categories it could be about.",
     "explanation: one or two neutral sentences using only values the tools returned. Never " +
       "recommend an option, pressure or upsell; the user decides.",
   ],
 });
-
-function stateSummary(state, profile) {
-  const categories = state.categories.map(({ id, name, locked, drivers }) => ({
-    id,
-    name,
-    locked,
-    items: drivers.map((driver) => ({
-      id: driver.id,
-      label: driver.label,
-      kind: driver.kind,
-      source: driver.source,
-    })),
-  }));
-  return JSON.stringify({
-    guestCount: state.guestCount,
-    priorities: profile.priorities,
-    mustHaves: profile.mustHaves,
-    categories,
-  });
-}
 
 function estimatesOf(events) {
   return events.flatMap((event) => {
@@ -75,23 +72,32 @@ function estimatesOf(events) {
 
 async function askModel(input, generate, nowIso) {
   const { profile, state, actor, template, text } = input;
-  const demo = async () => budgetOutput.parse(demoBudget({ text, template }));
+  const facts = budgetFacts(state, profile);
+  const demo = async () => budgetOutput.parse(demoBudget({ text, template, facts }));
   const tools = buildTools({ actor, profile, template, state, nowIso }).filter(({ name }) =>
     BUDGET_TOOLS.has(name),
   );
   const content = [
-    wrapUntrusted("budget state", stateSummary(state, profile)),
+    wrapUntrusted(
+      "budget facts",
+      [...facts, `Must-haves: ${profile.mustHaves.map((item) => item.text).join("; ")}`].join("\n"),
+      8000,
+    ),
     wrapUntrusted("user request", text),
   ].join("\n");
-  const { data } = await generateOrDemo(generate, {
+  const { data, offline, toolCalls } = await generateOrDemo(generate, {
     agent: "budget",
     system: SYSTEM,
     messages: [{ role: "user", content }],
     schema: budgetOutput,
     tools,
+    maxToolCalls: 1,
     demo,
   });
-  return data;
+  // A model can try a change with the tool, then leave it out of its final answer.
+  const tried = toolCalls.find(({ name }) => name === "compute_consequences")?.args?.proposals;
+  const dropped = data.proposals.length === 0 && !data.answer && Array.isArray(tried);
+  return { data: dropped ? { ...data, proposals: tried } : data, offline };
 }
 
 const refusal = {
@@ -99,6 +105,9 @@ const refusal = {
   changeEvents: [],
   estimates: [],
   clarifyingQuestion: null,
+  answer: "",
+  insight: null,
+  offline: false,
   consequences: null,
   consequenceText: "",
   explanation: "Only the event manager can change the budget.",
@@ -112,25 +121,41 @@ const refusal = {
  * @param {{profile: object, state: object, actor: object, text: string, template: object,
  *   nowIso?: string}} input The event, its budget, who asks, and what they said.
  * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
- * @returns {Promise<{allowed: boolean, changeEvents: object[], estimates: object[],
+ * @returns {Promise<{allowed: boolean, changeEvents: object[], estimates: object[], answer: string,
  *   clarifyingQuestion: string | null, consequences: object | null, consequenceText: string,
- *   explanation: string, rationale: string}>} The proposed change and its consequences.
+ *   insight: object | null, explanation: string, rationale: string, offline: boolean}>} The answer
+ *   to a question, or the proposed change, its consequences and what they mean for this event;
+ *   `offline` says no model was reached.
  */
 export async function interpretChange(input, { generate = realGenerate } = {}) {
   const { profile, state, actor, template, nowIso = new Date().toISOString() } = input;
   if (!canSeeBudget(actor, "total")) return { ...refusal };
   const text = String(input.text ?? "").slice(0, MAX_TEXT);
-  const data = await askModel({ ...input, text }, generate, nowIso);
+  const { data, offline } = await askModel({ ...input, text }, generate, nowIso);
   const categoryIds = state.categories.map(({ id }) => id);
-  const { events, questions } = toChangeEvents(data.proposals, { categoryIds });
+  const { events, questions } = toChangeEvents(data.proposals, { categoryIds, state });
 
   const result = {
     allowed: true,
     changeEvents: events,
     estimates: estimatesOf(events),
     rationale: groundedOr(data.rationale, ""),
+    offline,
+    insight: null,
+    answer: "",
   };
   if (events.length === 0) {
+    const facts = budgetFacts(state, profile).join(" ");
+    const answer = questions.length === 0 ? groundedOr(data.answer, `${facts} ${text}`) : "";
+    if (answer)
+      return {
+        ...result,
+        answer,
+        clarifyingQuestion: null,
+        consequences: null,
+        consequenceText: "",
+        explanation: "",
+      };
     const asked =
       groundedOr(data.clarifyingQuestion, `${text} ${CLARIFY}`) ||
       (questions[0] && `${questions[0].reason}. Could you say it another way?`);
@@ -146,10 +171,29 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
   const lines = consequenceText(rest, { profile, template, currency: state.currency });
   const problem = rest.rejected[0]?.reason ?? questions[0]?.reason;
   const allowedText = `${lines} ${text} ${state.guestCount} ${after.guestCount}`;
+  const insight = await explainChange(
+    {
+      state,
+      after,
+      events,
+      consequences: rest,
+      consequenceText: lines,
+      profile,
+      template,
+      text,
+      offline,
+    },
+    { generate },
+  );
   return {
     ...result,
+    insight,
+    offline: insight.offline,
     clarifyingQuestion: problem ? `${problem}. Could you check that?` : null,
-    consequences: { ...rest, budgetAfter: computeBudget(after) },
+    consequences: {
+      ...rest,
+      budgetAfter: { ...computeBudget(after), guestCount: after.guestCount },
+    },
     consequenceText: lines,
     explanation: groundedOr(data.explanation, allowedText),
   };

@@ -1,5 +1,5 @@
 import { computeBudget } from "../core/budgetEngine.js";
-import { formatMoney } from "../core/money.js";
+import { wholeMoney } from "../core/money.js";
 import { rankOf } from "../core/priorities.js";
 import {
   agentPrompt,
@@ -104,7 +104,7 @@ export async function generateIdeas(
       const category = budget.categories.find(({ id }) => id === idea.categoryId);
       const rank = rankOf(profile.priorities, idea.categoryId);
       const where = rank ? `your #${rank} priority` : "not ranked";
-      const costShare = `A ${idea.level} idea within the ${category.name} budget of ${formatMoney(category.highMinor, state.currency)} (${where}).`;
+      const costShare = `A ${idea.level} idea within the ${category.name} budget of ${wholeMoney(category.highMinor, state.currency)} (${where}).`;
       return { ...idea, costShare };
     });
   return { ideas, rationale: groundedOr(data.rationale, "") };

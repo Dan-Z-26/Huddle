@@ -70,6 +70,7 @@ export function createStore() {
     tasks: new Map(),
     budgets: new Map(),
     pendingChanges: new Map(),
+    digests: new Map(),
     messagesForGroup,
     groupsForUser,
     roleOf,

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { divFloor, formatMoney, shareOfBps, withTax } from "../../server/core/money.js";
+import { divFloor, formatMoney, shareOfBps, wholeMoney, withTax } from "../../server/core/money.js";
 
 describe("formatMoney", () => {
   it("uses en-IN grouping for INR and drops zero paise", () => {
@@ -51,5 +51,18 @@ describe("integer helpers", () => {
         assert.equal(BigInt(withTax(minor, taxBps)), BigInt(minor) + tax);
       }
     }
+  });
+});
+
+describe("wholeMoney", () => {
+  it("rounds to whole rupees for sentences", () => {
+    assert.equal(wholeMoney(38095238), "₹3,80,952");
+    assert.equal(wholeMoney(38095250), "₹3,80,953");
+    assert.equal(wholeMoney(12500000), "₹1,25,000");
+  });
+
+  it("keeps paise under one rupee, so a real difference never reads as zero", () => {
+    assert.equal(wholeMoney(40), "₹0.40");
+    assert.equal(wholeMoney(0), "₹0");
   });
 });

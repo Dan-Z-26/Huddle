@@ -311,3 +311,63 @@ describe("interpretChange: permissions", () => {
     assert.equal(called, false);
   });
 });
+
+describe("interpretChange: a proposal only tried with the tool", () => {
+  it("still uses it when the model leaves it out of the final answer", async () => {
+    const proposals = [{ type: "guest_count", delta: 50, confidence: 0.95 }];
+    const generate = async () => ({
+      data: { proposals: [], explanation: "", rationale: "ok" },
+      toolCalls: [{ name: "compute_consequences", args: { proposals } }],
+    });
+    const result = await ask("what if 50 more people come", {}, { generate });
+    assert.equal(result.changeEvents[0].delta, 50);
+  });
+});
+
+describe("interpretChange: insight on a change", () => {
+  const replies = (insight) => async (request) => ({
+    data: request.schema.shape.proposals
+      ? {
+          proposals: [{ type: "guest_count", delta: 50, confidence: 0.95 }],
+          explanation: "",
+          rationale: "ok",
+        }
+      : insight,
+    toolCalls: [],
+  });
+
+  it("keeps the model's reading of this event when its figures are real", async () => {
+    const generate = replies({
+      headline: "More guests push food costs up.",
+      insight: "The sit-down menu is what grows.",
+      optionNotes: [{ categoryId: "gifting", note: "Guests would leave with a smaller gift." }],
+      rationale: "ok",
+    });
+    const { insight } = await ask("what if 50 more people come", {}, { generate });
+    assert.equal(insight.headline, "More guests push food costs up.");
+    assert.equal(insight.optionNotes.gifting, "Guests would leave with a smaller gift.");
+    assert.equal(insight.offline, false);
+  });
+
+  it("drops wording with an invented figure, and notes for options that don't exist", async () => {
+    const generate = replies({
+      headline: "This will cost ₹7,77,777 more.",
+      insight: "Expect 999 complaints.",
+      optionNotes: [
+        { categoryId: "gifting", note: "Saves ₹5,55,555." },
+        { categoryId: "nope", note: "Not a real option." },
+      ],
+      rationale: "ok",
+    });
+    const { insight } = await ask("what if 50 more people come", {}, { generate });
+    assert.doesNotMatch(insight.headline, /7,77,777/);
+    assert.equal(insight.insight, "");
+    assert.deepEqual(insight.optionNotes, {});
+  });
+
+  it("still gives exact key points from code with no model at all", async () => {
+    const { insight, offline } = await ask("add 50 guests");
+    assert.equal(offline, true);
+    assert.ok(insight.points.some((point) => /Guests go from \d+ to \d+/.test(point)));
+  });
+});

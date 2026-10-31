@@ -1,6 +1,23 @@
 import rateLimit from "express-rate-limit";
 
-const USER_COOKIE = "huddle_user";
+export const USER_COOKIE = "huddle_user";
+
+/** The fields of a person that any client may see. */
+export const publicUser = ({ id, name, roleId, kind }) => ({ id, name, roleId, kind });
+
+/**
+ * Sets the "View as" cookie. Lax is enough: no GET route changes state, so cross-site POSTs stay blocked.
+ * @param {import("express").Response} res The response.
+ * @param {string} userId The seeded user to view as.
+ */
+export function setUserCookie(res, userId) {
+  res.cookie(USER_COOKIE, userId, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+  });
+}
 
 /**
  * Builds an error the error handler sends to the client as-is, so its message must be safe to show.
@@ -33,17 +50,49 @@ function readUserCookie(header = "") {
 }
 
 /**
+ * Reads the "View as" cookie from a request.
+ * @param {import("express").Request} req The request.
+ * @returns {string | undefined} The user id the cookie names, if any.
+ */
+export const readUserId = (req) => readUserCookie(req.headers.cookie);
+
+/**
  * Resolves the "View as" cookie to a seeded user and sets `req.user`; otherwise responds 401.
  * AI members are refused because the cookie is client-controlled and agents may post anywhere.
  * @type {import("express").RequestHandler}
  */
 export function requireUser(req, _res, next) {
-  const user = req.app.locals.store.users.get(readUserCookie(req.headers.cookie));
+  const user = req.app.locals.store.users.get(readUserId(req));
   if (!user || user.kind === "agent") {
     return next(HttpError(401, "UNAUTHENTICATED", "Choose a user to view as first."));
   }
   req.user = user;
   next();
+}
+
+/**
+ * Route rule: every route with an event :id first checks it is the user's own event.
+ * @param {import("express").Request} req The request.
+ * @returns {object} The event.
+ * @throws {Error} 404 for a missing event or another event's id, so the two look the same.
+ */
+export function ownEvent(req) {
+  const event = req.app.locals.store.events.get(req.params.id);
+  if (!event || event.id !== req.user.eventId) throw HttpError(404, "NOT_FOUND", "No such event.");
+  return event;
+}
+
+/**
+ * Like `ownEvent`, and also requires the event manager.
+ * @param {import("express").Request} req The request.
+ * @returns {object} The event.
+ * @throws {Error} 404 as `ownEvent`, or 403 for anyone but the manager.
+ */
+export function managerOnly(req) {
+  const event = ownEvent(req);
+  if (req.user.kind !== "manager")
+    throw HttpError(403, "FORBIDDEN", "Only the event manager can do this.");
+  return event;
 }
 
 /**

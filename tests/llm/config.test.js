@@ -74,3 +74,16 @@ describe("resolveAgent", () => {
     );
   });
 });
+
+describe("resolveAgent: falling back within a provider", () => {
+  const ENV = { GEMINI_API_KEY: "k", GEMINI_FAST_MODEL: "fast", GEMINI_SMART_MODEL: "smart" };
+
+  it("uses the other model tier when no second provider is set", () => {
+    assert.equal(resolveAgent("budget", ENV).fallback.model, "fast");
+    assert.equal(resolveAgent("planner", ENV).fallback.model, "smart");
+  });
+
+  it("has no fallback when both tiers are the same model", () => {
+    assert.equal(resolveAgent("budget", { ...ENV, GEMINI_FAST_MODEL: "smart" }).fallback, null);
+  });
+});

@@ -205,7 +205,7 @@ describe("generate: live", () => {
       generate({ agent: "planner", messages, schema, env: ENV, providers: { gemini } }),
       (err) => err.name === "LlmError" && !err.message.includes("leak"),
     );
-    assert.equal(gemini.calls.length, 2);
+    assert.equal(gemini.calls.length, 4, "twice on the model, then twice on its fallback");
   });
 
   it("gives the provider a timeout signal", async () => {
@@ -295,5 +295,57 @@ describe("generate: failures and fallback", () => {
       providers: { gemini: timeout, anthropic: working() },
     });
     assert.equal(result.provider, "anthropic");
+  });
+});
+
+describe("generate: tool stage ending in text", () => {
+  const ENV2 = { GEMINI_API_KEY: "k", GEMINI_FAST_MODEL: "m", GEMINI_SMART_MODEL: "m" };
+  const tool = { name: "t", description: "d", parameters: z.object({}), handler: () => 1 };
+
+  it("uses a valid answer from the tool stage without another call", async () => {
+    const gemini = fakeProvider(() => ({ text: '{"answer":"yes"}', toolCalls: [] }));
+    const shape = z.object({ answer: z.string() });
+    const { data } = await generate({
+      agent: "planner",
+      messages,
+      schema: shape,
+      tools: [tool],
+      env: ENV2,
+      providers: { gemini },
+    });
+    assert.deepEqual(data, { answer: "yes" });
+    assert.equal(gemini.calls.length, 1);
+  });
+
+  it("ends on the user's turn before asking for the final answer", async () => {
+    const replies = ["some prose", '{"answer":"yes"}'];
+    const gemini = fakeProvider(() => ({ text: replies.shift(), toolCalls: [] }));
+    await generate({
+      agent: "planner",
+      messages,
+      schema: z.object({ answer: z.string() }),
+      tools: [tool],
+      env: ENV2,
+      providers: { gemini },
+    });
+    assert.equal(gemini.calls.at(-1).messages.at(-1).role, "user");
+  });
+
+  it("honours a lower tool cap", async () => {
+    const gemini = fakeProvider((request) =>
+      request.tools.length
+        ? { text: "", toolCalls: [{ id: "1", name: "t", args: {} }] }
+        : { text: '{"answer":"yes"}', toolCalls: [] },
+    );
+    const { toolCalls } = await generate({
+      agent: "planner",
+      messages,
+      schema: z.object({ answer: z.string() }),
+      tools: [tool],
+      maxToolCalls: 1,
+      env: ENV2,
+      providers: { gemini },
+    });
+    assert.equal(toolCalls.length, 1);
   });
 });

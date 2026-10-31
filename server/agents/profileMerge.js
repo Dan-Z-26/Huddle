@@ -82,12 +82,14 @@ export function resolveGuests(profile, answer) {
  * figures found in the user's own answer, so a model never supplies a committed number.
  * @param {object} profile EventProfile.
  * @param {object} extracted Output of the extraction schema.
- * @param {{template: object, nowIso: string, answer: string}} context The event template, the
- *   current time and the user's reply the extraction came from.
+ * @param {{template: object, nowIso: string, answer: string, field: string}} context The event
+ *   template, the current time, the user's reply and the field it answers. A date or budget that is
+ *   already set changes only when that field is being answered, so an amount mentioned in passing
+ *   can never replace the total.
  * @returns {{profile: object, accepted: string[], rejected: Array<{field: string, reason: string}>}}
  *   The updated copy, the fields that changed, and what was refused and why.
  */
-export function applyExtracted(profile, extracted, { template, nowIso, answer }) {
+export function applyExtracted(profile, extracted, { template, nowIso, answer, field }) {
   const next = structuredClone(profile);
   const accepted = new Set();
   const rejected = [];
@@ -102,14 +104,14 @@ export function applyExtracted(profile, extracted, { template, nowIso, answer })
     if (text) take(field, text);
   }
   const fromAnswer = (text) => isGrounded(text, answer);
-  if (extracted.date) {
+  if (extracted.date && (field === "date" || !next.date)) {
     const iso = fromAnswer(extracted.date) ? parseEventDate(extracted.date) : null;
     if (!iso) rejected.push({ field: "date", reason: "I need the full date, including the year" });
     else if (iso.slice(0, 10) < nowIso.slice(0, 10))
       rejected.push({ field: "date", reason: "that date has already passed" });
     else take("date", iso);
   }
-  if (extracted.budgetText) {
+  if (extracted.budgetText && (field === "budget" || !next.budget.totalMinor)) {
     const amount = fromAnswer(extracted.budgetText) ? parseAmount(extracted.budgetText) : null;
     if (!amount) rejected.push({ field: "budget", reason: "I couldn't read that budget" });
     else {

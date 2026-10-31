@@ -40,14 +40,53 @@ function swapProposal(text, template) {
   };
 }
 
+function shiftProposal(text, template) {
+  const match = text.match(/\b(?:move|shift|transfer)\s+(.+?)\s+from\s+(.+?)\s+to\s+(.+)$/i);
+  if (!match) return null;
+  const from = categoriesMentioned(match[2], template)[0];
+  const to = categoriesMentioned(match[3], template)[0];
+  return from && to ? { type: "category_shift", from, to, amountText: match[1].trim() } : null;
+}
+
+function adjustProposal(text, template) {
+  const match = text.match(
+    /\b(reduce|cut|lower|decrease|increase|raise)\s+(.+?)\s+by\s+(half|\d+\s*%|.+)$/i,
+  );
+  const category = match && categoriesMentioned(match[2], template)[0];
+  if (!category) return null;
+  const direction = /increase|raise/i.test(match[1]) ? "increase" : "decrease";
+  const by = match[3].trim();
+  if (/^half$/i.test(by)) return { type: "category_adjust", category, direction, percent: 50 };
+  const percent = by.match(/^(\d+)\s*%$/);
+  if (percent) return { type: "category_adjust", category, direction, percent: Number(percent[1]) };
+  return { type: "category_adjust", category, direction, amountText: by };
+}
+
 /**
  * Offline stand-in for the Budget model: recognises a few plain-English change patterns (guest
  * count changes, a new budget total, swapping one item for another) and proposes them.
- * @param {{text: string, template: object}} input The user's request and the event template.
+ * @param {{text: string, template: object, facts?: string[]}} input The user's request, the event
+ *   template, and the budget as facts, which answer a plain question.
  * @returns {object} An object shaped like the budget output schema.
  */
-export function demoBudget({ text, template }) {
-  const found = swapProposal(text, template) ?? budgetProposal(text) ?? guestProposal(text);
+export function demoBudget({ text, template, facts = [] }) {
+  const found =
+    shiftProposal(text, template) ??
+    adjustProposal(text, template) ??
+    swapProposal(text, template) ??
+    budgetProposal(text) ??
+    guestProposal(text);
+  if (
+    !found &&
+    /\?|^\s*(?:how|what|which|where|can|do|does|is|are|show)\b/i.test(text) &&
+    facts.length
+  )
+    return {
+      proposals: [],
+      explanation: "",
+      answer: `Here is where the budget stands.\n${facts.slice(0, 5).join("\n")}`,
+      rationale: "I can only show the figures right now.",
+    };
   if (!found)
     return {
       proposals: [],

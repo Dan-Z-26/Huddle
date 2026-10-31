@@ -17,7 +17,7 @@ const NONE = z.object({});
 
 function proposalSummary(state, input) {
   const categoryIds = state.categories.map(({ id }) => id);
-  return toChangeEvents(input, { categoryIds });
+  return toChangeEvents(input, { categoryIds, state });
 }
 
 function budgetTools({ state, profile }) {

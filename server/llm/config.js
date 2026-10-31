@@ -26,9 +26,14 @@ export function resolveAgent(agent, env = process.env) {
   const primary = target(provider, env[`${name}_MODEL`] || tierModel(provider), env);
 
   const fallbackProvider = env.FALLBACK_PROVIDER?.toLowerCase();
+  // With no second provider, the provider's other model tier: one model can be overloaded while
+  // the other is fine, and a busy model should not push the app onto its offline rules.
+  const otherTier = env[`${provider.toUpperCase()}_${tier === "FAST" ? "SMART" : "FAST"}_MODEL`];
   const fallback = fallbackProvider
     ? target(fallbackProvider, env.FALLBACK_MODEL || tierModel(fallbackProvider), env)
-    : null;
+    : primary && otherTier && otherTier !== primary.model
+      ? target(provider, otherTier, env)
+      : null;
 
   return primary ? { live: true, ...primary, fallback } : { live: false, fallback: null };
 }

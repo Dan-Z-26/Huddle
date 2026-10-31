@@ -20,7 +20,7 @@ test("sets the exact strict CSP and security headers", async (t) => {
     "font-src 'self'",
     "form-action 'self'",
     "frame-ancestors 'none'",
-    "img-src 'self' data:",
+    "img-src 'self'",
     "object-src 'none'",
     "script-src 'self'",
     "style-src 'self'",

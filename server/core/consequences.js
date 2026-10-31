@@ -93,3 +93,34 @@ export function computeConsequences(state, events, profile) {
     increaseBudget: shortfall.highMinor === 0 ? null : { ...shortfall },
   };
 }
+
+/**
+ * Turns the manager's choice into the extra events that close the gap: the chosen categories are
+ * cut in the order given, each only as far as the gap still needs, and `raise` covers what is left.
+ * @param {{shortfall: {highMinor: number}, options: object[], after: {totalMinor: number}}} result
+ *   Result of computeConsequences.
+ * @param {{cuts?: string[], raise?: boolean}} choice Categories to cut, and whether to raise the budget.
+ * @returns {{events: object[], remainingMinor: number}} Events to add, and the gap still open.
+ */
+export function resolutionEvents({ shortfall, options, after }, { cuts = [], raise = false } = {}) {
+  const events = [];
+  let remainingMinor = shortfall.highMinor;
+  for (const categoryId of new Set(cuts)) {
+    const cut = options.find((option) => option.categoryId === categoryId);
+    const chosen = cut?.atHigh ?? cut?.atLow;
+    if (!chosen || remainingMinor === 0) continue;
+    const costMinor = chosen.newTotalMinor + chosen.cutMinor;
+    const takenMinor = Math.min(remainingMinor, costMinor);
+    events.push({
+      type: "category_amount",
+      category: categoryId,
+      amountMinor: costMinor - takenMinor,
+    });
+    remainingMinor -= takenMinor;
+  }
+  if (raise && remainingMinor > 0) {
+    events.push({ type: "budget_total", toMinor: after.totalMinor + remainingMinor });
+    remainingMinor = 0;
+  }
+  return { events, remainingMinor };
+}

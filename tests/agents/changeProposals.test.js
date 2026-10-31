@@ -149,3 +149,75 @@ describe("changeProposal schema", () => {
     );
   });
 });
+
+describe("toChangeEvents: moving and scaling money", () => {
+  const state = {
+    guestCount: 100,
+    currency: "INR",
+    categories: [
+      { id: "decor", drivers: [{ id: "a", kind: "fixed", unitMinor: 30000000, source: "user" }] },
+      { id: "food", drivers: [{ id: "b", kind: "fixed", unitMinor: 50000000, source: "user" }] },
+    ],
+  };
+  const run = (proposal) =>
+    toChangeEvents([{ confidence: 0.9, ...proposal }], { categoryIds: ["decor", "food"], state });
+
+  it("moves an amount, keeping the two categories' sum the same", () => {
+    const { events } = run({
+      type: "category_shift",
+      from: "decor",
+      to: "food",
+      amountText: "1 lakh",
+    });
+    assert.deepEqual(
+      events.map(({ category, amountMinor }) => [category, amountMinor]),
+      [
+        ["decor", 20000000],
+        ["food", 60000000],
+      ],
+    );
+  });
+
+  it("asks instead of moving more than a category has", () => {
+    const { events, questions } = run({
+      type: "category_shift",
+      from: "decor",
+      to: "food",
+      amountText: "10 lakh",
+    });
+    assert.deepEqual(events, []);
+    assert.match(questions[0].reason, /only has ₹3,00,000/);
+  });
+
+  it("asks about an unknown category on either side of a move", () => {
+    const { questions } = run({
+      type: "category_shift",
+      from: "decor",
+      to: "nope",
+      amountText: "1 lakh",
+    });
+    assert.match(questions[0].reason, /don't know the category "nope"/);
+  });
+
+  it("scales by a percent or an amount, in code", () => {
+    const half = run({
+      type: "category_adjust",
+      category: "food",
+      direction: "decrease",
+      percent: 50,
+    });
+    assert.equal(half.events[0].amountMinor, 25000000);
+    const more = run({
+      type: "category_adjust",
+      category: "food",
+      direction: "increase",
+      amountText: "50,000",
+    });
+    assert.equal(more.events[0].amountMinor, 55000000);
+  });
+
+  it("asks when it isn't told how much", () => {
+    const { questions } = run({ type: "category_adjust", category: "food", direction: "decrease" });
+    assert.match(questions[0].reason, /how much/);
+  });
+});
