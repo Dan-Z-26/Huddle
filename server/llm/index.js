@@ -18,8 +18,10 @@ const LOADERS = {
   gemini: () => import("./providers/gemini.js"),
   anthropic: () => import("./providers/anthropic.js"),
 };
-// A hung call should reach the fallback model quickly, not leave someone waiting.
-const DEFAULT_TIMEOUT_MS = 12000;
+// A hung call should reach the fallback model quickly, not leave someone waiting. Reading a
+// document takes the model longer, so a request with files gets three times as long.
+const DEFAULT_TIMEOUT_MS = 20000;
+const FILE_TIMEOUT_FACTOR = 3;
 
 /**
  * Builds the error thrown when a model call fails or keeps returning invalid output.
@@ -102,7 +104,8 @@ async function toolStage({ call, history, runner }) {
 async function runLive(request, target, providers) {
   const { system, messages, schema, tools = [], files = [], env = process.env } = request;
   const provider = providers[target.provider] ?? (await LOADERS[target.provider]());
-  const timeoutMs = Number(env.LLM_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS;
+  const timeoutMs =
+    (Number(env.LLM_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS) * (files.length ? FILE_TIMEOUT_FACTOR : 1);
   const declared = tools.map(({ name, description, parameters }) => ({
     name,
     description,

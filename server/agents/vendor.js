@@ -104,7 +104,7 @@ export async function buildRfq(
     `Category: ${category.name}`,
     wrapUntrusted("event profile", JSON.stringify({ ...relevant, purpose: profile.purpose })),
   ].join("\n");
-  const { data, fellBack } = await generateOrDemo(generate, {
+  const { data, fellBack, offline } = await generateOrDemo(generate, {
     agent: "vendor",
     system: RFQ_SYSTEM,
     messages: [{ role: "user", content }],
@@ -121,6 +121,7 @@ export async function buildRfq(
       checklist: merge(lines, data.checklist, allowedText),
       rfqQuestions: merge(questions, data.rfqQuestions, allowedText),
       rationale: groundedOr(data.rationale, ""),
+      offline,
     },
     !fellBack,
   );
@@ -129,7 +130,15 @@ export async function buildRfq(
 const clean = (value, max) =>
   typeof value === "string" && value.trim() ? value.trim().slice(0, max) : null;
 
-function toQuote(extracted, { categoryId, profile, fileId }) {
+/**
+ * Builds a quote from fields as stated by a person or read from a document. Prices and tax are
+ * parsed in code; must-have ids are kept only if they belong to this category.
+ * @param {object} extracted Fields in the shape of the quote extraction schema.
+ * @param {{categoryId: string, profile: object, fileId?: string | null}} context Where it belongs.
+ * @returns {{quote: object, warnings: string[]}} A quote with status "extracted" (no id or event),
+ *   and anything that could not be read.
+ */
+export function quoteFromExtracted(extracted, { categoryId, profile, fileId }) {
   const warnings = [];
   const price = (text, label) => {
     if (!text) return 0;
@@ -202,7 +211,7 @@ export async function extractQuote(
     wrapUntrusted("must-haves for this category", JSON.stringify(mustHaves)),
     wrapUntrusted("quote text", body || "(no pasted text; see the attached file)", MAX_QUOTE_TEXT),
   ].join("\n");
-  const { data, fellBack } = await generateOrDemo(generate, {
+  const { data, fellBack, offline } = await generateOrDemo(generate, {
     agent: "vendor",
     system: QUOTE_SYSTEM,
     messages: [{ role: "user", content }],
@@ -210,11 +219,15 @@ export async function extractQuote(
     schema: quoteExtraction,
     demo,
   });
-  const { quote, warnings } = toQuote(data.extracted, { categoryId, profile, fileId: file?.id });
+  const { quote, warnings } = quoteFromExtracted(data.extracted, {
+    categoryId,
+    profile,
+    fileId: file?.id,
+  });
   return remember(
     cache,
     key,
-    { extractedQuote: quote, warnings, rationale: groundedOr(data.rationale, "") },
+    { extractedQuote: quote, warnings, rationale: groundedOr(data.rationale, ""), offline },
     !fellBack,
   );
 }

@@ -36,7 +36,11 @@ describe("/me", () => {
       seeTotalBudget: true,
       manageGroups: true,
       markDirective: true,
+      viewQuotes: true,
     });
+    const core = await (await call("/me", { as: DESIGNER })).json();
+    assert.deepEqual(core.user.categoryIds, ["reveal", "decor", "music", "gifting"]);
+    assert.equal(core.permissions.viewQuotes, true);
   });
 
   it("lists only unacknowledged directives and open tasks of this user and event", async (t) => {
@@ -208,7 +212,7 @@ describe("group history", () => {
     const page = await (
       await call(url("core-team", `?before=${elsewhere}`), { as: DESIGNER })
     ).json();
-    assert.deepEqual(page, { messages: [], nextBefore: null });
+    assert.deepEqual(page, { messages: [], nextBefore: null, pinned: [] });
   });
 
   it("rejects bad paging values", async (t) => {

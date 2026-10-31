@@ -2,9 +2,6 @@ import rateLimit from "express-rate-limit";
 
 export const USER_COOKIE = "huddle_user";
 
-/** The fields of a person that any client may see. */
-export const publicUser = ({ id, name, roleId, kind }) => ({ id, name, roleId, kind });
-
 /**
  * Sets the "View as" cookie. Lax is enough: no GET route changes state, so cross-site POSTs stay blocked.
  * @param {import("express").Response} res The response.
@@ -150,6 +147,11 @@ export function createAiLimiter({ windowMs, max }) {
  */
 function describeError(err, req) {
   if (err.name === "HttpError") return err;
+  if (err.name === "MulterError") {
+    return err.code === "LIMIT_FILE_SIZE"
+      ? { status: 413, code: "PAYLOAD_TOO_LARGE", message: "That file is larger than 5 MB." }
+      : { status: 400, code: "BAD_REQUEST", message: "Invalid upload." };
+  }
   if (err.type === "entity.too.large") {
     return { status: 413, code: "PAYLOAD_TOO_LARGE", message: "Request body is too large." };
   }

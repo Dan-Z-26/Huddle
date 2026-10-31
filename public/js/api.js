@@ -1,10 +1,12 @@
 // The only module that talks to the server.
 
 async function request(path, { method = "GET", body } = {}) {
+  // A FormData body carries a file; the browser sets its own content type and boundary.
+  const isForm = body instanceof FormData;
   const res = await fetch(`/api${path}`, {
     method,
-    headers: body ? { "content-type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
+    headers: body && !isForm ? { "content-type": "application/json" } : {},
+    body: body && !isForm ? JSON.stringify(body) : body,
   });
   if (res.status === 204) return null;
   const data = await res.json().catch(() => ({}));
@@ -31,6 +33,22 @@ export const api = {
     }),
   confirmIntake: (id) =>
     request(`/events/${encodeURIComponent(id)}/intake/confirm`, { method: "POST" }),
+  rfq: (id, categoryId) =>
+    request(`/events/${encodeURIComponent(id)}/rfq`, { method: "POST", body: { categoryId } }),
+  quotes: (id, categoryId) =>
+    request(
+      `/events/${encodeURIComponent(id)}/quotes?categoryId=${encodeURIComponent(categoryId)}`,
+    ),
+  addQuote: (id, form) =>
+    request(`/events/${encodeURIComponent(id)}/quotes`, { method: "POST", body: form }),
+  confirmQuote: (quoteId, body) =>
+    request(`/quotes/${encodeURIComponent(quoteId)}/confirm`, { method: "POST", body }),
+  acceptQuote: (quoteId) =>
+    request(`/quotes/${encodeURIComponent(quoteId)}/accept`, { method: "POST" }),
+  comparison: (id, categoryId) =>
+    request(
+      `/events/${encodeURIComponent(id)}/comparison?categoryId=${encodeURIComponent(categoryId)}`,
+    ),
   ideas: (id) => request(`/events/${encodeURIComponent(id)}/ideas`, { method: "POST" }),
   budget: (id) => request(`/events/${encodeURIComponent(id)}/budget`),
   timeline: (id) => request(`/events/${encodeURIComponent(id)}/timeline`),
@@ -46,5 +64,35 @@ export const api = {
   setTask: (id, status) =>
     request(`/tasks/${encodeURIComponent(id)}`, { method: "PATCH", body: { status } }),
   digest: (id) => request(`/events/${encodeURIComponent(id)}/digest`, { method: "POST" }),
+  postMessage: (groupId, form) =>
+    request(`/groups/${encodeURIComponent(groupId)}/messages`, { method: "POST", body: form }),
+  pinDirective: (messageId, addressedUserIds) =>
+    request(`/messages/${encodeURIComponent(messageId)}/directive`, {
+      method: "POST",
+      body: { addressedUserIds },
+    }),
+  ack: (directiveId) =>
+    request(`/directives/${encodeURIComponent(directiveId)}/ack`, { method: "POST" }),
+  createGroup: (eventId, body) =>
+    request(`/events/${encodeURIComponent(eventId)}/groups`, { method: "POST", body }),
+  patchGroup: (groupId, body) =>
+    request(`/groups/${encodeURIComponent(groupId)}`, { method: "PATCH", body }),
+  deleteGroup: (groupId) => request(`/groups/${encodeURIComponent(groupId)}`, { method: "DELETE" }),
   messages: (groupId) => request(`/groups/${encodeURIComponent(groupId)}/messages`),
 };
+
+/**
+ * Opens the live stream. The browser reconnects by itself if it drops; `onOpen` runs on every
+ * (re)connection, so the screen can catch up on anything it missed.
+ * @param {Record<string, (event: object) => void>} handlers One function per event type.
+ * @param {() => void} onOpen Called each time the stream opens.
+ * @returns {() => void} Closes the stream.
+ */
+export function openStream(handlers, onOpen) {
+  const source = new EventSource("/api/stream");
+  source.onopen = onOpen;
+  for (const [type, handler] of Object.entries(handlers)) {
+    source.addEventListener(type, (message) => handler(JSON.parse(message.data)));
+  }
+  return () => source.close();
+}

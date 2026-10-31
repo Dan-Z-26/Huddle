@@ -349,3 +349,35 @@ describe("generate: tool stage ending in text", () => {
     assert.equal(toolCalls.length, 1);
   });
 });
+
+describe("generate: timeouts", () => {
+  const ENV3 = {
+    GEMINI_API_KEY: "k",
+    GEMINI_FAST_MODEL: "m",
+    GEMINI_SMART_MODEL: "m",
+    LLM_TIMEOUT_MS: "1000",
+  };
+  const good2 = '{"answer":"yes"}';
+  const shape = z.object({ answer: z.string() });
+
+  it("gives a request with a file three times as long to answer", async () => {
+    const seen = [];
+    const gemini = fakeProvider((request) => {
+      seen.push(request.signal);
+      return { text: good2, toolCalls: [] };
+    });
+    const run = (files) =>
+      generate({
+        agent: "vendor",
+        messages,
+        schema: shape,
+        files,
+        env: ENV3,
+        providers: { gemini },
+      });
+    await run([]);
+    await run([{ mime: "application/pdf", buffer: Buffer.from("%PDF-"), name: "q.pdf" }]);
+    assert.equal(seen.length, 2);
+    assert.ok(seen.every((signal) => signal instanceof AbortSignal));
+  });
+});

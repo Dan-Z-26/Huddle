@@ -1,7 +1,6 @@
 import { Router } from "express";
-import { mentionsMoney } from "../core/amount.js";
 import { missingProfileFields } from "../core/profile.js";
-import { canSeeBudget } from "../core/permissions.js";
+import { canPost } from "../core/permissions.js";
 import { getTemplate, listEventTypes } from "../core/templates.js";
 import { generateIdeas } from "../agents/ideas.js";
 import { nextStep } from "../agents/discovery.js";
@@ -10,7 +9,6 @@ import {
   HttpError,
   managerOnly,
   ownEvent,
-  publicUser,
   requireUser,
   setUserCookie,
   validate,
@@ -18,39 +16,13 @@ import {
 import { DEMO_EVENT_ID } from "../store/seed.js";
 import { createEvent, createWorkspace, deleteEvent } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
+import { profileFor, publicUser } from "./views.js";
 
 const MAX_EVENTS = 50;
-const HIDDEN = "(contains an amount; visible to the event manager)";
-const noMoney = (text) => (mentionsMoney(text) ? HIDDEN : text);
-
-/**
- * The profile as a user may see it. Only the manager gets the total budget and the ranking: a
- * category's opening amount follows from its rank, so rank plus amount would reveal the total.
- * Others also lose other categories' needs and any amount typed into shared text.
- */
-function profileFor(event, role) {
-  if (canSeeBudget(role, "total")) return event;
-  const rest = { ...event };
-  delete rest.budget;
-  delete rest.priorities;
-  const owns = (categoryId) => role.categoryIds.includes(categoryId);
-  return {
-    ...rest,
-    name: noMoney(event.name),
-    purpose: noMoney(event.purpose),
-    city: noMoney(event.city),
-    venueType: noMoney(event.venueType),
-    attendeeExperience: noMoney(event.attendeeExperience),
-    mustHaves: event.mustHaves
-      .filter(({ categoryId }) => !categoryId || owns(categoryId))
-      .map((item) => (item.categoryId ? item : { ...item, text: noMoney(item.text) })),
-    constraints: Object.fromEntries(
-      Object.entries(event.constraints).map(([key, items]) => [key, items.map(noMoney)]),
-    ),
-    vendorNeeds: Object.fromEntries(
-      Object.entries(event.vendorNeeds).filter(([categoryId]) => owns(categoryId)),
-    ),
-  };
+/** The user's groups, each saying whether they may post there, so the screen can offer a composer. */
+export function groupsFor(store, user) {
+  const role = store.roleOf(user);
+  return store.groupsForUser(user).map((group) => ({ ...group, canPost: canPost(role, group) }));
 }
 
 /** Event-scoped routes: the user's own event only, and managers only where it changes things. */
@@ -83,8 +55,11 @@ export function eventRoutes({ ai }) {
       template: {
         label: template.label,
         categories: template.categories.map(({ id, name }) => ({ id, name })),
+        roles: template.roles
+          .filter(({ kind }) => kind !== "agent")
+          .map(({ id, name, kind }) => ({ id, name, kind })),
       },
-      groups: store.groupsForUser(req.user),
+      groups: groupsFor(store, req.user),
       members: members.map(publicUser),
     });
   });
@@ -130,7 +105,7 @@ export function eventRoutes({ ai }) {
       createWorkspace(store, event, new Date().toISOString());
       res.json({
         event: profileFor(event, store.roleOf(req.user)),
-        groups: store.groupsForUser(req.user),
+        groups: groupsFor(store, req.user),
       });
     },
   );

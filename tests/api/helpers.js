@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createApp } from "../../server/app.js";
 import { errorHandler } from "../../server/http.js";
 import { createStore } from "../../server/store/index.js";
@@ -18,8 +21,8 @@ const SEEDED_AT = "2026-10-31T09:00:00.000Z";
  * @param {{ store?: object, mount?: (app: import("express").Express) => void }} [options]
  * @returns {Promise<string>} Base URL.
  */
-export async function serve(t, { store = createStore(), mount } = {}) {
-  const app = createApp({ store });
+export async function serve(t, { store = createStore(), mount, uploadsDir } = {}) {
+  const app = createApp({ store, uploadsDir });
   mount?.(app);
   app.use(errorHandler);
 
@@ -58,7 +61,9 @@ export async function assertError(res, status, code) {
 export async function startDemo(t) {
   const store = createStore();
   seedDemo(store, SEEDED_AT);
-  const base = await serve(t, { store });
+  const uploadsDir = await mkdtemp(join(tmpdir(), "huddle-test-"));
+  t.after(() => rm(uploadsDir, { recursive: true, force: true }));
+  const base = await serve(t, { store, uploadsDir });
   const call = (path, { as, method = "GET", body } = {}) =>
     fetch(`${base}/api${path}`, {
       method,
@@ -68,7 +73,7 @@ export async function startDemo(t) {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-  return { store, call };
+  return { store, call, base, uploadsDir };
 }
 
 /**

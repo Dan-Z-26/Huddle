@@ -65,6 +65,7 @@ export function timelineRoutes({ ai }) {
         nowIso,
       });
     }
+    store.publish({ type: "timeline.updated", eventId: event.id });
     res.json({ event: { id: event.id, date }, tasks: timelineView(store, event.id) });
   });
 
@@ -82,6 +83,8 @@ export function timelineRoutes({ ai }) {
       new Date().toISOString(),
     );
     store.tasks.set(updated.id, updated);
+    store.publish({ type: "timeline.updated", eventId: task.eventId });
+    store.publish({ type: "attention.updated", eventId: task.eventId });
     res.json({ tasks: timelineView(store, task.eventId) });
   });
 

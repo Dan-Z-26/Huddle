@@ -3,6 +3,7 @@ import { mentionsMoney } from "../core/amount.js";
 import { buildBudgetState, emptyProfile } from "../core/profile.js";
 import { getTemplate } from "../core/templates.js";
 import { planTimeline } from "../core/timelinePlanner.js";
+import { messageView } from "../routes/views.js";
 
 /**
  * Creates an event and its seeded people (the manager, the core roles and the four AI members).
@@ -70,6 +71,32 @@ export function createWorkspace(store, event, nowIso) {
   return { groups, tasks };
 }
 
+const MAX_MESSAGES_PER_GROUP = 300;
+
+/**
+ * Stores a message and tells everyone in the group who is connected. Each group keeps its latest
+ * messages only, so a busy room can't fill memory.
+ * @param {object} store The store.
+ * @param {object} message A complete message.
+ * @returns {object} The stored message.
+ */
+export function addMessage(store, message) {
+  store.messages.set(message.id, message);
+  const inGroup = [...store.messages.values()].filter(({ groupId }) => groupId === message.groupId);
+  for (const old of inGroup.slice(0, Math.max(0, inGroup.length - MAX_MESSAGES_PER_GROUP)))
+    store.messages.delete(old.id);
+  const group = store.groups.get(message.groupId);
+  if (group) {
+    store.publish({
+      type: message.authorKind === "system" ? "notice.created" : "message.created",
+      eventId: group.eventId,
+      groupId: group.id,
+      message: messageView(store, message),
+    });
+  }
+  return message;
+}
+
 /**
  * Stores a message from an AI member, or a system notice with `authorKind: "system"`.
  * @param {object} store The store.
@@ -81,7 +108,7 @@ export function postAgentMessage(
   store,
   { groupId, authorId, authorKind = "agent", text, rationale = null, nowIso },
 ) {
-  const message = {
+  return addMessage(store, {
     id: `m-${randomUUID().slice(0, 8)}`,
     groupId,
     authorId,
@@ -90,9 +117,7 @@ export function postAgentMessage(
     fileIds: [],
     createdAt: nowIso,
     rationale,
-  };
-  store.messages.set(message.id, message);
-  return message;
+  });
 }
 
 /**
@@ -118,8 +143,31 @@ export function deleteEvent(store, eventId) {
   ]) {
     for (const [key, item] of map) if (belongs(item)) map.delete(key);
   }
-  for (const key of store.digests.keys())
-    if (key.startsWith(`${eventId}:`)) store.digests.delete(key);
+  for (const keyed of [store.digests, store.rfqPosted])
+    for (const key of keyed.keys()) if (key.startsWith(`${eventId}:`)) keyed.delete(key);
   store.budgets.delete(eventId);
   store.events.delete(eventId);
+}
+
+/**
+ * Removes a group with its messages, directives and files. Tasks it owned move to #core-team.
+ * @param {object} store The store.
+ * @param {object} group The group.
+ * @returns {object[]} The removed file records, so the caller can delete them from disk.
+ */
+export function deleteGroup(store, group) {
+  const home = store.groups.get(`g-${group.eventId}-core-team`);
+  for (const task of store.tasks.values()) {
+    if (task.ownerGroupId === group.id) task.ownerGroupId = home?.id ?? null;
+  }
+  const files = [...store.files.values()].filter(({ groupId }) => groupId === group.id);
+  for (const [map, key, item] of [
+    ...[...store.messages].map(([k, v]) => [store.messages, k, v]),
+    ...[...store.directives].map(([k, v]) => [store.directives, k, v]),
+    ...[...store.files].map(([k, v]) => [store.files, k, v]),
+  ]) {
+    if (item.groupId === group.id) map.delete(key);
+  }
+  store.groups.delete(group.id);
+  return files;
 }

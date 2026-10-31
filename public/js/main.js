@@ -2,13 +2,17 @@ import { api } from "./api.js";
 import { renderBrief, countdown } from "./brief.js";
 import { renderBudget } from "./budgetChart.js";
 import { hideConsequences, setUpWhatIf } from "./consequences.js";
+import { showGroup } from "./chat.js";
 import { announce, el } from "./dom.js";
+import { setUpGroupsAdmin } from "./groupsAdmin.js";
 import { hideIdeas, setUpIdeas } from "./ideas.js";
 import { startIntake } from "./intake.js";
 import { renderTimeline } from "./timeline.js";
 import { bump } from "./session.js";
+import { setUpVendors } from "./vendors.js";
 import { setUpViewAs } from "./viewAs.js";
-import { renderAttention, renderGroups, showGroup } from "./workspace.js";
+import { startLive } from "./live.js";
+import { renderAttention, renderGroups } from "./workspace.js";
 
 const DEMO_MANAGER = "user-manager@demo";
 const TYPE_ABOUT = {
@@ -21,6 +25,8 @@ const show = (id, visible) => (document.getElementById(id).hidden = !visible);
 let activeGroupId = null;
 let shownBudget = null;
 let wasSettingUp = null;
+let view = "group";
+const unread = new Map();
 
 async function signedIn() {
   try {
@@ -33,7 +39,7 @@ async function signedIn() {
 }
 
 function setUpPlanTools(event) {
-  setUpWhatIf(event, {
+  const whatIf = setUpWhatIf(event, {
     currentBudget: () => shownBudget,
     onApplied: async (notices) => {
       await load();
@@ -68,6 +74,7 @@ function setUpPlanTools(event) {
       digestButton.disabled = false;
     }
   };
+  return whatIf.show;
 }
 
 async function loadPlan(event, isManager) {
@@ -77,10 +84,12 @@ async function loadPlan(event, isManager) {
   renderTimeline(tasks);
   show("ask", isManager);
   show("timeline-tools", isManager);
+  let showProposal = () => {};
   if (isManager) {
-    setUpPlanTools(event);
+    showProposal = setUpPlanTools(event);
     setUpIdeas(event.id);
   }
+  return showProposal;
 }
 
 async function load({ focusIntake = false } = {}) {
@@ -98,12 +107,15 @@ async function load({ focusIntake = false } = {}) {
   document.getElementById("event-title").textContent = event.name || template.label;
   document.getElementById("event-countdown").textContent = countdown(event.date);
   renderBrief(event, template, me.permissions.seeTotalBudget);
-  renderAttention(me.attention);
+  // Rebuilt below once the groups are known; until then a directive can only open the first one.
 
   const settingUp = event.intakeStatus === "in_progress";
   const isManager = me.user.kind === "manager";
   show("intake", settingUp && isManager);
-  show("group-view", !settingUp);
+  if (settingUp) {
+    show("group-view", false);
+    show("vendors-view", false);
+  }
   show("budget-panel", !settingUp);
   show("timeline-panel", !settingUp);
   if (settingUp) show("ask", false);
@@ -127,15 +139,74 @@ async function load({ focusIntake = false } = {}) {
     }
     return;
   }
-  await loadPlan(event, isManager);
+  const showProposal = await loadPlan(event, isManager);
+  const drawGroups = () =>
+    renderGroups(
+      groups,
+      view === "group" ? activeGroupId : null,
+      (next) => open(next, true),
+      unread,
+    );
   const open = async (group, moveFocus = false) => {
     activeGroupId = group.id;
-    renderGroups(groups, group.id, (next) => open(next, true));
+    view = "group";
+    unread.delete(group.id);
+    showView("group");
+    drawGroups();
     if (moveFocus) document.getElementById("group-title").focus();
-    await showGroup(group, members, () => activeGroupId === group.id);
+    await showGroup(group, members, { me: me.user, isManager }, () => activeGroupId === group.id);
   };
+  const openById = (id) => {
+    const group = groups.find((item) => item.id === id);
+    if (group) open(group, true);
+  };
+  renderAttention(me.attention, openById);
+  if (isManager) setUpGroupsAdmin({ event, groups, roles: template.roles, onChanged: load });
+  startLive({
+    userId: me.user.id,
+    eventId: event.id,
+    activeGroupId: () => (view === "group" ? activeGroupId : null),
+    hasPreview: () => !document.getElementById("consequences").hidden,
+    openGroup: openById,
+    onUnread: (groupId) => {
+      unread.set(groupId, (unread.get(groupId) ?? 0) + 1);
+      drawGroups();
+    },
+    onGroupsChanged: () => load(),
+    onReconnect: () => load(),
+    onBudget: (budget) => {
+      shownBudget = budget;
+    },
+  });
+  // Vendors and quotes are for the manager and the core members who own a category.
+  const mine = isManager
+    ? template.categories
+    : template.categories.filter(({ id }) => me.user.categoryIds?.includes(id));
+  const canVendors = me.permissions.viewQuotes && mine.length > 0;
+  document.querySelector(".vendors-nav").hidden = !canVendors;
+  document.getElementById("manage-groups").hidden = !isManager;
+  let refreshVendors = async () => {};
+  const openVendors = async (moveFocus = false) => {
+    view = "vendors";
+    showView("vendors");
+    view = "vendors";
+    drawGroups();
+    if (moveFocus) document.getElementById("vendors-title").focus();
+    await refreshVendors();
+  };
+  if (canVendors) {
+    refreshVendors = setUpVendors({ event, categories: mine, isManager, showProposal });
+    document.getElementById("vendors-nav").onclick = () => openVendors(true);
+  }
   const first = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
-  if (first) await open(first);
+  if (view === "vendors" && canVendors) await openVendors();
+  else if (first) await open(first);
+}
+
+function showView(name) {
+  show("group-view", name === "group");
+  show("vendors-view", name === "vendors");
+  document.getElementById("vendors-nav").setAttribute("aria-current", String(name === "vendors"));
 }
 
 function setUpNewEvent() {

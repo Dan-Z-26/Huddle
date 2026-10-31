@@ -20,6 +20,8 @@ export const hideConsequences = () => ($("consequences").hidden = true);
  * @param {object} event The event.
  * @param {{currentBudget: () => object, onApplied: (notices: number) => Promise<void>}} hooks The
  *   budget on screen, and what to do once the server has applied a change.
+ * @returns {{show: (text: string, data: object) => void}} `show` displays any proposed change,
+ *   such as accepting a quote, in the same panel.
  */
 export function setUpWhatIf(event, { currentBudget, onApplied }) {
   let changeId = null;
@@ -242,4 +244,5 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
       button.disabled = false;
     }
   };
+  return { show };
 }

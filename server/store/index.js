@@ -82,6 +82,11 @@ export function createStore() {
     budgets: new Map(),
     pendingChanges: new Map(),
     digests: new Map(),
+    /** Tells open streams about a change; the app replaces this with its hub. */
+    publish() {},
+    /** Work running after a response was sent, so tests can wait for it. */
+    background: new Set(),
+    rfqPosted: new Set(),
     messagesForGroup,
     groupsForUser,
     roleOf,

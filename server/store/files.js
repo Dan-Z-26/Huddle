@@ -1,0 +1,46 @@
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { detectFileType, safeFileName } from "../validation/uploads.js";
+
+/**
+ * Stores an uploaded file under a random name outside `public/`, and records it against the group
+ * it was posted in. Who may read it follows from that group.
+ * @param {object} store The store.
+ * @param {string} uploadsDir Directory for uploads.
+ * @param {{buffer: Buffer, originalName: string, groupId: string, userId: string,
+ *   nowIso?: string}} upload The file and who posted it where.
+ * @returns {Promise<object | null>} The FileRecord, or null when the contents are not an allowed
+ *   type (nothing is written then).
+ */
+export async function saveUpload(
+  store,
+  uploadsDir,
+  { buffer, originalName, groupId, userId, nowIso = new Date().toISOString() },
+) {
+  const type = detectFileType(buffer);
+  if (!type) return null;
+  const storedName = `${randomUUID()}.${type.ext}`;
+  await mkdir(uploadsDir, { recursive: true });
+  await writeFile(join(uploadsDir, storedName), buffer, { flag: "wx" });
+  const record = {
+    id: `f-${randomUUID().slice(0, 8)}`,
+    groupId,
+    originalName: safeFileName(originalName),
+    mime: type.mime,
+    size: buffer.length,
+    storedName,
+    uploadedBy: userId,
+    createdAt: nowIso,
+  };
+  store.files.set(record.id, record);
+  return record;
+}
+
+/**
+ * Reads a stored file. The name comes from our own record, never from a request.
+ * @param {string} uploadsDir Directory for uploads.
+ * @param {{storedName: string}} record The FileRecord.
+ * @returns {Promise<Buffer>} The contents.
+ */
+export const readUpload = (uploadsDir, record) => readFile(join(uploadsDir, record.storedName));

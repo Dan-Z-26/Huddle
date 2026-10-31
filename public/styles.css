@@ -537,6 +537,367 @@ progress::-moz-progress-bar {
   margin-top: 0.75rem;
 }
 
+/* Team workspace */
+.link-button {
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--pink-deep);
+  background: none;
+  border: 0;
+  padding: 0.2rem 0;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.side nav .link-button {
+  margin: 0.5rem 0 0 0.75rem;
+}
+.attention-list {
+  display: grid;
+  gap: 0.4rem;
+}
+.unread {
+  margin-left: 0.5rem;
+  padding: 0 0.45rem;
+  border-radius: 999px;
+  background: var(--pink);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.button.small {
+  padding: 0.25rem 0.85rem;
+  font-size: 0.875rem;
+}
+.composer {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 0.9rem;
+  background: var(--bg);
+  border: 1px solid var(--control);
+  border-radius: 1.25rem;
+  box-shadow: var(--shadow);
+}
+.composer textarea {
+  border: 0;
+  padding: 0.25rem 0.4rem;
+  resize: vertical;
+  min-height: 3rem;
+  background: none;
+  font-size: 1rem;
+}
+.composer textarea:focus-visible {
+  outline: none;
+}
+.composer:has(textarea:focus-visible) {
+  outline: 3px solid var(--ai);
+  outline-offset: 2px;
+}
+.composer-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+.attach {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+.attach label {
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+.attachments a {
+  display: inline-block;
+  padding: 0.15rem 0.7rem;
+  border-radius: 0.6rem;
+  background: var(--blush);
+  color: var(--pink-deep);
+  font-size: 0.875rem;
+}
+.thinking {
+  font-style: italic;
+}
+.message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin-top: 0.2rem;
+}
+.directive {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  align-items: center;
+  margin-top: 0.5rem;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.9rem;
+  border-left: 4px solid var(--pink);
+  background: var(--blush);
+}
+.directive-status {
+  font-size: 0.875rem;
+  color: var(--pink-deep);
+  font-weight: 500;
+}
+.pinned {
+  margin-bottom: 1.25rem;
+  padding: 0.9rem 1rem;
+  border-radius: 1.25rem;
+  background: var(--blush);
+}
+.pinned-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin-bottom: 0.5rem;
+}
+.pinned-list {
+  display: grid;
+  gap: 0.5rem;
+}
+.pinned-item .directive {
+  margin-top: 0;
+  background: var(--bg);
+}
+.directive-text {
+  flex: 1 1 14rem;
+  font-weight: 500;
+}
+.pin-quote {
+  padding: 0.6rem 0.85rem;
+  border-radius: 0.9rem;
+  background: var(--blush);
+  white-space: pre-wrap;
+}
+.admin-list {
+  display: grid;
+  gap: 1rem;
+  margin: 1rem 0;
+}
+.admin-row,
+.admin-new {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+}
+.admin-name {
+  display: grid;
+  gap: 0.25rem;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.admin-new h3 {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+/* Vendors */
+.vendors-nav {
+  margin-top: 0.5rem;
+}
+.vendor-step {
+  margin-top: 1.75rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+.vendor-step h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+.vendor-step h4 {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin: 1rem 0 0.35rem;
+}
+.vendor-step > .button {
+  margin-top: 0.6rem;
+}
+.field {
+  display: grid;
+  gap: 0.3rem;
+  margin-top: 0.75rem;
+}
+.field label,
+.field-row label {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0 0.75rem;
+}
+.field-row.two {
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+}
+.quote-form .button {
+  margin-top: 1rem;
+}
+.typed {
+  margin-top: 0.75rem;
+}
+.typed summary {
+  cursor: pointer;
+  padding-block: 0.3rem;
+  color: var(--pink-deep);
+  font-weight: 500;
+}
+.field-error {
+  color: var(--risk);
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+}
+.field-error:empty {
+  display: none;
+}
+.rfq {
+  margin-top: 0.9rem;
+  padding: 1rem 1.1rem;
+  border-radius: 1rem;
+  background: var(--blush);
+}
+.rfq:focus {
+  outline: none;
+}
+.plain-list {
+  display: grid;
+  gap: 0.35rem;
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.plain-list li {
+  display: list-item;
+}
+.quote-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.quote {
+  display: grid;
+  gap: 0.4rem;
+  justify-items: start;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+}
+.quote-accepted {
+  border-color: var(--pink);
+  background: var(--blush);
+}
+.quote-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  justify-content: space-between;
+  width: 100%;
+}
+.quote-total {
+  font-weight: 600;
+  color: var(--pink-deep);
+}
+.quote-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.quote-actions a.button {
+  text-decoration: none;
+  display: inline-block;
+}
+.table-wrap {
+  overflow-x: auto;
+  margin-top: 0.75rem;
+}
+.compare-table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.compare-table th,
+.compare-table td {
+  padding: 0.5rem 0.4rem;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 400;
+  border-top: 1px solid var(--line);
+}
+.compare-table thead th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  border-top: 0;
+}
+.compare-table tbody th {
+  font-weight: 600;
+}
+.compare-table .num {
+  text-align: right;
+  white-space: nowrap;
+}
+.confirm-form {
+  display: grid;
+  gap: 0.25rem;
+}
+.warnings {
+  color: var(--risk);
+  font-size: 0.9rem;
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.warnings:empty {
+  display: none;
+}
+.musts {
+  margin: 0.9rem 0 0;
+  border: 1px solid var(--control);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.9rem 0.8rem;
+}
+.musts legend {
+  font-size: 0.9rem;
+  font-weight: 500;
+  padding: 0 0.4rem;
+}
+.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.25rem 0;
+}
+.check input {
+  accent-color: var(--pink);
+}
+input[type="file"] {
+  font: inherit;
+  max-width: 100%;
+}
+dialog:has(.confirm-form) {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
 /* Ideas */
 .ideas-get {
   margin-top: 0.85rem;

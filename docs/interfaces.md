@@ -333,7 +333,7 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 | Route file | Method and path | Body | Response |
 |---|---|---|---|
 | session | `POST /view-as` | `{ userId }` | `{ user }`, sets cookie |
-| session | `GET /me` | | `{ user, permissions, attention }` |
+| session | `GET /me` | | `{ user, permissions, attention }`; `user.categoryIds` for core members |
 | session | `GET /users` | | `{ users: [{ id, name, roleId, roleName, kind }] }`: the humans of the caller's event, or of the demo event with no cookie (public, for the switcher) |
 | events | `POST /events` | `{ eventType }` | `{ event }` |
 | events | `GET /event-types` | | `{ eventTypes: [{ eventType, label }] }` (public) |
@@ -349,24 +349,25 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 | timeline | `POST /events/:id/reschedule` | `{ date }` as text (manager) | `{ event: { id, date }, tasks }` |
 | timeline | `PATCH /tasks/:id` | `{ status }` (members of the owner group) | `{ tasks }` |
 | timeline | `POST /events/:id/digest` * | | `{ message }` |
-| groups | `POST /events/:id/groups` | `{ name, kind, memberRoleIds }` | `{ group }` |
-| groups | `PATCH /groups/:id` | `{ name?, memberRoleIds? }` | `{ group }` |
-| groups | `DELETE /groups/:id` | | 204 |
-| messages | `GET /groups/:id/messages?before=&limit=` | | `{ messages, nextBefore }` |
-| messages | `POST /groups/:id/messages` * | multipart: `text`, up to 3 `files` | `{ message }` |
-| messages | `GET /files/:id` | | file bytes, with nosniff and Content-Disposition |
-| messages | `POST /messages/:id/directive` | `{ addressedUserIds }` | `{ directive, task }` |
-| messages | `POST /directives/:id/ack` | | `{ directive, status }` |
-| vendors | `POST /events/:id/rfq` * | `{ categoryId }` | `{ checklist, rfqQuestions, message }` |
-| vendors | `POST /events/:id/quotes` * | fields, or `{ categoryId, text }`, or `{ categoryId, fileId }` | `{ quote }` with status `extracted` |
-| vendors | `POST /quotes/:id/confirm` | corrected fields | `{ quote }` |
-| vendors | `POST /quotes/:id/accept` | | `{ quote, budget, tasks, noticesPosted }` |
-| vendors | `GET /events/:id/comparison?categoryId=` | | `{ rows }`; manager and core team only |
-| stream | `GET /stream` | | SSE |
+| groups | `POST /events/:id/groups` | `{ name, memberRoleIds }` (manager) | `{ group }`; a `category` room with no budget category of its own. The manager and AI members are always in |
+| groups | `PATCH /groups/:id` | `{ name?, memberRoleIds? }` (manager) | `{ group }`; the id and slug never change. #announcements keeps everyone |
+| groups | `DELETE /groups/:id` | (manager) | 204; removes its messages, directives and files, moves its tasks to #core-team. #announcements and #core-team can't be removed |
+| messages | `GET /groups/:id/messages?before=&limit=` | | `{ messages, nextBefore, pinned }`; each message has `files` and, if pinned, `directive` with `status`; `pinned` lists the group's directives with their text |
+| messages | `POST /groups/:id/messages` * | JSON `{ text }`, or multipart `text` and up to 3 `files` | `{ message }` (201). `*` applies only when the text contains `@huddle`; the Planner's reply is posted in the same group afterwards |
+| messages | `GET /files/:id` | | file bytes: members of the file's group only, `Content-Type` from the stored type, `nosniff`, `attachment` disposition and a sandbox CSP |
+| messages | `POST /messages/:id/directive` * | `{ addressedUserIds? }` (manager; a person's message; people in the group other than the manager) | `{ directive, task }` (201); the Planner words the task, code reads its due date |
+| messages | `POST /directives/:id/ack` | | `{ directive, status }`; only people the directive names |
+| vendors | `POST /events/:id/rfq` * | `{ categoryId }` (manager, or a core member who owns it) | `{ checklist, rfqQuestions, rationale, offline, message }`; `message` is the RFQ posted in the category's group, once per category, else null |
+| vendors | `GET /events/:id/quotes?categoryId=` | | `{ quotes }`, each with `totalMinor` and `missing` |
+| vendors | `POST /events/:id/quotes` * | JSON `{ categoryId, text }` or typed `{ categoryId, vendorName, perGuestText, fixedText, taxPercent, includes }`; or multipart with the same fields plus one `file` | `{ quote, warnings, rationale, offline }`. Text and files give status `extracted`; typed details with a price give `confirmed` |
+| vendors | `POST /quotes/:id/confirm` | `{ vendorName, perGuestText?, fixedText?, taxPercent?, includes?, mustHaveIdsMet?, answers? }`, prices as text | `{ quote, warnings }` with status `confirmed`; needs a price; an accepted quote can't be edited |
+| vendors | `POST /quotes/:id/accept` * | (manager) | The same shape as `POST /events/:id/changes`: the consequences, with a `changeId` to apply through `changes/:changeId/accept`. Nothing changes until then |
+| vendors | `GET /events/:id/comparison?categoryId=` | | `{ rows }` of `{ quoteId, vendorName, totalMinor, mustHaveFit, score, missing, riskFlags, status, includes, answers }`, best first; confirmed and accepted quotes only |
+| stream | `GET /stream` | | SSE; 5 connections per person, 200 in all |
 
 `*` means rate limited, because the route can call a model. `POST /groups/:id/messages` calls a model only when the text mentions `@huddle`.
 
-Files are sent with the message, so there is no separate upload route. The client always posts `FormData`.
+Message attachments arrive with the message (Phase 6). A quote file arrives with the quote and is stored against the category's group. Uploads: PDF, PNG, JPEG or WEBP only, judged by the file's first bytes; at most 5 MB; stored under a random name outside `public/`.
 
 Ids: the demo event is `demo`; users are `<seedId>@<eventId>` (for example `user-manager@demo`) and groups are `g-<eventId>-<slug>`. `POST /events` creates the event with its people and sets the cookie to its manager; groups, budget and timeline are created by `intake/confirm`. At most 50 events are kept in memory: the oldest non-demo event is replaced at the cap, and each client can create 20 an hour.
 
@@ -375,13 +376,14 @@ Ids: the demo event is `demo`; users are `<seedId>@<eventId>` (for example `user
 One connection per client, sent as named events with a JSON payload:
 
 ```jsonc
-{ "type": "message.created|notice.created", "eventId": "", "groupId": "", "message": Message }
-{ "type": "directive.updated", "eventId": "", "groupId": "", "directive": Directive, "status": {} }
-{ "type": "budget.updated", "eventId": "", "budget": {} }
-{ "type": "timeline.updated", "eventId": "", "tasks": [] }
+{ "type": "message.created|notice.created|message.updated", "eventId": "", "groupId": "", "message": MessageView }
+{ "type": "directive.updated", "eventId": "", "groupId": "", "directive": DirectiveView }
+{ "type": "budget.updated|timeline.updated|attention.updated|groups.updated", "eventId": "" }
 ```
 
-Each event is filtered per client by group membership. `budget.updated` is filtered by `canSeeBudget`. The heartbeat is an SSE comment every 25 seconds, and clients are removed on disconnect.
+Group events go only to members of that group, decided at send time from the store. The last four types carry **no data**: they only tell the client to refetch, so budget figures always come from routes that filter by role. `budget.updated` goes to the manager and core members. The heartbeat is an SSE comment every 25 seconds, and clients are removed on disconnect. `store.publish(event)` sends an event; `createApp` points it at the hub.
+
+Each group keeps its latest 300 messages. `server/reminders.js` runs every minute: a directive unacknowledged after `DIRECTIVE_SLA_MINUTES` (default 120) gets one reminder from the Timeline agent, mentioning only the people still pending.
 
 ## Store
 

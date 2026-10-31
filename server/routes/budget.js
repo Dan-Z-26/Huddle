@@ -42,7 +42,16 @@ const pendingOf = (store, eventId) =>
 // Each affected group gets a notice worded from only the facts it may see.
 async function postNotices({ store, event, template, before, after, deltas, nowIso }) {
   const guests = { before: before.guestCount, after: after.guestCount };
-  const targets = noticeTargets({ deltas, categoryGroupMap: template.categoryGroupMap });
+  // A category whose group was removed is told to #core-team instead, so nobody is left out.
+  const merged = new Map();
+  for (const { slug, categoryIds } of noticeTargets({
+    deltas,
+    categoryGroupMap: template.categoryGroupMap,
+  })) {
+    const to = store.groups.has(`g-${event.id}-${slug}`) ? slug : "core-team";
+    merged.set(to, [...new Set([...(merged.get(to) ?? []), ...categoryIds])]);
+  }
+  const targets = [...merged].map(([slug, categoryIds]) => ({ slug, categoryIds }));
   const posted = await Promise.all(
     targets.map(async ({ slug, categoryIds }) => {
       const group = store.groups.get(`g-${event.id}-${slug}`);
@@ -73,6 +82,22 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
     }),
   );
   return posted.filter(Boolean);
+}
+
+/**
+ * Keeps a proposed change until the manager applies it. At most MAX_PENDING_PER_EVENT wait at once.
+ * @param {object} store The store.
+ * @param {{id: string}} event The event.
+ * @param {object} state The budget the change was worked out against.
+ * @param {object[]} events The change events.
+ * @returns {string} The change id.
+ */
+export function storePending(store, event, state, events) {
+  const changeId = `c-${randomUUID().slice(0, 8)}`;
+  store.pendingChanges.set(changeId, { id: changeId, eventId: event.id, events, baseState: state });
+  const own = pendingOf(store, event.id);
+  if (own.length > MAX_PENDING_PER_EVENT) store.pendingChanges.delete(own[0].id);
+  return changeId;
 }
 
 /** Budget and consequences. Reads top to bottom: user, validate, permission, work, store. */
@@ -107,18 +132,7 @@ export function budgetRoutes({ ai }) {
         result.changeEvents.length > 0 &&
         result.consequences?.rejected.length === 0 &&
         !result.clarifyingQuestion;
-      let changeId = null;
-      if (applies) {
-        changeId = `c-${randomUUID().slice(0, 8)}`;
-        store.pendingChanges.set(changeId, {
-          id: changeId,
-          eventId: event.id,
-          events: result.changeEvents,
-          baseState: state,
-        });
-        const own = pendingOf(store, event.id);
-        if (own.length > MAX_PENDING_PER_EVENT) store.pendingChanges.delete(own[0].id);
-      }
+      const changeId = applies ? storePending(store, event, state, result.changeEvents) : null;
       const { consequences, consequenceText, estimates, explanation, clarifyingQuestion } = result;
       res.json({
         changeId,
@@ -151,13 +165,20 @@ export function budgetRoutes({ ai }) {
         throw HttpError(400, "BAD_REQUEST", "The budget has changed since. Please ask again.");
 
       // Re-applied here in code, so what is stored is never just what the model proposed.
-      const first = computeConsequences(before, pending.events, event);
+      // Quotes live beside the budget; a quote_accepted event needs them to be applied.
+      const quotes = [...store.quotes.values()].filter(({ eventId }) => eventId === event.id);
+      const working = { ...before, quotes };
+      const first = computeConsequences(working, pending.events, event);
       const { events: extra } = resolutionEvents(first, req.valid.body);
       const allEvents = [...pending.events, ...extra];
-      const { after, deltas, rejected } = computeConsequences(before, allEvents, event);
+      const { after: applied, deltas, rejected } = computeConsequences(working, allEvents, event);
       if (rejected.length > 0)
         throw HttpError(400, "BAD_REQUEST", "That change can no longer be applied.");
       const nowIso = new Date().toISOString();
+      // Accepting a quote changes the status of quotes; they are kept beside the budget, not in it.
+      for (const quote of applied.quotes ?? [])
+        store.quotes.set(quote.id, { ...store.quotes.get(quote.id), status: quote.status });
+      const after = { ...applied, quotes: [] };
       store.budgets.set(event.id, after);
       // Any other proposal was worked out against the old budget, so it is stale now.
       for (const { id } of pendingOf(store, event.id)) store.pendingChanges.delete(id);
@@ -177,6 +198,8 @@ export function budgetRoutes({ ai }) {
         deltas,
         nowIso,
       });
+      store.publish({ type: "budget.updated", eventId: event.id });
+      store.publish({ type: "timeline.updated", eventId: event.id });
       res.json({
         budget: budgetFor(event, after, store.roleOf(req.user)),
         tasks: timelineView(store, event.id),

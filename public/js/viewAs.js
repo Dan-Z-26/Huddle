@@ -15,7 +15,8 @@ export async function setUpViewAs(selected, onChange) {
       }),
     );
   }
-  select.onchange = async () => {
+  // The view changes only on the button, not as the list is being browsed with the arrow keys.
+  document.getElementById("view-switch").onclick = async () => {
     const name = select.selectedOptions[0].textContent;
     try {
       await api.viewAs(select.value);

@@ -167,9 +167,38 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
       explanation: "",
     };
   }
+  const described = await describeChange(
+    {
+      profile,
+      state,
+      events,
+      template,
+      text,
+      offline,
+      question: questions[0]?.reason,
+      explanation: data.explanation,
+    },
+    { generate },
+  );
+  return { ...result, ...described };
+}
+
+/**
+ * States what a set of change events does: consequences from code, written out neutrally, plus
+ * the model's reading of what it means for this event. Used for typed requests and for accepting
+ * a vendor quote alike. Nothing is applied.
+ * @param {{profile: object, state: object, events: object[], template: object, text: string,
+ *   offline?: boolean, question?: string, explanation?: string}} input The budget and the events;
+ *   `question` is something still unclear about the request.
+ * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
+ * @returns {Promise<{insight: object, offline: boolean, clarifyingQuestion: string | null,
+ *   consequences: object, consequenceText: string, explanation: string}>} The change described.
+ */
+export async function describeChange(input, { generate = realGenerate } = {}) {
+  const { profile, state, events, template, text, offline = false } = input;
   const { after, ...rest } = computeConsequences(state, events, profile);
   const lines = consequenceText(rest, { profile, template, currency: state.currency });
-  const problem = rest.rejected[0]?.reason ?? questions[0]?.reason;
+  const problem = rest.rejected[0]?.reason ?? input.question;
   const allowedText = `${lines} ${text} ${state.guestCount} ${after.guestCount}`;
   const insight = await explainChange(
     {
@@ -186,7 +215,6 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
     { generate },
   );
   return {
-    ...result,
     insight,
     offline: insight.offline,
     clarifyingQuestion: problem ? `${problem}. Could you check that?` : null,
@@ -195,6 +223,6 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
       budgetAfter: { ...computeBudget(after), guestCount: after.guestCount },
     },
     consequenceText: lines,
-    explanation: groundedOr(data.explanation, allowedText),
+    explanation: groundedOr(input.explanation, allowedText),
   };
 }
