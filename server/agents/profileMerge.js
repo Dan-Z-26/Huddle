@@ -3,6 +3,7 @@ import { parseEventDate } from "../core/dateText.js";
 import { parseGuestCount } from "../core/guestCount.js";
 import { MAX_GUESTS } from "../core/money.js";
 import { normalisePriorities } from "../core/priorities.js";
+import { isGrounded } from "./grounded.js";
 
 const YES =
   /^\s*(?:y|yes|yeah|yep|ok|okay|sure|confirm(?:ed)?|go ahead|sounds good|that works|fine)\b/i;
@@ -77,15 +78,16 @@ export function resolveGuests(profile, answer) {
 
 /**
  * Validates what the Discovery model extracted and merges the good parts into a copy of the
- * profile. Dates, money and guest counts are parsed here from the user's own words, so a model
- * never supplies a committed number.
+ * profile. Dates, money and guest counts are parsed here, and only when the model's copy is made of
+ * figures found in the user's own answer, so a model never supplies a committed number.
  * @param {object} profile EventProfile.
  * @param {object} extracted Output of the extraction schema.
- * @param {{template: object, nowIso: string}} context The event template and the current time.
+ * @param {{template: object, nowIso: string, answer: string}} context The event template, the
+ *   current time and the user's reply the extraction came from.
  * @returns {{profile: object, accepted: string[], rejected: Array<{field: string, reason: string}>}}
  *   The updated copy, the fields that changed, and what was refused and why.
  */
-export function applyExtracted(profile, extracted, { template, nowIso }) {
+export function applyExtracted(profile, extracted, { template, nowIso, answer }) {
   const next = structuredClone(profile);
   const accepted = new Set();
   const rejected = [];
@@ -99,22 +101,23 @@ export function applyExtracted(profile, extracted, { template, nowIso }) {
     const text = clean(extracted[field], max);
     if (text) take(field, text);
   }
+  const fromAnswer = (text) => isGrounded(text, answer);
   if (extracted.date) {
-    const iso = parseEventDate(extracted.date);
+    const iso = fromAnswer(extracted.date) ? parseEventDate(extracted.date) : null;
     if (!iso) rejected.push({ field: "date", reason: "I need the full date, including the year" });
     else if (iso.slice(0, 10) < nowIso.slice(0, 10))
       rejected.push({ field: "date", reason: "that date has already passed" });
     else take("date", iso);
   }
   if (extracted.budgetText) {
-    const amount = parseAmount(extracted.budgetText);
+    const amount = fromAnswer(extracted.budgetText) ? parseAmount(extracted.budgetText) : null;
     if (!amount) rejected.push({ field: "budget", reason: "I couldn't read that budget" });
     else {
       next.budget = { totalMinor: amount.minor, currency: amount.currency ?? next.budget.currency };
       accepted.add("budget");
     }
   }
-  if (extracted.guestText && next.guests.confirmed === null) {
+  if (extracted.guestText && fromAnswer(extracted.guestText) && next.guests.confirmed === null) {
     const { profile: withGuests, understood } = resolveGuests(next, extracted.guestText);
     if (understood) take("guests", withGuests.guests);
   }

@@ -1,5 +1,8 @@
 import { divFloor } from "./money.js";
 
+// Only the start of a reply is read: counts are short, and the patterns stay fast on huge input.
+const MAX_READ = 500;
+
 const NUMBER = String.raw`\d[\d,]*\d|\d`;
 const BARE_COUNT = new RegExp(
   String.raw`^\s*(?:exactly\s+)?(?:${NUMBER})(?:\s*(?:guests?|people|persons?|pax|attendees))?\s*\.?\s*$`,
@@ -29,8 +32,9 @@ function readCounts(text) {
  * @returns {{min: number, max: number, suggested: number, needsConfirmation: boolean} | null}
  *   Null when the text holds no positive count.
  */
-export function parseGuestCount(text) {
-  if (typeof text !== "string") return null;
+export function parseGuestCount(input) {
+  if (typeof input !== "string") return null;
+  const text = input.slice(0, MAX_READ);
   const counts = readCounts(text);
   if (!counts || !counts.every(isValidCount)) return null;
   const min = Math.min(...counts);

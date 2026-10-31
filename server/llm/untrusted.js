@@ -18,7 +18,12 @@ export const UNTRUSTED_RULE =
 export function wrapUntrusted(label, text, maxChars = MAX_CHARS) {
   if (!/^[A-Za-z0-9 _-]{1,40}$/.test(label)) throw new RangeError("invalid untrusted label");
   const raw = String(text ?? "");
-  const kept = raw.slice(0, maxChars).replaceAll("<<<", "‹‹‹").replaceAll(">>>", "›››");
+  // NFKC folds full-width look-alikes of the delimiters into plain ones before they are neutralised.
+  const kept = raw
+    .slice(0, maxChars)
+    .normalize("NFKC")
+    .replaceAll("<<<", "‹‹‹")
+    .replaceAll(">>>", "›››");
   const cut = raw.length > maxChars ? "\n[text cut: too long]" : "";
   return `<<<UNTRUSTED ${label}>>>\n${kept}${cut}\n<<<END UNTRUSTED ${label}>>>`;
 }

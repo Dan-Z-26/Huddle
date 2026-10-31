@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseEventDate } from "../../server/core/dateText.js";
+import { parseDueDate, parseEventDate } from "../../server/core/dateText.js";
 
 describe("parseEventDate", () => {
   const cases = [
@@ -37,5 +37,34 @@ describe("parseEventDate", () => {
 
   it("copes with non-strings", () => {
     for (const value of [undefined, null, 20270312]) assert.equal(parseEventDate(value), null);
+  });
+});
+
+describe("parseDueDate", () => {
+  const FRIDAY = "2027-03-12T15:30:00.000Z"; // 12 March 2027 is a Friday
+  const cases = [
+    ["send the AV specs by Friday", "2027-03-12T00:00:00.000Z"],
+    ["by Monday please", "2027-03-15T00:00:00.000Z"],
+    ["on Thursday", "2027-03-18T00:00:00.000Z"],
+    ["next Friday", "2027-03-19T00:00:00.000Z"],
+    ["next Monday", "2027-03-15T00:00:00.000Z"],
+    ["today", "2027-03-12T00:00:00.000Z"],
+    ["tomorrow morning", "2027-03-13T00:00:00.000Z"],
+    ["in 3 days", "2027-03-15T00:00:00.000Z"],
+    ["in 2 weeks", "2027-03-26T00:00:00.000Z"],
+    ["finish by 20 March 2027", "2027-03-20T00:00:00.000Z"],
+  ];
+  for (const [text, expected] of cases) {
+    it(`reads ${JSON.stringify(text)}`, () => assert.equal(parseDueDate(text, FRIDAY), expected));
+  }
+
+  it("crosses a month end", () => {
+    assert.equal(parseDueDate("in 3 days", "2027-03-30T10:00:00.000Z"), "2027-04-02T00:00:00.000Z");
+  });
+
+  it("returns null when no date is named, and copes with non-strings", () => {
+    for (const text of ["as soon as you can", "", "fridays are busy", null, 5]) {
+      assert.equal(parseDueDate(text, FRIDAY), null, String(text));
+    }
   });
 });

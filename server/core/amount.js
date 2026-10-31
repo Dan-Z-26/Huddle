@@ -1,5 +1,8 @@
 import { MAX_MINOR } from "./money.js";
 
+// Only the start of a reply is read: amounts are short, and the patterns stay fast on huge input.
+const MAX_READ = 500;
+
 const CURRENCIES = new Map([
   ["₹", "INR"],
   ["rs", "INR"],
@@ -53,8 +56,9 @@ function toMinor(digits, unit) {
  * @returns {{minor: number, currency: string | null} | null} Integer minor units (paise or cents)
  *   and the currency if the text names one; null when there is no usable amount.
  */
-export function parseAmount(text) {
-  if (typeof text !== "string") return null;
+export function parseAmount(input) {
+  if (typeof input !== "string") return null;
+  const text = input.slice(0, MAX_READ);
   const candidates = [...text.matchAll(CANDIDATE)];
   const marked = candidates.find(([, symbol, , unit]) => symbol || unit);
   const plain = candidates.find(([match, , digits, ,]) => {

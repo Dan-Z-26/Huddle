@@ -1,27 +1,48 @@
 import { computeBudget } from "../core/budgetEngine.js";
 import { computeConsequences } from "../core/consequences.js";
 import { canSeeBudget } from "../core/permissions.js";
-import { generate as realGenerate, UNTRUSTED_RULE, wrapUntrusted } from "../llm/index.js";
-import { demoBudget } from "./budgetDemo.js";
+import {
+  agentPrompt,
+  generate as realGenerate,
+  generateOrDemo,
+  wrapUntrusted,
+} from "../llm/index.js";
+import { CLARIFY, demoBudget } from "./budgetDemo.js";
 import { toChangeEvents } from "./changeProposals.js";
 import { consequenceText } from "./consequenceText.js";
-import { isGrounded } from "./grounded.js";
+import { groundedOr } from "./grounded.js";
 import { budgetOutput } from "./schemas.js";
 import { buildTools } from "./tools.js";
 
 const BUDGET_TOOLS = new Set(["compute_consequences", "apply_change_events"]);
 const MAX_TEXT = 1000;
 
-const SYSTEM = `You are the Budget agent of Huddle. You turn an organiser's plain-language change into proposals, and the tools calculate. A good event fits the organiser; it is not the most expensive one.
-Work privately in these steps and never show them: understand the request -> check the event profile, priorities and must-haves -> propose the change(s) -> call compute_consequences to see their effect -> use only tool results -> write the output.
-Rules:
-- Never do arithmetic and never invent figures. Copy money exactly as the user wrote it into amountText or priceText (for example "18 lakh").
-- Only when the user does not know a price, give an estimate range in whole rupees (lowRupees, highRupees). It is shown as an estimate and never counts as committed.
-- Use only the category ids, item ids and labels you are given. Set confidence honestly; below 0.7 the user is asked instead.
-- If the request is unclear, return no proposals and put one short question in clarifyingQuestion.
-- explanation: one or two neutral sentences using only values the tools returned. Never recommend an option, pressure or upsell; the user decides.
-Return ONLY JSON matching the schema, with a one-sentence rationale for the user.
-${UNTRUSTED_RULE}`;
+const SYSTEM = agentPrompt({
+  role:
+    "You are the Budget agent of Huddle. You turn an organiser's plain-language change into " +
+    "proposals, and the tools calculate. A good event fits the organiser; it is not the most " +
+    "expensive one.",
+  steps: [
+    "understand the request",
+    "check the event profile, priorities and must-haves",
+    "propose the change(s)",
+    "call compute_consequences to see their effect",
+    "use only tool results",
+    "write the output",
+  ],
+  rules: [
+    "Never do arithmetic and never invent figures. Copy money exactly as the user wrote it into " +
+      'amountText or priceText (for example "18 lakh").',
+    "Only when the user does not know a price, give an estimate range in whole rupees " +
+      "(lowRupees, highRupees). It is shown as an estimate and never counts as committed.",
+    "Use only the category ids, item ids and labels you are given. Set confidence honestly; " +
+      "below 0.7 the user is asked instead.",
+    "If the request is unclear, return no proposals and put one short question in " +
+      "clarifyingQuestion.",
+    "explanation: one or two neutral sentences using only values the tools returned. Never " +
+      "recommend an option, pressure or upsell; the user decides.",
+  ],
+});
 
 function stateSummary(state, profile) {
   const categories = state.categories.map(({ id, name, locked, drivers }) => ({
@@ -62,20 +83,15 @@ async function askModel(input, generate, nowIso) {
     wrapUntrusted("budget state", stateSummary(state, profile)),
     wrapUntrusted("user request", text),
   ].join("\n");
-  try {
-    const { data } = await generate({
-      agent: "budget",
-      system: SYSTEM,
-      messages: [{ role: "user", content }],
-      schema: budgetOutput,
-      tools,
-      demo,
-    });
-    return data;
-  } catch (err) {
-    if (err.name === "LlmError") return demo();
-    throw err;
-  }
+  const { data } = await generateOrDemo(generate, {
+    agent: "budget",
+    system: SYSTEM,
+    messages: [{ role: "user", content }],
+    schema: budgetOutput,
+    tools,
+    demo,
+  });
+  return data;
 }
 
 const refusal = {
@@ -112,11 +128,11 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
     allowed: true,
     changeEvents: events,
     estimates: estimatesOf(events),
-    rationale: data.rationale,
+    rationale: groundedOr(data.rationale, ""),
   };
   if (events.length === 0) {
     const asked =
-      data.clarifyingQuestion ??
+      groundedOr(data.clarifyingQuestion, `${text} ${CLARIFY}`) ||
       (questions[0] && `${questions[0].reason}. Could you say it another way?`);
     return {
       ...result,
@@ -135,6 +151,6 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
     clarifyingQuestion: problem ? `${problem}. Could you check that?` : null,
     consequences: { ...rest, budgetAfter: computeBudget(after) },
     consequenceText: lines,
-    explanation: isGrounded(data.explanation, allowedText) ? data.explanation : "",
+    explanation: groundedOr(data.explanation, allowedText),
   };
 }

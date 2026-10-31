@@ -14,11 +14,14 @@ const shortMessage = (err) => String(err?.message ?? "tool failed").slice(0, 200
 export function createToolRunner(tools, max = MAX_TOOL_CALLS) {
   const byName = new Map(tools.map((tool) => [tool.name, tool]));
   const calls = [];
+  let attempts = 0;
 
   async function run({ name, args = {} }) {
+    // Every attempt counts, including unknown tool names, so a looping model cannot run forever.
+    if (attempts >= max) return { error: "tool call limit reached" };
+    attempts += 1;
     const tool = byName.get(name);
     if (!tool) return { error: "unknown tool" };
-    if (calls.length >= max) return { error: "tool call limit reached" };
     const parsed = tool.parameters.safeParse(args);
     let result;
     if (!parsed.success) result = { error: "invalid arguments" };
@@ -33,5 +36,5 @@ export function createToolRunner(tools, max = MAX_TOOL_CALLS) {
     return result;
   }
 
-  return { calls, remaining: () => max - calls.length, run };
+  return { calls, remaining: () => max - attempts, run };
 }

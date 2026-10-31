@@ -272,7 +272,38 @@ Vegetarian and Jain menus available`;
       rationale: "ok",
     });
     await extractQuote({ ...input, text: "a".repeat(50000) }, { generate, cache: new Map() });
-    assert.ok(calls[0].messages[0].content.length < 5000);
+    assert.ok(calls[0].messages[0].content.length < 8500);
+  });
+
+  it("does not cache an answer that came from the offline fallback", async () => {
+    const cache = new Map();
+    const failing = async () => {
+      throw Object.assign(new Error("x"), { name: "LlmError" });
+    };
+    await extractQuote({ ...input, text: PASTED }, { generate: failing, cache });
+    assert.equal(cache.size, 0);
+    const { generate, calls } = counting({
+      extracted: { vendorName: "Real Caterers", fixedText: "₹1" },
+      rationale: "ok",
+    });
+    const retry = await extractQuote({ ...input, text: PASTED }, { generate, cache });
+    assert.equal(retry.extractedQuote.vendorName, "Real Caterers");
+    assert.equal(calls.length, 1);
+    assert.equal(cache.size, 1);
+  });
+
+  it("keeps cached quote readings separate per event", async () => {
+    const cache = new Map();
+    const { generate, calls } = counting({
+      extracted: { vendorName: "V", fixedText: "₹1" },
+      rationale: "ok",
+    });
+    await extractQuote({ ...input, text: PASTED }, { generate, cache });
+    await extractQuote(
+      { ...input, profile: { ...input.profile, id: "other-event" }, text: PASTED },
+      { generate, cache },
+    );
+    assert.equal(calls.length, 2);
   });
 
   it("rejects an unknown category", async () => {

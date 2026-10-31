@@ -54,10 +54,14 @@ describe("createToolRunner", () => {
     assert.equal(called, false);
   });
 
-  it("returns an error result for unknown tools and does not count them", async () => {
+  it("returns an error result for unknown tools and counts them toward the cap", async () => {
     const runner = createToolRunner([add]);
     assert.deepEqual(await runner.run({ name: "nope" }), { error: "unknown tool" });
-    assert.equal(runner.remaining(), 4);
+    assert.equal(runner.remaining(), 3);
+    assert.equal(runner.calls.length, 0);
+    for (let i = 0; i < 3; i += 1) await runner.run({ name: "nope" });
+    assert.equal(runner.remaining(), 0);
+    assert.deepEqual(await runner.run({ name: "nope" }), { error: "tool call limit reached" });
   });
 
   it("turns a throwing handler into a short error result", async () => {

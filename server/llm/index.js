@@ -4,6 +4,7 @@ import { runDemo } from "./demo.js";
 import { createToolRunner } from "./toolRunner.js";
 
 export { wrapUntrusted, UNTRUSTED_RULE } from "./untrusted.js";
+export { agentPrompt } from "./prompt.js";
 
 /*
  * Two stages per request, because a model cannot be relied on to call tools and also answer in a
@@ -153,5 +154,23 @@ export async function generate(request) {
     }
     if (err.name === "LlmError") throw err;
     throw LlmError("model call failed", { status: err?.status });
+  }
+}
+
+/**
+ * Calls `generate`, and when the model fails (an LlmError) answers from the agent's own offline
+ * heuristic instead, so the app keeps working. Other errors still throw.
+ * @param {Function} generate The model call, `generate` from this module or a test double.
+ * @param {object} request The same request `generate` takes; it must include `schema` and `demo`.
+ * @returns {Promise<{data: *, fellBack: boolean}>} The validated answer, and whether it came from the
+ *   offline heuristic after a model failure (callers should not cache such an answer).
+ */
+export async function generateOrDemo(generate, request) {
+  try {
+    const { data } = await generate(request);
+    return { data, fellBack: false };
+  } catch (err) {
+    if (err.name !== "LlmError") throw err;
+    return { data: request.schema.parse(await request.demo()), fellBack: true };
   }
 }

@@ -1,10 +1,15 @@
-import { z } from "zod";
-import { generate as realGenerate, UNTRUSTED_RULE, wrapUntrusted } from "../llm/index.js";
+import {
+  agentPrompt,
+  generate as realGenerate,
+  generateOrDemo,
+  wrapUntrusted,
+} from "../llm/index.js";
 import { missingProfileFields } from "../core/profile.js";
 import { demoExtract } from "./discoveryDemo.js";
+import { groundedOr } from "./grounded.js";
 import { applyExtracted, resolveGuests } from "./profileMerge.js";
 import { guestConfirmation, questionFor } from "./questions.js";
-import { discoveryOutput } from "./schemas.js";
+import { discoveryOutput, extraction } from "./schemas.js";
 import { buildTools } from "./tools.js";
 
 const SKIPPABLE = new Set(["mustHaves", "absoluteMustHave", "constraints", "vendorNeeds"]);
@@ -12,16 +17,30 @@ const NONE = /^\s*(?:none|no|nothing|nope|nil|n\/a|skip|not really)\b/i;
 const MAX_ANSWER = 2000;
 const INTAKE_TOOLS = new Set(["parse_guest_count", "missing_profile_fields"]);
 
-const SYSTEM = `You are the Discovery agent of Huddle, a warm, practical event planner who listens. You help an organiser describe their event, one question at a time. A good event fits the organiser, the planner and the guests; it is not the most expensive one.
-Work privately in these steps and never show them: understand the answer -> check the profile and constraints so far -> check the priorities and must-haves -> use a tool for any number you need -> use only tool results -> write the output.
-Rules:
-- Extract only what the user actually said. Never invent values and never do arithmetic.
-- Copy dates and money exactly as the user wrote them (date, budgetText, guestText); code parses them.
-- Priorities: only the category ids you are given, in exactly the order the user ranked them. Never assume a ranking.
-- If the user says none or skip for an optional field, set skipped to true.
-- Set nextField to the first field in the missing list that is still unanswered after this answer, and write nextQuestion as one short, friendly question about that field only.
-Return ONLY JSON matching the schema, with a one-sentence rationale for the user.
-${UNTRUSTED_RULE}`;
+const SYSTEM = agentPrompt({
+  role:
+    "You are the Discovery agent of Huddle, a warm, practical event planner who listens. You " +
+    "help an organiser describe their event, one question at a time. A good event fits the " +
+    "organiser, the planner and the guests; it is not the most expensive one.",
+  steps: [
+    "understand the answer",
+    "check the profile and constraints so far",
+    "check the priorities and must-haves",
+    "use a tool for any number you need",
+    "use only tool results",
+    "write the output",
+  ],
+  rules: [
+    "Extract only what the user actually said. Never invent values and never do arithmetic.",
+    "Copy dates and money exactly as the user wrote them (date, budgetText, guestText); code " +
+      "parses them.",
+    "Priorities: only the category ids you are given, in exactly the order the user ranked " +
+      "them. Never assume a ranking.",
+    "If the user says none or skip for an optional field, set skipped to true.",
+    "Set nextField to the first field in the missing list that is still unanswered after this " +
+      "answer, and write nextQuestion as one short, friendly question about that field only.",
+  ],
+});
 
 function summarise(profile) {
   const { guests, budget, mustHaves, constraints, vendorNeeds, priorities } = profile;
@@ -57,36 +76,31 @@ function buildMessage({ profile, template, field, answer, missing }) {
 
 async function extractWithModel(input, generate, nowIso) {
   const { profile, template } = input;
-  const demoOutput = () => ({
-    extracted: demoExtract(input),
-    rationale: "I read your answer with simple rules.",
-  });
+  const demoOutput = () => {
+    // A long reply can overflow a field's length cap; read nothing from it rather than fail.
+    const read = extraction.safeParse(demoExtract(input));
+    return {
+      extracted: read.success ? read.data : {},
+      rationale: "I read your answer with simple rules.",
+    };
+  };
   const tools = buildTools({
     actor: { kind: "manager", eventId: profile.id },
     profile,
     template,
     nowIso,
   }).filter(({ name }) => INTAKE_TOOLS.has(name));
-  try {
-    const { data } = await generate({
-      agent: "discovery",
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: buildMessage({ ...input, missing: missingProfileFields(profile) }),
-        },
-      ],
-      schema: discoveryOutput,
-      tools,
-      demo: async () => discoveryOutput.parse(demoOutput()),
-    });
-    return data;
-  } catch (err) {
-    if (err.name === "LlmError" || err instanceof z.ZodError)
-      return discoveryOutput.parse(demoOutput());
-    throw err;
-  }
+  const { data } = await generateOrDemo(generate, {
+    agent: "discovery",
+    system: SYSTEM,
+    messages: [
+      { role: "user", content: buildMessage({ ...input, missing: missingProfileFields(profile) }) },
+    ],
+    schema: discoveryOutput,
+    tools,
+    demo: demoOutput,
+  });
+  return data;
 }
 
 // A single must-have is the absolute one; no must-haves means there is nothing to rank.
@@ -106,8 +120,8 @@ function chooseQuestion({ working, template, nextField, model, rejected, progres
     const waiting = working.guests.suggested > 0 && working.guests.confirmed === null;
     return waiting ? guestConfirmation(working.guests) : base;
   }
-  const usable = model?.nextField === nextField && model.nextQuestion?.trim();
-  const question = usable ? model.nextQuestion.trim() : base;
+  const usable = model?.nextField === nextField;
+  const question = (usable && groundedOr(model.nextQuestion, "")) || base;
   if (rejected.length) return `${rejected[0].reason}. ${base}`;
   return progressed ? question : `I didn't quite catch that. ${base}`;
 }
@@ -159,8 +173,8 @@ export async function nextStep(
         profile: working,
         accepted,
         rejected,
-      } = applyExtracted(working, model.extracted, { template, nowIso }));
-      rationale = model.rationale;
+      } = applyExtracted(working, model.extracted, { template, nowIso, answer: text }));
+      rationale = groundedOr(model.rationale, "", rationale);
     }
   }
 

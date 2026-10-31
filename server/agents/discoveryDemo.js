@@ -1,5 +1,8 @@
 import { parseEventDate } from "../core/dateText.js";
 
+// Long enough for any profile field, short enough to keep the patterns fast.
+const MAX_ANSWER = 500;
+
 const plain = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const CONSTRAINT_HINTS = [
   ["dietary", /veg|vegan|jain|halal|kosher|allerg|gluten|nut|diet/],
@@ -81,7 +84,7 @@ function volunteered(field, answer) {
  * @returns {object} An object shaped like the extraction schema.
  */
 export function demoExtract({ field, answer, profile, template }) {
-  const text = answer.trim();
+  const text = answer.trim().slice(0, MAX_ANSWER);
   const byField = {
     date: { date: text },
     budget: { budgetText: text },

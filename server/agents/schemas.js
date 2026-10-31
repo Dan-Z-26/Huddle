@@ -125,3 +125,41 @@ export const quoteExtraction = z.object({
   }),
   rationale: short(300),
 });
+
+const wording = (field, max) => z.object({ [field]: short(max), rationale: short(300) });
+
+export const taskWordsOutput = z.object({
+  tasks: z.array(z.object({ id: short(80), title: short(120) })).max(30),
+  rationale: short(300),
+});
+export const digestOutput = wording("digestText", 400);
+export const reminderOutput = wording("reminderText", 400);
+export const noticeOutput = wording("wording", 400);
+export const directiveTaskOutput = z.object({
+  title: short(120),
+  ownerGroupSlug: short(60),
+  rationale: short(300),
+});
+
+export const ideasOutput = z.object({
+  ideas: z
+    .array(
+      z.object({
+        title: short(100),
+        whyItFits: short(300),
+        categoryId: short(60),
+        level: z.enum(["light", "moderate", "stretch"]),
+      }),
+    )
+    .max(6),
+  rationale: short(300),
+});
+
+export const INTENTS = ["budget_change", "vendor_help", "timeline", "ideas", "question"];
+export const plannerOutput = z.object({
+  intent: z.enum(INTENTS),
+  categoryId: short(60).nullable().optional(),
+  suggestDirective: z.boolean(),
+  reply: short(600).optional(),
+  rationale: short(300),
+});

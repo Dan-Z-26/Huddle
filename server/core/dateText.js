@@ -53,3 +53,34 @@ export function parseEventDate(text) {
     date.getUTCDate() === parts.day;
   return sameDay ? date.toISOString() : null;
 }
+
+const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+const MS_PER_DAY = 86400000;
+const WEEKDAY_PHRASE = new RegExp(String.raw`\b(next\s+)?(${WEEKDAYS.join("|")})\b`);
+const RELATIVE = /\bin\s+(\d{1,3})\s+(day|week)s?\b/;
+
+/**
+ * Finds the due date in a sentence such as "send the AV specs by Friday". Understands full dates,
+ * today, tomorrow, "in 3 days", "in 2 weeks" and weekday names (the next one, today included;
+ * "next Friday" is never today).
+ * @param {string} text The user's words.
+ * @param {string} nowIso The current time.
+ * @returns {string | null} ISO date at 00:00 UTC, or null when the text names no date.
+ */
+export function parseDueDate(text, nowIso) {
+  if (typeof text !== "string") return null;
+  const explicit = parseEventDate(text);
+  if (explicit) return explicit;
+  const now = new Date(nowIso);
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const lower = text.toLowerCase();
+  const toIso = (days) => new Date(today + days * MS_PER_DAY).toISOString();
+  if (/\btoday\b/.test(lower)) return toIso(0);
+  if (/\btomorrow\b/.test(lower)) return toIso(1);
+  const relative = lower.match(RELATIVE);
+  if (relative) return toIso(Number(relative[1]) * (relative[2] === "week" ? 7 : 1));
+  const weekday = lower.match(WEEKDAY_PHRASE);
+  if (!weekday) return null;
+  const ahead = (WEEKDAYS.indexOf(weekday[2]) - now.getUTCDay() + 7) % 7;
+  return toIso(weekday[1] ? ahead || 7 : ahead);
+}

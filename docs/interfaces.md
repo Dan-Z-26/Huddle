@@ -288,9 +288,12 @@ Every result includes a user-facing `rationale`. `actor` is the asking user's `r
 **Money, dates and counts are text in model output.** The model copies what the user wrote (`amountText: "18 lakh"`, `date: "12 March 2027"`); code parses it (`core/amount.js`, `core/dateText.js`, `core/guestCount.js`). The only numbers a model produces are estimate ranges in whole rupees, which code converts, labels `estimate` and keeps out of committed totals.
 
 ```js
-planner.handleMention({ profile, state, group, actor, text, files })
-// { reply, intent, delegateTo, suggestDirective, rationale }
-planner.taskFromDirective({ profile, directiveText }) // { title, ownerGroupSlug, dueDate, rationale }
+planner.handleMention({ profile, state, template, actor, text, files, tasks, quotes, directives, members, nowIso })
+// { reply, intent, delegateTo, suggestDirective, rationale, result? }. intent: budget_change | vendor_help |
+// timeline | ideas | question. Code dispatches to the right agent; result is that agent's raw output
+// (for example the change events a route stores until the manager accepts them).
+planner.taskFromDirective({ directiveText, template, nowIso }) // { title, ownerGroupSlug, dueDate, rationale }
+// dueDate is read from the directive in code (weekday, date, "in 3 days"), else two days out.
 
 discovery.nextStep({ profile, template, answer, nowIso })
 // { nextQuestion, field, extracted, rejected, complete, rationale, profile }   (omit answer for the first question)
@@ -309,11 +312,13 @@ vendor.extractQuote({ profile, categoryId, template, text, file })   // file: { 
 // { extractedQuote, warnings, rationale }. extractedQuote has status "extracted" (a person confirms
 // it) and no id/eventId (the route assigns them). Prices and tax are parsed in code. Quote text and
 // file contents are untrusted data. Cached by file id, or by text content.
-timeline.wordTasks({ profile, tasks }) // { tasks, rationale }
-timeline.digest({ profile, tasks, directives }) // { digestText, rationale }
-timeline.reminder({ directive, pendingNames }) // { reminderText, rationale }
-notices.word({ change, groupName }) // { wording, rationale }
-ideas.generate({ profile, state, files }) // { ideas: [{ title, whyItFits, categoryId, costShare }], rationale }
+timeline.wordTasks({ profile, tasks }) // { tasks, rationale }; only titles change
+timeline.digest({ profile, tasks, directives, members, nowIso }) // { digestText, rationale }; facts from code
+timeline.reminder({ directiveText, pendingNames }) // { reminderText, rationale }; every pending person is @-mentioned by code
+notices.noticeTargets({ deltas, categoryGroupMap }) // [{ slug, categoryIds }]; code only
+notices.noticeFacts({ guests, deltas, categoryIds, groupSlug, template, currency }) // string[]; never the total budget; amounts only if every core member of the group owns the categories
+notices.word({ facts, groupName }) // { wording, rationale }; falls back to the plain facts
+ideas.generateIdeas({ profile, state, template, files }) // { ideas: [{ title, whyItFits, categoryId, level, costShare }], rationale }; manager only
 ```
 
 Tools registered in `server/agents/tools.js` (`buildTools(context)`), filtered by the asker's permissions: `parse_guest_count`, `missing_profile_fields`, `plan_timeline`, `flag_at_risk`, `groups_for_category`, `ack_status`, `overdue_acks` for everyone; `allocate_budget`, `apply_change_events`, `compute_consequences` only when `canSeeBudget(actor, "total")`; `score_quotes`, `normalise_quote` only when `canView(actor, { type: "quotes" })`. Budget tools take `proposals` (the `changeProposal` schema), which `agents/changeProposals.js` converts to core change events, turning anything unsure or unreadable into a question.

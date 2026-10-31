@@ -1,6 +1,6 @@
 import { categoriesMentioned } from "./discoveryDemo.js";
 
-const CLARIFY =
+export const CLARIFY =
   "I couldn't tell what to change. Try something like 'add 50 guests', 'raise the budget to 18 lakh' or 'swap the DJ for a live band in music'.";
 const HIGH_CONFIDENCE = 0.9;
 

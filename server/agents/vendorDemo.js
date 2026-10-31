@@ -1,4 +1,7 @@
 // Offline stand-ins for the Vendor model. A file gets a fixed sample; pasted text is read with patterns.
+
+// Quotes are read from their first 8000 characters, as in the vendor agent.
+const MAX_READ = 8000;
 const SAMPLE = {
   vendorName: "Sample Caterers (demo)",
   perGuestText: "₹1,800 per guest",
@@ -29,7 +32,8 @@ const lineWith = (text, pattern) => text.match(pattern)?.[0].trim().slice(0, 200
  * @param {string} text The quote text.
  * @returns {object} An object shaped like the quote extraction schema's `extracted`.
  */
-export function demoQuoteFromText(text) {
+export function demoQuoteFromText(input) {
+  const text = input.slice(0, MAX_READ);
   const named = text.match(/(?:vendor|from|company)\s*[:-]\s*(.+)/i)?.[1] ?? text.split("\n")[0];
   const includes = (text.match(/includes?\s*:\s*(.+)/i)?.[1] ?? "")
     .split(",")
