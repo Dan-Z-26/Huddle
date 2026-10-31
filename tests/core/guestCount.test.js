@@ -22,7 +22,7 @@ describe("parseGuestCount", () => {
     ["200 to 250", result(200, 250, 263, true)],
     ["200 or 250", result(200, 250, 263, true)],
     ["between 200 and 250", result(200, 250, 263, true)],
-    ["maybe 300, could be 350", result(300, 300, 315, true)],
+    ["maybe 300, could be 350", result(300, 350, 368, true)],
     ["1", result(1, 1, 1, false)],
     ["about 1", result(1, 1, 2, true)],
   ];
@@ -62,5 +62,37 @@ describe("parseGuestCount", () => {
     assert.equal(parseGuestCount(200), null);
     assert.equal(parseGuestCount(null), null);
     assert.equal(parseGuestCount("99999999999999999"), null);
+  });
+});
+
+describe("parseGuestCount: a hedged second number", () => {
+  it("keeps both ends of a mixed answer", () => {
+    for (const [text, min, max] of [
+      ["around 200, maybe 300 if partners come", 200, 300],
+      ["around 200 maybe 250", 200, 250],
+      ["200 guests, could be 240", 200, 240],
+      ["about 150, up to 180", 150, 180],
+    ]) {
+      const parsed = parseGuestCount(text);
+      assert.equal(parsed.min, min, text);
+      assert.equal(parsed.max, max, text);
+      assert.equal(parsed.needsConfirmation, true, text);
+    }
+    assert.equal(parseGuestCount("around 200, maybe 300 if partners come").suggested, 315);
+  });
+
+  it("does not read unrelated numbers as a range", () => {
+    assert.equal(parseGuestCount("200 guests for 3 hours").max, 200);
+    assert.equal(parseGuestCount("on the 12th floor, maybe 200").max, 200);
+  });
+});
+
+describe("parseGuestCount: hedges only join an adjacent number", () => {
+  it("does not read an unrelated first number as the low end", () => {
+    for (const text of ["over 2 days, maybe 300 people", "20% vegetarian, maybe 300"]) {
+      const parsed = parseGuestCount(text);
+      assert.ok(!(parsed.min === 2 && parsed.max === 300), text);
+      assert.ok(!(parsed.min === 20 && parsed.max === 300), text);
+    }
   });
 });

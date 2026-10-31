@@ -3,8 +3,10 @@ import { renderBrief, countdown } from "./brief.js";
 import { renderBudget } from "./budgetChart.js";
 import { hideConsequences, setUpWhatIf } from "./consequences.js";
 import { announce, el } from "./dom.js";
+import { hideIdeas, setUpIdeas } from "./ideas.js";
 import { startIntake } from "./intake.js";
 import { renderTimeline } from "./timeline.js";
+import { bump } from "./session.js";
 import { setUpViewAs } from "./viewAs.js";
 import { renderAttention, renderGroups, showGroup } from "./workspace.js";
 
@@ -53,13 +55,17 @@ function setUpPlanTools(event) {
       announce(err.message);
     }
   };
-  document.getElementById("post-digest").onclick = async () => {
+  const digestButton = document.getElementById("post-digest");
+  digestButton.onclick = async () => {
+    digestButton.disabled = true;
     try {
       await api.digest(event.id);
       await load();
       announce("Digest posted in #announcements.");
     } catch (err) {
       announce(err.message);
+    } finally {
+      digestButton.disabled = false;
     }
   };
 }
@@ -71,12 +77,17 @@ async function loadPlan(event, isManager) {
   renderTimeline(tasks);
   show("ask", isManager);
   show("timeline-tools", isManager);
-  if (isManager) setUpPlanTools(event);
+  if (isManager) {
+    setUpPlanTools(event);
+    setUpIdeas(event.id);
+  }
 }
 
 async function load({ focusIntake = false } = {}) {
+  bump();
   announce("");
   hideConsequences();
+  hideIdeas();
   const me = await signedIn();
   const { event, template, groups, members } = await api.event(me.user.eventId);
   await setUpViewAs(me.user.id, async (name) => {

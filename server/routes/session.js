@@ -54,14 +54,14 @@ export function sessionRoutes() {
 
   router.get("/me", requireUser, (req, res) => {
     const { store, user } = { store: req.app.locals.store, user: req.user };
-    const directives = [...store.directives.values()].filter(
-      ({ groupId }) => store.groups.get(groupId)?.eventId === user.eventId,
-    );
-    const tasks = [...store.tasks.values()].filter(({ eventId }) => eventId === user.eventId);
     res.json({
       user: { ...publicUser(user), eventId: user.eventId },
       permissions: permissionsOf(store.roleOf(user)),
-      attention: attentionFor(user.id, directives, tasks),
+      attention: attentionFor(
+        user.id,
+        store.directivesForEvent(user.eventId),
+        store.tasksForEvent(user.eventId),
+      ),
     });
   });
 

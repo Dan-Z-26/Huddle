@@ -31,6 +31,7 @@ export const api = {
     }),
   confirmIntake: (id) =>
     request(`/events/${encodeURIComponent(id)}/intake/confirm`, { method: "POST" }),
+  ideas: (id) => request(`/events/${encodeURIComponent(id)}/ideas`, { method: "POST" }),
   budget: (id) => request(`/events/${encodeURIComponent(id)}/budget`),
   timeline: (id) => request(`/events/${encodeURIComponent(id)}/timeline`),
   proposeChange: (id, text) =>

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { mentionsMoney } from "../core/amount.js";
 import { missingProfileFields } from "../core/profile.js";
 import { canSeeBudget } from "../core/permissions.js";
 import { getTemplate, listEventTypes } from "../core/templates.js";
@@ -19,9 +20,8 @@ import { createEvent, createWorkspace, deleteEvent } from "../store/workspace.js
 import * as schemas from "../validation/schemas.js";
 
 const MAX_EVENTS = 50;
-const MONEY = /₹|\brs\.?\s*\d|\binr\b|\b(?:lakhs?|crores?)\b|\d\s*k\b/i;
 const HIDDEN = "(contains an amount; visible to the event manager)";
-const noMoney = (text) => (MONEY.test(text) ? HIDDEN : text);
+const noMoney = (text) => (mentionsMoney(text) ? HIDDEN : text);
 
 /**
  * The profile as a user may see it. Only the manager gets the total budget and the ranking: a
@@ -38,6 +38,8 @@ function profileFor(event, role) {
     ...rest,
     name: noMoney(event.name),
     purpose: noMoney(event.purpose),
+    city: noMoney(event.city),
+    venueType: noMoney(event.venueType),
     attendeeExperience: noMoney(event.attendeeExperience),
     mustHaves: event.mustHaves
       .filter(({ categoryId }) => !categoryId || owns(categoryId))
@@ -52,9 +54,8 @@ function profileFor(event, role) {
 }
 
 /** Event-scoped routes: the user's own event only, and managers only where it changes things. */
-export function eventRoutes() {
+export function eventRoutes({ ai }) {
   const router = Router();
-  const ai = createAiLimiter({ windowMs: 60_000, max: 30 });
   const newEvents = createAiLimiter({ windowMs: 3_600_000, max: 20 });
 
   router.get("/event-types", (_req, res) => res.json({ eventTypes: listEventTypes() }));
@@ -143,12 +144,12 @@ export function eventRoutes() {
       const event = managerOnly(req);
       const state = req.app.locals.store.budgets.get(event.id);
       if (!state) throw HttpError(400, "BAD_REQUEST", "Finish setting up the event first.");
-      const { ideas, rationale } = await generateIdeas({
+      const { ideas, rationale, offline } = await generateIdeas({
         profile: event,
         state,
         template: getTemplate(event.eventType),
       });
-      res.json({ ideas, rationale });
+      res.json({ ideas, rationale, offline });
     },
   );
 

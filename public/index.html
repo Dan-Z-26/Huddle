@@ -61,6 +61,9 @@
             <button type="submit" id="what-if-send" class="button primary">Ask</button>
           </form>
           <div id="ask-suggestions" class="chips" role="group" aria-label="Try one of these"></div>
+          <button type="button" id="ideas-get" class="button ideas-get">
+            Suggest ideas for this event
+          </button>
         </section>
 
         <section
@@ -73,7 +76,7 @@
           <p id="result-request" class="muted"></p>
           <h2 id="result-title" class="result-title"></h2>
           <p id="result-offline" class="offline" hidden>
-            Gemini is busy right now, so this used simple rules. The figures are still exact. Try
+            The AI is busy right now, so this used simple rules. The figures are still exact. Try
             again in a minute for a fuller reading.
           </p>
           <p id="result-insight" class="result-insight"></p>
@@ -101,6 +104,18 @@
               Apply this change
             </button>
             <button type="button" id="result-discard" class="button">Discard</button>
+          </div>
+        </section>
+
+        <section id="ideas" class="result" aria-labelledby="ideas-title" tabindex="-1" hidden>
+          <h2 id="ideas-title" class="result-title">Ideas for this event</h2>
+          <p id="ideas-offline" class="offline" hidden>
+            The AI is busy right now, so these came from simple rules. Try again in a minute.
+          </p>
+          <p id="ideas-rationale" class="muted"></p>
+          <ul id="ideas-list" class="ideas-list"></ul>
+          <div class="result-actions">
+            <button type="button" id="ideas-close" class="button">Close</button>
           </div>
         </section>
 

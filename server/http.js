@@ -96,6 +96,19 @@ export function managerOnly(req) {
 }
 
 /**
+ * Gets an event's budget, which exists once intake is confirmed.
+ * @param {object} store The store.
+ * @param {{id: string}} event The event.
+ * @returns {object} BudgetState.
+ * @throws {Error} 404 before the workspace exists.
+ */
+export function requireBudget(store, event) {
+  const state = store.budgets.get(event.id);
+  if (!state) throw HttpError(404, "NOT_FOUND", "This event has no budget yet.");
+  return state;
+}
+
+/**
  * Validates a request with a zod schema over `{ body, params, query }` and sets `req.valid` to the
  * parsed result. Only the field path is reported: zod's messages can echo client-supplied keys.
  * @param {import("zod").ZodType} schema

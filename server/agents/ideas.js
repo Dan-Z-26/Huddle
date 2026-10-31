@@ -82,7 +82,7 @@ export async function generateIdeas(
     `Categories: ${JSON.stringify(categories)}`,
     wrapUntrusted("event profile", context),
   ].join("\n");
-  const { data } = await generateOrDemo(generate, {
+  const { data, offline } = await generateOrDemo(generate, {
     agent: "ideas",
     system: SYSTEM,
     messages: [{ role: "user", content }],
@@ -107,5 +107,5 @@ export async function generateIdeas(
       const costShare = `A ${idea.level} idea within the ${category.name} budget of ${wholeMoney(category.highMinor, state.currency)} (${where}).`;
       return { ...idea, costShare };
     });
-  return { ideas, rationale: groundedOr(data.rationale, "") };
+  return { ideas, rationale: groundedOr(data.rationale, ""), offline };
 }

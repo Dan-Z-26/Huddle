@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { mentionsMoney } from "../core/amount.js";
 import { buildBudgetState, emptyProfile } from "../core/profile.js";
 import { getTemplate } from "../core/templates.js";
 import { planTimeline } from "../core/timelinePlanner.js";
@@ -62,7 +63,7 @@ export function createWorkspace(store, event, nowIso) {
   postAgentMessage(store, {
     groupId: announcements.id,
     authorId: `agent-planner@${event.id}`,
-    text: `Welcome to ${event.name}. I've set up your groups, budget and timeline. Ask me anything with @huddle.`,
+    text: `Welcome to ${mentionsMoney(event.name) ? "your event" : event.name}. I've set up your groups, budget and timeline. Ask me anything with @huddle.`,
     rationale: "Created from your answers and the event-type template.",
     nowIso,
   });

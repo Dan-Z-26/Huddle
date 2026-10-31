@@ -25,7 +25,7 @@ server/
   http.js         requireUser, validate(schema), HttpError, error handler
   sse.js          Set of clients, broadcast(event), heartbeat
   reminders.js    runReminders(store, nowIso), called by the timer and tests
-  routes/         session, events, budget, groups, messages, vendors, stream
+  routes/         session, events, budget, timeline, groups, messages, vendors, stream
   store/          index.js (createStore), seed.js
   validation/     schemas.js (requests), uploads.js (signature check)
 ```
@@ -341,14 +341,14 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 | events | `PATCH /events/:id/profile` | `name, purpose, city, venueType, attendeeExperience` only (manager) | `{ event }` |
 | events | `POST /events/:id/intake` * | `{ answer }` | `{ nextQuestion, feedback, field, profile, complete, rationale }` |
 | events | `POST /events/:id/intake/confirm` | | `{ event, groups }`; creates the workspace |
-| events | `POST /events/:id/ideas` * | | `{ ideas, rationale }` |
+| events | `POST /events/:id/ideas` * | | `{ ideas, rationale, offline }` |
 | budget | `GET /events/:id/budget` | | `computeBudget` output plus `guestCount`, `currency` and per-category `tierLabel`, `locked`, and for the manager `rank`; core members get only their categories, with no totals and no rank |
 | budget | `POST /events/:id/changes` * | `{ text }` | `{ changeId, answer, insight, offline, consequences, consequenceText, estimates, explanation, clarifyingQuestion, rationale }`. `answer` replies to a plain question; `insight` is `{ headline, insight, points, optionNotes }`; `offline` says no model was reached; `changeId` is null unless the change applies cleanly |
 | budget | `POST /events/:id/changes/:changeId/accept` * | `{ cuts?: [categoryId], raise?: boolean }`: how to close the gap | `{ budget, tasks, noticesPosted }`; re-applied in code, refused if the budget changed since |
-| budget | `GET /events/:id/timeline` | | `{ tasks }` by date, each with `ownerGroupName` |
-| budget | `POST /events/:id/reschedule` | `{ date }` as text (manager) | `{ event: { id, date }, tasks }` |
-| budget | `PATCH /tasks/:id` | `{ status }` (members of the owner group) | `{ tasks }` |
-| budget | `POST /events/:id/digest` * | | `{ message }` |
+| timeline | `GET /events/:id/timeline` | | `{ tasks }` by date, each with `ownerGroupName` |
+| timeline | `POST /events/:id/reschedule` | `{ date }` as text (manager) | `{ event: { id, date }, tasks }` |
+| timeline | `PATCH /tasks/:id` | `{ status }` (members of the owner group) | `{ tasks }` |
+| timeline | `POST /events/:id/digest` * | | `{ message }` |
 | groups | `POST /events/:id/groups` | `{ name, kind, memberRoleIds }` | `{ group }` |
 | groups | `PATCH /groups/:id` | `{ name?, memberRoleIds? }` | `{ group }` |
 | groups | `DELETE /groups/:id` | | 204 |
@@ -394,6 +394,7 @@ store.files, store.quotes, store.tasks, store.budgets, store.pendingChanges // M
 store.messagesForGroup(groupId, { before, limit })
 store.groupsForUser(user)
 store.roleOf(user) // { kind, roleId, categoryIds, groupIds } for core permissions
+store.tasksForEvent(eventId), store.directivesForEvent(eventId)
 ```
 
 `messagesForGroup` returns `{ messages, nextBefore }`. `before` is a message id, `limit` defaults to 50 and is capped at 100, messages are oldest first within the page, and `nextBefore` is null on the last page. An unknown `before` gives an empty page. `groupsForUser` never crosses events: managers and agents get every group of their own event; others get that event's groups whose `memberRoleIds` include their `roleId`.

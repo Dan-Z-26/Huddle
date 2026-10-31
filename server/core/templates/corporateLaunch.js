@@ -85,7 +85,12 @@ const roles = [
     kind: "core",
     categoryIds: ["reveal", "decor", "music", "gifting"],
   },
-  { id: "production-lead", name: "Production lead", kind: "core", categoryIds: ["reveal", "av"] },
+  {
+    id: "production-lead",
+    name: "Production lead",
+    kind: "core",
+    categoryIds: ["reveal", "av", "food-beverage"],
+  },
   { id: "pr-head", name: "PR head", kind: "core", categoryIds: ["pr", "photo-video"] },
 ];
 

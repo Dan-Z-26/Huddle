@@ -1,11 +1,12 @@
 import { fileURLToPath } from "node:url";
 import express from "express";
 import helmet from "helmet";
-import { errorHandler, HttpError } from "./http.js";
+import { createAiLimiter, errorHandler, HttpError } from "./http.js";
 import { budgetRoutes } from "./routes/budget.js";
 import { eventRoutes } from "./routes/events.js";
 import { messageRoutes } from "./routes/messages.js";
 import { sessionRoutes } from "./routes/session.js";
+import { timelineRoutes } from "./routes/timeline.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 
@@ -48,7 +49,16 @@ export function createApp({ store }) {
     next();
   });
 
-  app.use("/api", sessionRoutes(), eventRoutes(), budgetRoutes(), messageRoutes());
+  // One budget of AI calls per client across every route, because they all draw on one API key.
+  const ai = createAiLimiter({ windowMs: 60_000, max: 30 });
+  app.use(
+    "/api",
+    sessionRoutes(),
+    eventRoutes({ ai }),
+    budgetRoutes({ ai }),
+    timelineRoutes({ ai }),
+    messageRoutes(),
+  );
   app.use("/api", (_req, _res, next) => next(HttpError(404, "NOT_FOUND", "Not found.")));
   app.use(express.static(PUBLIC_DIR));
   app.use(errorHandler);

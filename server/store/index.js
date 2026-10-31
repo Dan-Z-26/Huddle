@@ -60,6 +60,17 @@ export function createStore() {
   }
 
   return {
+    /** @returns {object[]} One event's tasks. */
+    tasksForEvent(eventId) {
+      return [...this.tasks.values()].filter((task) => task.eventId === eventId);
+    },
+    /** @returns {object[]} One event's directives; each belongs to a group in the event. */
+    directivesForEvent(eventId) {
+      const ids = new Set(
+        [...groups.values()].filter((group) => group.eventId === eventId).map(({ id }) => id),
+      );
+      return [...this.directives.values()].filter(({ groupId }) => ids.has(groupId));
+    },
     events: new Map(),
     users: new Map(),
     groups,

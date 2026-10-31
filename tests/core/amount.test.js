@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseAmount } from "../../server/core/amount.js";
+import { mentionsMoney, parseAmount } from "../../server/core/amount.js";
 
 const minor = (text) => parseAmount(text)?.minor ?? null;
 
@@ -66,5 +66,43 @@ describe("parseAmount", () => {
   it("stays in whole minor units for awkward decimals", () => {
     assert.ok(Number.isInteger(minor("1.234567 lakh")));
     assert.equal(minor("1.234567 lakh"), 12345670);
+  });
+});
+
+describe("mentionsMoney", () => {
+  it("catches amounts in any common form", () => {
+    for (const text of [
+      "Budget is 2500000 rupees or USD 30000",
+      "max ₹8 lakh",
+      "about $30,000",
+      "16 lakh total",
+      "2 crore",
+      "spend 50k on food",
+      "25,00,000 in all",
+      "budget of 900",
+      "Total 8L",
+      "1.5L for food",
+      "under 90 thousand",
+      "500/-",
+      "we can pay 8000",
+      "capped at 800",
+    ])
+      assert.equal(mentionsMoney(text), true, text);
+  });
+
+  it("leaves dates, counts and ordinary words alone", () => {
+    for (const text of [
+      "Final specs by 1 Feb 2027",
+      "200 guests",
+      "Press embargo lifts at 11 am",
+      "Launch in 2027",
+      "Event on 12 March 1999",
+      "Level 5 of the hall",
+      "use the blue logo",
+      "Nova X1 launch",
+      "",
+      undefined,
+    ])
+      assert.equal(mentionsMoney(text), false, String(text));
   });
 });

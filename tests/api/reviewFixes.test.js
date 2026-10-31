@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { getTemplate } from "../../server/core/templates.js";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
 import { assertError, startDemo } from "./helpers.js";
 
@@ -299,5 +300,98 @@ describe("the assistant adapts to what is asked", () => {
   it("says plainly when no model was reached", async (t) => {
     const { call } = await startDemo(t);
     assert.equal((await ask(call, "add 50 guests")).offline, true);
+  });
+});
+
+describe("judge's fixes", () => {
+  it("hides amounts however they are written, from core members only", async (t) => {
+    const { call, store } = await startDemo(t);
+    store.events.get(ID).purpose = "Budget is 2500000 rupees or USD 30000";
+    const seen = (await (await call(`/events/${ID}`, { as: PR_HEAD })).json()).event;
+    assert.doesNotMatch(seen.purpose, /2500000|30000/);
+    const own = (await (await call(`/events/${ID}`, { as: MANAGER })).json()).event;
+    assert.match(own.purpose, /2500000/);
+  });
+
+  // Birthdays and community events have one helper; the host or organiser runs the other rooms.
+  it("gives every category a core owner where the event has a full team", () => {
+    for (const eventType of ["corporate_launch", "wedding"]) {
+      const { categories, roles } = getTemplate(eventType);
+      const owned = new Set(
+        roles.filter(({ kind }) => kind === "core").flatMap(({ categoryIds }) => categoryIds),
+      );
+      for (const { id } of categories) assert.ok(owned.has(id), `${eventType}: ${id}`);
+    }
+  });
+
+  it("tells #announcements when the date moves", async (t) => {
+    const { call, store } = await startDemo(t);
+    await call(`/events/${ID}/reschedule`, {
+      as: MANAGER,
+      method: "POST",
+      body: { date: "20 June 2031" },
+    });
+    const { messages } = store.messagesForGroup(`g-${ID}-announcements`);
+    assert.match(messages.at(-1).text, /20 June 2031/);
+    assert.equal(messages.at(-1).authorKind, "system");
+  });
+
+  it("returns ideas that say why they fit, and whether a model wrote them", async (t) => {
+    const { call } = await startDemo(t);
+    const body = await (await call(`/events/${ID}/ideas`, { as: MANAGER, method: "POST" })).json();
+    assert.ok(body.ideas.length > 0);
+    assert.ok(body.ideas.every(({ whyItFits, costShare }) => whyItFits && costShare));
+    assert.equal(body.offline, true);
+  });
+});
+
+describe("review: every shared text field", () => {
+  it("hides amounts typed into the venue or city from core members", async (t) => {
+    const { call, store } = await startDemo(t);
+    store.events.get(ID).venueType = "Ballroom under 5 lakh";
+    store.events.get(ID).city = "Pune, 90000 cap";
+    const seen = (await (await call(`/events/${ID}`, { as: PR_HEAD })).json()).event;
+    assert.doesNotMatch(`${seen.venueType} ${seen.city}`, /lakh|90000/);
+  });
+
+  it("keeps an amount in the event name out of the welcome post", async (t) => {
+    const { store } = await startDemo(t);
+    const { createWorkspace, createEvent } = await import("../../server/store/workspace.js");
+    const { event } = createEvent(store, { eventType: "birthday", id: "gala" });
+    Object.assign(event, {
+      name: "Gala 5 lakh",
+      date: "2031-01-01T00:00:00.000Z",
+      guests: { min: 10, max: 10, suggested: 10, confirmed: 10 },
+      budget: { totalMinor: 10000000, currency: "INR" },
+      priorities: ["food-cake"],
+    });
+    createWorkspace(store, event, "2026-10-31T09:00:00.000Z");
+    const { messages } = store.messagesForGroup("g-gala-announcements");
+    assert.doesNotMatch(messages[0].text, /lakh/);
+  });
+
+  it("gives all AI routes one shared limit, not one per router", async (t) => {
+    const { call, store } = await startDemo(t);
+    let last;
+    for (let i = 0; i < 31; i++) {
+      // Alternate routes: each used to have its own counter of 30.
+      last =
+        i % 2
+          ? await call(`/events/${ID}/digest`, { as: MANAGER, method: "POST" })
+          : await call(`/events/${ID}/ideas`, { as: MANAGER, method: "POST" });
+    }
+    assert.equal(last.status, 429);
+    assert.ok(store);
+  });
+
+  it("shares one digest between two quick requests", async (t) => {
+    const { call, store } = await startDemo(t);
+    const post = () => call(`/events/${ID}/digest`, { as: MANAGER, method: "POST" });
+    const [a, b] = await Promise.all([post(), post()]);
+    assert.equal((await a.json()).message.id, (await b.json()).message.id);
+    const posted = store
+      .messagesForGroup(`g-${ID}-announcements`)
+      .messages.filter(({ authorId }) => authorId === `agent-timeline@${ID}`);
+    assert.equal(posted.length, 1);
   });
 });

@@ -2,24 +2,16 @@ import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { interpretChange } from "../agents/budget.js";
 import { noticeFacts, noticeTargets, word } from "../agents/notices.js";
-import { digest } from "../agents/timeline.js";
 import { computeBudget, tierForCost } from "../core/budgetEngine.js";
 import { computeConsequences, resolutionEvents } from "../core/consequences.js";
-import { parseEventDate } from "../core/dateText.js";
-import { canSeeBudget, canView } from "../core/permissions.js";
+import { canSeeBudget } from "../core/permissions.js";
 import { rankOf } from "../core/priorities.js";
 import { getTemplate } from "../core/templates.js";
-import { flagAtRisk, replanTimeline } from "../core/timelinePlanner.js";
-import {
-  createAiLimiter,
-  HttpError,
-  managerOnly,
-  ownEvent,
-  requireUser,
-  validate,
-} from "../http.js";
+import { flagAtRisk } from "../core/timelinePlanner.js";
+import { HttpError, managerOnly, ownEvent, requireBudget, requireUser, validate } from "../http.js";
 import { postAgentMessage } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
+import { saveTasks, timelineView } from "./timeline.js";
 
 const MAX_PENDING_PER_EVENT = 100;
 
@@ -46,29 +38,6 @@ function budgetFor(event, state, role) {
 
 const pendingOf = (store, eventId) =>
   [...store.pendingChanges.values()].filter((change) => change.eventId === eventId);
-
-const eventTasks = (store, eventId) =>
-  [...store.tasks.values()].filter((task) => task.eventId === eventId);
-
-function saveTasks(store, tasks) {
-  for (const task of tasks) store.tasks.set(task.id, task);
-}
-
-/** Tasks in date order, each with its owner group's name, which everyone on the event may see. */
-function timelineView(store, eventId) {
-  return eventTasks(store, eventId)
-    .map((task) => ({
-      ...task,
-      ownerGroupName: store.groups.get(task.ownerGroupId)?.name ?? null,
-    }))
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-}
-
-function requireState(store, event) {
-  const state = store.budgets.get(event.id);
-  if (!state) throw HttpError(404, "NOT_FOUND", "This event has no budget yet.");
-  return state;
-}
 
 // Each affected group gets a notice worded from only the facts it may see.
 async function postNotices({ store, event, template, before, after, deltas, nowIso }) {
@@ -106,15 +75,14 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
   return posted.filter(Boolean);
 }
 
-/** Budget, consequences and timeline. Reads top to bottom: user, validate, permission, work, store. */
-export function budgetRoutes() {
+/** Budget and consequences. Reads top to bottom: user, validate, permission, work, store. */
+export function budgetRoutes({ ai }) {
   const router = Router();
-  const ai = createAiLimiter({ windowMs: 60_000, max: 30 });
 
   router.get("/events/:id/budget", requireUser, validate(schemas.eventParam), (req, res) => {
     const { store } = req.app.locals;
     const event = ownEvent(req);
-    const state = requireState(store, event);
+    const state = requireBudget(store, event);
     res.json(budgetFor(event, state, store.roleOf(req.user)));
   });
 
@@ -126,7 +94,7 @@ export function budgetRoutes() {
     async (req, res) => {
       const { store } = req.app.locals;
       const event = managerOnly(req);
-      const state = requireState(store, event);
+      const state = requireBudget(store, event);
       const result = await interpretChange({
         profile: event,
         state,
@@ -175,7 +143,7 @@ export function budgetRoutes() {
     async (req, res) => {
       const { store } = req.app.locals;
       const event = managerOnly(req);
-      const before = requireState(store, event);
+      const before = requireBudget(store, event);
       const pending = store.pendingChanges.get(req.valid.params.changeId);
       if (!pending || pending.eventId !== event.id)
         throw HttpError(404, "NOT_FOUND", "That change is no longer available.");
@@ -198,7 +166,7 @@ export function budgetRoutes() {
         event.guests = { min: n, max: n, suggested: n, confirmed: n };
       }
       event.budget = { ...event.budget, totalMinor: after.totalMinor };
-      saveTasks(store, flagAtRisk(eventTasks(store, event.id), nowIso));
+      saveTasks(store, flagAtRisk(store.tasksForEvent(event.id), nowIso));
 
       const notices = await postNotices({
         store,
@@ -214,78 +182,6 @@ export function budgetRoutes() {
         tasks: timelineView(store, event.id),
         noticesPosted: notices.length,
       });
-    },
-  );
-
-  router.get("/events/:id/timeline", requireUser, validate(schemas.eventParam), (req, res) => {
-    const event = ownEvent(req);
-    res.json({ tasks: timelineView(req.app.locals.store, event.id) });
-  });
-
-  router.post("/events/:id/reschedule", requireUser, validate(schemas.reschedule), (req, res) => {
-    const { store } = req.app.locals;
-    const event = managerOnly(req);
-    requireState(store, event);
-    const date = parseEventDate(req.valid.body.date);
-    const nowIso = new Date().toISOString();
-    if (!date)
-      throw HttpError(400, "BAD_REQUEST", "Please give the full date, including the year.");
-    if (date.slice(0, 10) < nowIso.slice(0, 10))
-      throw HttpError(400, "BAD_REQUEST", "That date has already passed.");
-    event.date = date;
-    saveTasks(store, replanTimeline(eventTasks(store, event.id), date, nowIso));
-    res.json({ event: { id: event.id, date }, tasks: timelineView(store, event.id) });
-  });
-
-  // Anyone who can see the task's owner group can tick it off.
-  router.patch("/tasks/:id", requireUser, validate(schemas.taskStatus), (req, res) => {
-    const { store } = req.app.locals;
-    const task = store.tasks.get(req.valid.params.id);
-    if (!task || task.eventId !== req.user.eventId)
-      throw HttpError(404, "NOT_FOUND", "No such task.");
-    const group = store.groups.get(task.ownerGroupId);
-    if (!group || !canView(store.roleOf(req.user), { type: "group", group }))
-      throw HttpError(403, "FORBIDDEN", "Only people in the owner group can update this task.");
-    const [updated] = flagAtRisk(
-      [{ ...task, status: req.valid.body.status }],
-      new Date().toISOString(),
-    );
-    store.tasks.set(updated.id, updated);
-    res.json({ tasks: timelineView(store, task.eventId) });
-  });
-
-  router.post(
-    "/events/:id/digest",
-    requireUser,
-    ai,
-    validate(schemas.eventParam),
-    async (req, res) => {
-      const { store } = req.app.locals;
-      const event = managerOnly(req);
-      requireState(store, event);
-      const nowIso = new Date().toISOString();
-      const key = `${event.id}:${nowIso.slice(0, 10)}`;
-      if (store.digests.has(key)) return res.json({ message: store.digests.get(key) });
-      const { digestText, rationale } = await digest({
-        profile: event,
-        tasks: eventTasks(store, event.id),
-        directives: [...store.directives.values()].filter(
-          ({ groupId }) => store.groups.get(groupId)?.eventId === event.id,
-        ),
-        members: [...store.users.values()].filter(
-          ({ eventId, kind }) => eventId === event.id && kind !== "agent",
-        ),
-        nowIso,
-      });
-      const message = postAgentMessage(store, {
-        groupId: `g-${event.id}-announcements`,
-        authorId: `agent-timeline@${event.id}`,
-        text: digestText,
-        rationale,
-        nowIso,
-      });
-      store.digests.set(key, message);
-      res.json({ message });
     },
   );
 
