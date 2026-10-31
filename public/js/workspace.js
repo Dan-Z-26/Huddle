@@ -1,4 +1,4 @@
-import { clear, el, formatShortDate } from "./dom.js";
+import { clear, el, formatShortDate, keepFocus } from "./dom.js";
 
 /**
  * Renders the group list and calls `onOpen(group)` when one is chosen. A group with messages the
@@ -9,6 +9,10 @@ import { clear, el, formatShortDate } from "./dom.js";
  * @param {Map<string, number>} [unread] New messages per group id.
  */
 export function renderGroups(groups, activeId, onOpen, unread = new Map()) {
+  keepFocus(() => drawGroups(groups, activeId, onOpen, unread));
+}
+
+function drawGroups(groups, activeId, onOpen, unread) {
   const list = document.getElementById("group-list");
   clear(list);
   document.getElementById("groups-empty").hidden = groups.length > 0;
@@ -39,17 +43,22 @@ export function renderGroups(groups, activeId, onOpen, unread = new Map()) {
  * @param {{directives: object[], tasks: object[]}} attention From the server.
  * @param {(groupId: string) => void} openGroup Opens a group by id.
  */
-export function renderAttention({ directives, tasks }, openGroup) {
+export function renderAttention(attention, openGroup) {
+  keepFocus(() => drawAttention(attention, openGroup));
+}
+
+function drawAttention({ directives, tasks }, openGroup) {
   const box = document.getElementById("attention");
   clear(box);
   const items = [
-    ...directives.map(({ groupId, groupName, text }) =>
+    ...directives.map(({ id, groupId, groupName, text }) =>
       el(
         "li",
         {},
         el("button", {
           type: "button",
           class: "link-button",
+          "data-focus-key": `attn:${id}`,
           onclick: () => openGroup(groupId),
           text: `Directive in ${groupName}: ${text}`,
         }),

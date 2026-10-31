@@ -395,3 +395,214 @@ describe("review: every shared text field", () => {
     assert.equal(posted.length, 1);
   });
 });
+
+describe("security review of phases 5 and 6", () => {
+  const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
+  const DESIGNER = `user-creative-director@${ID}`;
+
+  it("keeps the manager's budget questions out of what core members can read", async (t) => {
+    const { call, store } = await startDemo(t);
+    const ask = (text) =>
+      call(`/groups/g-${ID}-stage-decor/messages`, { as: MANAGER, method: "POST", body: { text } });
+    for (const text of [
+      "@huddle what if we add 50 guests?",
+      "@huddle give me ideas",
+      "@huddle what is left in the budget?",
+    ]) {
+      await ask(text);
+      await Promise.all([...store.background]);
+    }
+    const seen = await (
+      await call(`/groups/g-${ID}-stage-decor/messages`, { as: DESIGNER })
+    ).json();
+    const agentText = seen.messages
+      .filter(({ authorKind }) => authorKind === "agent")
+      .map(({ text, rationale }) => `${text} ${rationale ?? ""}`)
+      .join("\n");
+    assert.doesNotMatch(agentText, /₹|priority|\d{5}/);
+  });
+
+  it("refuses a quote that was edited after the manager reviewed it", async (t) => {
+    const { call } = await startDemo(t);
+    const made = (
+      await (
+        await call(`/events/${ID}/quotes`, {
+          as: MANAGER,
+          method: "POST",
+          body: {
+            categoryId: "food-beverage",
+            vendorName: "Green Leaf",
+            perGuestText: "₹1,000",
+            taxPercent: 5,
+          },
+        })
+      ).json()
+    ).quote;
+    const proposed = await (
+      await call(`/quotes/${made.id}/accept`, { as: MANAGER, method: "POST" })
+    ).json();
+    await call(`/quotes/${made.id}/confirm`, {
+      as: MANAGER,
+      method: "POST",
+      body: { vendorName: "Green Leaf", perGuestText: "₹900", taxPercent: 5 },
+    });
+    await assertError(
+      await call(`/events/${ID}/changes/${proposed.changeId}/accept`, {
+        as: MANAGER,
+        method: "POST",
+        body: {},
+      }),
+      400,
+      "BAD_REQUEST",
+    );
+  });
+
+  it("won't accept the same quote twice", async (t) => {
+    const { call } = await startDemo(t);
+    const made = (
+      await (
+        await call(`/events/${ID}/quotes`, {
+          as: MANAGER,
+          method: "POST",
+          body: { categoryId: "food-beverage", vendorName: "Green Leaf", perGuestText: "₹1,000" },
+        })
+      ).json()
+    ).quote;
+    const first = await (
+      await call(`/quotes/${made.id}/accept`, { as: MANAGER, method: "POST" })
+    ).json();
+    await call(`/events/${ID}/changes/${first.changeId}/accept`, {
+      as: MANAGER,
+      method: "POST",
+      body: {},
+    });
+    await assertError(
+      await call(`/quotes/${made.id}/accept`, { as: MANAGER, method: "POST" }),
+      400,
+      "BAD_REQUEST",
+    );
+  });
+
+  it("downloads a file whose name isn't plain ASCII", async (t) => {
+    const { base, call } = await startDemo(t);
+    const form = new FormData();
+    form.append("files", new Blob([PDF]), "quo’te 中.pdf");
+    const res = await fetch(`${base}/api/groups/g-${ID}-core-team/messages`, {
+      method: "POST",
+      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      body: form,
+    });
+    const { message } = await res.json();
+    const file = await call(`/files/${message.files[0].id}`, { as: MANAGER });
+    assert.equal(file.status, 200);
+    assert.deepEqual(Buffer.from(await file.arrayBuffer()), PDF);
+    assert.match(
+      file.headers.get("content-disposition"),
+      /filename\*=UTF-8''quo%E2%80%99te%20%E4%B8%AD\.pdf/,
+    );
+  });
+
+  it("caps the files an event may keep, and frees files when old messages are dropped", async (t) => {
+    const { base, store, uploadsDir } = await startDemo(t);
+    const { readdir } = await import("node:fs/promises");
+    for (let i = 0; i < 40; i++)
+      store.files.set(`f${i}`, {
+        id: `f${i}`,
+        groupId: `g-${ID}-core-team`,
+        size: 10,
+        storedName: `x${i}`,
+      });
+    const form = new FormData();
+    form.append("files", new Blob([PDF]), "one-too-many.pdf");
+    const res = await fetch(`${base}/api/groups/g-${ID}-core-team/messages`, {
+      method: "POST",
+      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      body: form,
+    });
+    await assertError(res, 413, "PAYLOAD_TOO_LARGE");
+    assert.deepEqual(await readdir(uploadsDir), []);
+    // An evicted message takes its file with it.
+    store.files.clear();
+    const { addMessage } = await import("../../server/store/workspace.js");
+    const { saveUpload } = await import("../../server/store/files.js");
+    const record = await saveUpload(store, uploadsDir, {
+      buffer: PDF,
+      originalName: "a.pdf",
+      groupId: `g-${ID}-music-av`,
+      userId: MANAGER,
+    });
+    addMessage(store, {
+      id: "old",
+      groupId: `g-${ID}-music-av`,
+      authorKind: "human",
+      authorId: MANAGER,
+      text: "x",
+      fileIds: [record.id],
+      createdAt: "2026-10-31T00:00:00.000Z",
+    });
+    for (let i = 0; i < 300; i++)
+      addMessage(store, {
+        id: `n${i}`,
+        groupId: `g-${ID}-music-av`,
+        authorKind: "human",
+        authorId: MANAGER,
+        text: "x",
+        fileIds: [],
+        createdAt: "2026-10-31T00:00:00.000Z",
+      });
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(store.files.size, 0);
+    assert.deepEqual(await readdir(uploadsDir), []);
+  });
+
+  it("deletes the file of a quote that could not be read", async (t) => {
+    const { base, store, uploadsDir } = await startDemo(t);
+    const { readdir } = await import("node:fs/promises");
+    store.events.get(ID).mustHaves = null; // makes reading fail after the file is saved
+    const form = new FormData();
+    form.set("categoryId", "food-beverage");
+    form.set("file", new Blob([PDF]), "q.pdf");
+    t.mock.method(console, "error", () => {});
+    const res = await fetch(`${base}/api/events/${ID}/quotes`, {
+      method: "POST",
+      headers: { cookie: `huddle_user=${encodeURIComponent(MANAGER)}` },
+      body: form,
+    });
+    assert.equal(res.status, 500);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(store.files.size, 0);
+    assert.deepEqual(await readdir(uploadsDir), []);
+  });
+
+  it("hides a directive from someone removed from its group, and doesn't remind them", async (t) => {
+    const { call, store } = await startDemo(t);
+    const message = (
+      await (
+        await call(`/groups/g-${ID}-stage-decor/messages`, {
+          as: MANAGER,
+          method: "POST",
+          body: { text: "Specs by Friday" },
+        })
+      ).json()
+    ).message;
+    await call(`/messages/${message.id}/directive`, { as: MANAGER, method: "POST", body: {} });
+    await call(`/groups/g-${ID}-stage-decor`, {
+      as: MANAGER,
+      method: "PATCH",
+      body: { memberRoleIds: ["production-lead"] },
+    });
+    const me = await (await call("/me", { as: DESIGNER })).json();
+    assert.deepEqual(me.attention.directives, []);
+    const { runReminders } = await import("../../server/reminders.js");
+    const generate = async () => ({
+      data: { reminderText: "Nudge", rationale: "ok" },
+      toolCalls: [],
+    });
+    await runReminders(store, new Date(Date.now() + 5 * 3600000).toISOString(), {
+      slaMinutes: 120,
+      generate,
+    });
+    const text = store.messagesForGroup(`g-${ID}-stage-decor`).messages.at(-1).text;
+    assert.doesNotMatch(text, /Rohan Kapoor/);
+  });
+});

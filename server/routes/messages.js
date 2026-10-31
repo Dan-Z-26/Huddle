@@ -3,7 +3,7 @@ import multer from "multer";
 import { Router } from "express";
 import { canPost, canView } from "../core/permissions.js";
 import { HttpError, requireUser, validate } from "../http.js";
-import { readUpload, saveUpload } from "../store/files.js";
+import { assertRoom, readUpload, saveUpload } from "../store/files.js";
 import { addMessage } from "../store/workspace.js";
 import { detectFileType, MAX_FILE_BYTES, MAX_FILES } from "../validation/uploads.js";
 import { fileParam, groupMessages, postMessage } from "../validation/schemas.js";
@@ -13,6 +13,8 @@ import { directiveView, messageView } from "./views.js";
 const HUDDLE = /@huddle\b/i;
 const upload = multer({
   storage: multer.memoryStorage(),
+  // Browsers send file names as UTF-8; the default would read them as Latin-1.
+  defParamCharset: "utf8",
   limits: { fileSize: MAX_FILE_BYTES, files: MAX_FILES, fields: 5, fieldSize: 20_000, parts: 12 },
 }).array("files", MAX_FILES);
 const maybeUpload = (req, res, next) =>
@@ -72,6 +74,11 @@ export function messageRoutes({ ai, chat }) {
       // Every file is judged first, so one bad file means nothing is saved.
       if (files.some(({ buffer }) => !detectFileType(buffer)))
         throw HttpError(400, "UNSUPPORTED_FILE", "Only PDF, PNG, JPG or WEBP files are allowed.");
+      assertRoom(
+        store,
+        group.eventId,
+        files.map(({ size }) => size),
+      );
       const nowIso = new Date().toISOString();
       const records = [];
       for (const file of files) {
@@ -128,10 +135,11 @@ export function messageRoutes({ ai, chat }) {
     const bytes = await readUpload(uploadsDir, record).catch(() => {
       throw HttpError(404, "NOT_FOUND", "No such file.");
     });
+    // Header values must be plain ASCII: a readable fallback, and the real name in filename*.
+    const ascii = record.originalName.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "");
     res.set({
       "Content-Type": record.mime,
-      "Content-Length": bytes.length,
-      "Content-Disposition": `attachment; filename="${record.originalName.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(record.originalName)}`,
+      "Content-Disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(record.originalName)}`,
       // The type was checked from the file's own bytes when it was saved; browsers must not guess.
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "sandbox; default-src 'none'",

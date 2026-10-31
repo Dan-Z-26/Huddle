@@ -1,12 +1,20 @@
 import { handleMention } from "../agents/planner.js";
+import { mentionsMoney } from "../core/amount.js";
 import { canSeeBudget, canView } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
 import { eventQuotes } from "./vendorSupport.js";
 import { addMessage, postAgentMessage } from "../store/workspace.js";
 import { messageView, profileFor, publicUser } from "./views.js";
 
+// A group has core members in it, so a reply that carries budget figures, the ranking or cut
+// options must never be posted there, even when the manager asked. The manager sees those through
+// Ask Huddle on the budget panel, which only the manager can open.
+const PRIVATE_INTENTS = new Set(["budget_change", "ideas"]);
+const PRIVATE_NOTE =
+  "I've worked that out. It involves budget figures, so I won't post them in a group. Open Ask Huddle on the budget panel to see the details.";
+const looksPrivate = (text) =>
+  mentionsMoney(text) || /\bpriority\b/i.test(text) || /\bbudget\b.*\d/i.test(text);
 const SORRY = "Sorry, I couldn't work on that just now. Please try again in a moment.";
-const APPLY_HINT = "To apply it, ask again in the Ask Huddle box on the budget panel.";
 
 /**
  * Answers an @huddle message in the group it was posted in. The asker's own permissions decide
@@ -41,12 +49,12 @@ export async function replyAsPlanner({ store, event, group, user, message, files
         .map(publicUser),
       nowIso,
     });
-    const applicable = asked.intent === "budget_change" && asked.result?.changeEvents?.length > 0;
+    const keep = !PRIVATE_INTENTS.has(asked.intent) && !looksPrivate(asked.reply);
     postAgentMessage(store, {
       groupId: group.id,
       authorId,
-      text: applicable && isManager ? `${asked.reply}\n${APPLY_HINT}` : asked.reply,
-      rationale: asked.rationale || null,
+      text: keep ? asked.reply : isManager ? PRIVATE_NOTE : asked.reply,
+      rationale: keep && asked.rationale && !looksPrivate(asked.rationale) ? asked.rationale : null,
       nowIso,
     });
     if (asked.suggestDirective) {

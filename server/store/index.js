@@ -86,6 +86,8 @@ export function createStore() {
     publish() {},
     /** Work running after a response was sent, so tests can wait for it. */
     background: new Set(),
+    /** Removes files from disk once their records are gone; the app replaces this. */
+    discardFiles() {},
     rfqPosted: new Set(),
     messagesForGroup,
     groupsForUser,

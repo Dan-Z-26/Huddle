@@ -1,7 +1,9 @@
 import { api } from "./api.js";
-import { announce, clear, el } from "./dom.js";
+import { clear, el } from "./dom.js";
 
 const $ = (id) => document.getElementById(id);
+let state = null;
+const say = (text) => ($("groups-status").textContent = text);
 
 function roleBoxes(roles, chosen, name) {
   return roles.map((role) =>
@@ -20,9 +22,13 @@ function roleBoxes(roles, chosen, name) {
  *   onChanged: () => Promise<void>}} context The event, its groups, the roles that can be chosen
  *   (the manager and AI members are always in), and what to do after a change.
  */
-export function setUpGroupsAdmin({ event, groups, roles, onChanged }) {
+export function setUpGroupsAdmin(context) {
+  // Called again after every reload, so an open dialog redraws from the latest groups.
+  state = context;
+  const { event, roles, onChanged } = context;
   const dialog = $("groups-dialog");
   const choosable = roles.filter(({ kind }) => kind === "core");
+  if (dialog.open) render();
   $("manage-groups").hidden = false;
   $("manage-groups").onclick = () => {
     render();
@@ -30,15 +36,17 @@ export function setUpGroupsAdmin({ event, groups, roles, onChanged }) {
   };
   $("groups-close").onclick = () => dialog.close();
 
+  // Messages go inside the dialog: the rest of the page is inert while it is open.
   async function run(work, done) {
-    announce("");
+    say("");
     try {
       await work();
       await onChanged();
-      announce(done);
       render();
+      say(done);
+      $("groups-title").focus();
     } catch (err) {
-      announce(err.message);
+      say(err.message);
     }
   }
 
@@ -63,10 +71,18 @@ export function setUpGroupsAdmin({ event, groups, roles, onChanged }) {
       type: "button",
       class: "button",
       text: "Remove",
+      "aria-label": `Remove ${group.name}`,
+      onblur: () => {
+        armed = false;
+        remove.textContent = "Remove";
+        remove.setAttribute("aria-label", `Remove ${group.name}`);
+      },
       onclick: () => {
         if (!armed) {
           armed = true;
           remove.textContent = `Click again to remove ${group.name} and its messages`;
+          remove.removeAttribute("aria-label");
+          say(`Press Remove again to delete ${group.name} and its messages.`);
           return;
         }
         run(() => api.deleteGroup(group.id), `${group.name} removed.`);
@@ -105,7 +121,7 @@ export function setUpGroupsAdmin({ event, groups, roles, onChanged }) {
   function render() {
     const list = $("groups-admin");
     clear(list);
-    list.append(...groups.map(row));
+    list.append(...state.groups.map(row));
     const people = $("group-new-people");
     people.replaceChildren(
       el("legend", { text: "Who is in it?" }),
@@ -125,8 +141,8 @@ export function setUpGroupsAdmin({ event, groups, roles, onChanged }) {
       });
       $("group-new-name").value = "";
       await onChanged();
-      announce("Group added.");
       render();
+      say("Group added.");
     } catch (err) {
       $("group-new-error").textContent = err.message;
       $("group-new-name").setAttribute("aria-describedby", "group-new-error");

@@ -32,8 +32,13 @@ function attentionView(store, user) {
     store.directivesForEvent(user.eventId),
     store.tasksForEvent(user.eventId),
   );
+  const role = store.roleOf(user);
+  // Someone removed from a group no longer sees what was pinned there.
+  const visible = directives.filter((directive) =>
+    canView(role, { type: "group", group: store.groups.get(directive.groupId) }),
+  );
   return {
-    directives: directives.map((directive) => ({
+    directives: visible.map((directive) => ({
       id: directive.id,
       groupId: directive.groupId,
       groupName: store.groups.get(directive.groupId)?.name,

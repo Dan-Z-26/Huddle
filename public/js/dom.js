@@ -11,6 +11,8 @@ export function el(tag, props = {}, ...children) {
     else if (value === true) node.setAttribute(key, "");
     else if (value !== false && value != null) node.setAttribute(key, value);
   }
+  // list-style: none can make some screen readers drop list semantics.
+  if ((tag === "ul" || tag === "ol") && !props.role) node.setAttribute("role", "list");
   node.append(...children.filter(Boolean));
   return node;
 }
@@ -43,3 +45,20 @@ export const formatMoney = (minor, currency = "INR") =>
   new Intl.NumberFormat("en-IN", { style: "currency", currency, maximumFractionDigits: 0 }).format(
     minor / 100,
   );
+
+/**
+ * Runs a redraw and puts keyboard focus back afterwards. A control marked `data-focus-key` is
+ * found again by its key; if it is gone (a "Got it" that was pressed), the element marked
+ * `data-focus-after` with the same key takes focus, so focus is never dropped to the page.
+ * @param {() => void} redraw Rebuilds part of the screen.
+ */
+export function keepFocus(redraw) {
+  const key = document.activeElement?.dataset?.focusKey;
+  redraw();
+  if (!key) return;
+  const q = CSS.escape(key);
+  (
+    document.querySelector(`[data-focus-key="${q}"]`) ??
+    document.querySelector(`[data-focus-after="${q}"]`)
+  )?.focus();
+}

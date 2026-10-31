@@ -59,6 +59,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
           type: "button",
           class: "button",
           text: quote.status === "extracted" ? "Check and confirm" : "Edit",
+          "aria-label": `${quote.status === "extracted" ? "Check and confirm" : "Edit"} the ${quote.vendorName} quote`,
           onclick: () => openConfirm(quote, { mustHaves: mustHaves(), onConfirmed: refresh }),
         }),
       );
@@ -69,6 +70,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
           href: `/api/files/${encodeURIComponent(quote.sourceFileId)}`,
           download: "",
           text: "Download the file",
+          "aria-label": `Download the file for the ${quote.vendorName} quote`,
         }),
       );
     if (isManager && quote.status === "confirmed")
@@ -77,6 +79,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
           type: "button",
           class: "button primary",
           text: "See what accepting does",
+          "aria-label": `See what accepting the ${quote.vendorName} quote does`,
           onclick: async () => {
             try {
               showProposal(`Accept the ${quote.vendorName} quote`, await api.acceptQuote(quote.id));
@@ -212,13 +215,15 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
       $("quote-form").reset();
       await refresh();
       if (result.quote.status === "extracted") {
-        announce(
-          result.offline
-            ? "No AI was reachable, so this is a sample reading. Please check it carefully."
-            : "Quote read. Please check it.",
-        );
         openConfirm(result.quote, {
-          warnings: result.warnings,
+          warnings: [
+            ...(result.offline
+              ? [
+                  "No AI was reachable, so this is a sample reading, not your quote. Please check every figure.",
+                ]
+              : []),
+            ...result.warnings,
+          ],
           mustHaves: mustHaves(),
           onConfirmed: refresh,
         });

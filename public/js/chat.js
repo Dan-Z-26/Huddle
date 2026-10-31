@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { announce, clear, el, formatTime, initials } from "./dom.js";
+import { announce, clear, el, formatTime, initials, keepFocus } from "./dom.js";
 import { isCurrent, generation } from "./session.js";
 import { openPin } from "./pin.js";
 
@@ -22,7 +22,7 @@ const pinned = new Map();
 
 const nameOf = (id) => current?.members.find((member) => member.id === id)?.name ?? "Someone";
 
-function directiveCard(message, directive) {
+function directiveCard(directive, where) {
   const { me, isManager } = current;
   const status = directive.status;
   const mine = directive.addressedUserIds.includes(me.id);
@@ -31,7 +31,12 @@ function directiveCard(message, directive) {
     "div",
     { class: "directive" },
     el("strong", { text: "Directive" }),
-    el("span", { class: "directive-status", text: status.label }),
+    el("span", {
+      class: "directive-status",
+      tabindex: "-1",
+      "data-focus-after": `ack:${directive.id}:${where}`,
+      text: status.label,
+    }),
   );
   if (isManager && status.pending.length)
     card.append(
@@ -43,11 +48,12 @@ function directiveCard(message, directive) {
         type: "button",
         class: "button primary small",
         text: "Got it",
+        "aria-label": `Got it: ${directive.text ?? "this directive"}`.slice(0, 120),
+        "data-focus-key": `ack:${directive.id}:${where}`,
         onclick: () => acknowledge(directive.id),
       }),
     );
   if (mine && acked) card.append(el("span", { class: "tag", text: "You've acknowledged this" }));
-  void message;
   return card;
 }
 
@@ -86,7 +92,7 @@ function messageRow(message) {
       ),
     );
   }
-  if (message.directive) body.push(directiveCard(message, message.directive));
+  if (message.directive) body.push(directiveCard(message.directive, `row:${message.id}`));
   else if (current.isManager && message.authorKind === "human") {
     const suggested = message.suggestDirective;
     body.push(
@@ -98,6 +104,8 @@ function messageRow(message) {
           type: "button",
           class: "link-button",
           text: "Pin as directive",
+          "aria-label": `Pin as directive: ${message.text.slice(0, 40)}`,
+          "data-focus-key": `pin:${message.id}`,
           onclick: () => openPin(message, current, afterPin),
         }),
       ),
@@ -128,11 +136,15 @@ function afterPin() {
 }
 
 function renderPinned() {
+  keepFocus(drawPinned);
+}
+
+function drawPinned() {
   const list = $("pinned-list");
   clear(list);
   $("pinned").hidden = pinned.size === 0;
   for (const { directive, text } of pinned.values()) {
-    const card = directiveCard({}, directive);
+    const card = directiveCard({ ...directive, text }, `pinned:${directive.id}`);
     card.prepend(
       el("span", {
         class: "directive-text",
@@ -163,13 +175,23 @@ export function updateLiveMessage(message) {
   known.row.replaceWith(messageRow(message));
 }
 
+// Only the card changes, so an acknowledgement isn't announced as a whole new message.
+function placeDirective({ row, message }, directive) {
+  const card = directiveCard(directive, `row:${message.id}`);
+  const old = row.querySelector(".directive");
+  if (old) return old.replaceWith(card);
+  const body = row.lastElementChild;
+  body.querySelector(".message-actions")?.remove();
+  body.querySelector(".why")?.before(card) ?? body.append(card);
+}
+
 /** Updates a directive's card and the pinned list as people acknowledge it. */
 export function updateLiveDirective(directive) {
   if (!current || directive.groupId !== current.group.id) return;
   const known = [...rows.values()].find(({ message }) => message.id === directive.messageId);
   if (known) {
     known.message.directive = directive;
-    known.row.replaceWith(messageRow(known.message));
+    keepFocus(() => placeDirective(known, directive));
     pinned.set(directive.id, { directive, text: known.message.text });
   } else if (pinned.has(directive.id))
     pinned.set(directive.id, { ...pinned.get(directive.id), directive });
@@ -197,34 +219,42 @@ function setUpComposer(group) {
   form.onsubmit = async (e) => {
     e.preventDefault();
     const body = text.value.trim();
+    const status = $("composer-status");
+    if (send.getAttribute("aria-disabled") === "true") return;
     if (!body && files.files.length === 0) {
-      announce("Write a message or attach a file first.");
+      status.textContent = "Write a message or attach a file first.";
       return;
     }
     if (files.files.length > 3) {
-      announce("Please attach up to 3 files.");
+      status.textContent = "Please attach up to 3 files.";
       return;
     }
     const data = new FormData();
     if (body) data.set("text", body);
     for (const file of files.files) data.append("files", file);
-    send.disabled = true;
+    // aria-disabled, not disabled, so focus stays on the button while it works.
+    send.setAttribute("aria-disabled", "true");
     send.textContent = files.files.length ? "Uploading…" : "Sending…";
-    announce("");
+    status.textContent = files.files.length
+      ? `Uploading ${files.files.length === 1 ? "1 file" : `${files.files.length} files`}…`
+      : "Sending…";
     try {
       const { message } = await api.postMessage(group.id, data);
       text.value = "";
       files.value = "";
+      status.textContent = "Message sent.";
       addLiveMessage(message);
-      if (/@huddle\b/i.test(message.text))
-        $("messages").append(
-          el("p", { class: "muted thinking", text: "Huddle is working on that…" }),
-        );
+      if (/@huddle\b/i.test(message.text)) {
+        const waiting = el("p", { class: "muted thinking", text: "Huddle is working on that…" });
+        $("messages").append(waiting);
+        // If no reply comes, don't leave this standing.
+        setTimeout(() => waiting.remove(), 45_000);
+      }
       $("messages").scrollTop = $("messages").scrollHeight;
     } catch (err) {
-      announce(err.message);
+      status.textContent = err.message;
     } finally {
-      send.disabled = false;
+      send.removeAttribute("aria-disabled");
       send.textContent = "Send";
     }
   };
@@ -248,11 +278,12 @@ export async function showGroup(group, members, who, isStillWanted) {
     current = { group, members, ...who };
     rows.clear();
     pinned.clear();
+    // Filled before it is put in the page, so a screen reader doesn't read the whole history aloud.
     const fresh = $("messages").cloneNode(false);
-    $("messages").replaceWith(fresh);
     if (messages.length === 0)
       fresh.append(el("p", { class: "muted empty", text: "No messages yet." }));
     fresh.append(...messages.map(messageRow));
+    $("messages").replaceWith(fresh);
     for (const directive of pins) pinned.set(directive.id, { directive, text: directive.text });
     renderPinned();
     setUpComposer(group);

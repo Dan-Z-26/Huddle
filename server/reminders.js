@@ -1,5 +1,6 @@
 import { reminder } from "./agents/timeline.js";
 import { overdue } from "./core/directives.js";
+import { groupPeople } from "./routes/views.js";
 import { postAgentMessage } from "./store/workspace.js";
 
 const MAX_PER_RUN = 5;
@@ -23,8 +24,13 @@ export async function runReminders(store, nowIso, { slaMinutes = 120, generate }
     const group = store.groups.get(directive.groupId);
     const message = store.messages.get(directive.messageId);
     if (!group || !message) continue;
-    const pending = overdue(directive, nowIso, slaMinutes).pendingUserIds;
+    // Only people still in the group are reminded; someone removed can no longer see it.
+    const inGroup = new Set(groupPeople(store, group).map(({ id }) => id));
+    const pending = overdue(directive, nowIso, slaMinutes).pendingUserIds.filter((id) =>
+      inGroup.has(id),
+    );
     const names = pending.map((id) => store.users.get(id)?.name).filter(Boolean);
+    if (names.length === 0) continue;
     // Marked first, so a slow model call can't lead to the same reminder twice.
     directive.remindedAt = nowIso;
     try {

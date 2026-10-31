@@ -196,7 +196,14 @@
             <button type="button" id="rfq-get" class="button">
               Prepare checklist and questions
             </button>
-            <div id="rfq-result" class="rfq" tabindex="-1" hidden>
+            <div
+              id="rfq-result"
+              class="rfq"
+              tabindex="-1"
+              role="region"
+              aria-label="Checklist and questions"
+              hidden
+            >
               <p id="rfq-offline" class="offline" hidden>
                 The AI is busy right now, so these are the standard questions only.
               </p>
@@ -276,7 +283,7 @@
                 must-haves a quote meets, weighted by how important this category is to you. It
                 supports your decision; it doesn't make it.
               </p>
-              <div class="table-wrap">
+              <div class="table-wrap" tabindex="0" role="region" aria-label="Quote comparison">
                 <table class="compare-table">
                   <caption class="sr-only">
                     Confirmed quotes for this category, best score first
@@ -321,7 +328,10 @@
               rows="2"
               maxlength="4000"
               placeholder="Write a message. Type @huddle to ask the planner."
+              aria-describedby="composer-keys"
             ></textarea>
+            <p id="composer-status" class="muted" role="status"></p>
+            <p id="composer-keys" class="sr-only">Enter sends. Shift and Enter add a new line.</p>
             <div class="composer-row">
               <div class="attach">
                 <label for="composer-files">Attach files</label>
@@ -394,7 +404,7 @@
       </aside>
     </div>
 
-    <dialog id="pin-dialog" aria-labelledby="pin-title">
+    <dialog id="pin-dialog" aria-labelledby="pin-title" aria-describedby="pin-text">
       <form id="pin-form" method="dialog" class="confirm-form">
         <h2 id="pin-title" class="dialog-title">Pin as a directive</h2>
         <p id="pin-text" class="pin-quote"></p>
@@ -419,6 +429,7 @@
         <p class="muted">
           The manager and the AI members are in every group. Renaming keeps notices working.
         </p>
+        <p id="groups-status" class="muted" role="status"></p>
         <ul id="groups-admin" class="admin-list"></ul>
         <form id="group-new" class="admin-new">
           <h3>Add a group</h3>
@@ -438,7 +449,11 @@
       </div>
     </dialog>
 
-    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+    <dialog
+      id="confirm-dialog"
+      aria-labelledby="confirm-title"
+      aria-describedby="confirm-source confirm-warnings"
+    >
       <form id="confirm-form" method="dialog" class="confirm-form">
         <h2 id="confirm-title" class="dialog-title">Check this quote</h2>
         <p id="confirm-source" class="muted"></p>
@@ -475,8 +490,8 @@
             ><input id="confirm-setup" type="text" maxlength="200" />
           </div>
           <div class="field">
-            <label for="confirm-cancel">Cancellation terms</label
-            ><input id="confirm-cancel" type="text" maxlength="200" />
+            <label for="confirm-cancellation">Cancellation terms</label
+            ><input id="confirm-cancellation" type="text" maxlength="200" />
           </div>
           <div class="field">
             <label for="confirm-dietary">Dietary handling</label
@@ -486,7 +501,7 @@
         <fieldset id="confirm-musts" class="musts">
           <legend>Which of your must-haves does it meet?</legend>
         </fieldset>
-        <p id="confirm-error" class="field-error" role="alert"></p>
+        <p id="confirm-error" class="field-error" role="alert" tabindex="-1"></p>
         <div class="dialog-actions">
           <button type="button" id="confirm-cancel" class="button">Cancel</button>
           <button type="submit" class="button primary">Confirm these details</button>

@@ -3,6 +3,7 @@ import { canView } from "./core/permissions.js";
 const HEARTBEAT_MS = 25_000;
 const MAX_CLIENTS = 200;
 const MAX_PER_USER = 5;
+const MAX_BUFFERED_BYTES = 1024 * 1024;
 const GROUP_EVENTS = new Set([
   "message.created",
   "notice.created",
@@ -31,6 +32,12 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
 
   const write = (client, chunk) => {
     try {
+      // A client that isn't reading would make the server hold its events in memory.
+      if (client.res.writableLength > MAX_BUFFERED_BYTES) {
+        client.res.end();
+        clients.delete(client);
+        return;
+      }
       client.res.write(chunk);
     } catch {
       clients.delete(client);

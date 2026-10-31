@@ -105,6 +105,7 @@ async function load({ focusIntake = false } = {}) {
   });
 
   document.getElementById("event-title").textContent = event.name || template.label;
+  document.title = `${event.name || template.label} · Huddle`;
   document.getElementById("event-countdown").textContent = countdown(event.date);
   renderBrief(event, template, me.permissions.seeTotalBudget);
   // Rebuilt below once the groups are known; until then a directive can only open the first one.
@@ -248,5 +249,6 @@ function setUpNewEvent() {
   };
 }
 
+for (const list of document.querySelectorAll("ul, ol")) list.setAttribute("role", "list");
 setUpNewEvent();
 load().catch((err) => announce(err.message));

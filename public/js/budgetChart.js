@@ -4,12 +4,12 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // Google's accent colours, led by the app's pink. Every slice also carries its row number.
 const COLORS = [
   "#d81b60",
-  "#1a73e8",
-  "#e37400",
+  "#1967d2",
+  "#b45309",
   "#188038",
   "#a142f4",
   "#c5221f",
-  "#12858f",
+  "#0e7490",
   "#b06000",
 ];
 const SPARE = "#9aa0a6";

@@ -83,8 +83,15 @@ const MAX_MESSAGES_PER_GROUP = 300;
 export function addMessage(store, message) {
   store.messages.set(message.id, message);
   const inGroup = [...store.messages.values()].filter(({ groupId }) => groupId === message.groupId);
-  for (const old of inGroup.slice(0, Math.max(0, inGroup.length - MAX_MESSAGES_PER_GROUP)))
+  for (const old of inGroup.slice(0, Math.max(0, inGroup.length - MAX_MESSAGES_PER_GROUP))) {
     store.messages.delete(old.id);
+    // What was attached to a message that is gone, and any directive on it, goes too.
+    const files = (old.fileIds ?? []).map((id) => store.files.get(id)).filter(Boolean);
+    for (const file of files) store.files.delete(file.id);
+    if (files.length) store.discardFiles(files);
+    for (const [id, directive] of store.directives)
+      if (directive.messageId === old.id) store.directives.delete(id);
+  }
   const group = store.groups.get(message.groupId);
   if (group) {
     store.publish({

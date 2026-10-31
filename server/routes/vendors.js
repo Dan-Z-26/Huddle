@@ -7,7 +7,7 @@ import { scoreQuotes } from "../core/quoteScoring.js";
 import { canPost } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
 import { HttpError, ownEvent, requireBudget, requireUser, validate } from "../http.js";
-import { saveUpload } from "../store/files.js";
+import { assertRoom, saveUpload } from "../store/files.js";
 import { postAgentMessage } from "../store/workspace.js";
 import { MAX_FILE_BYTES } from "../validation/uploads.js";
 import * as schemas from "../validation/schemas.js";
@@ -24,6 +24,8 @@ import {
 const MAX_QUOTES_PER_EVENT = 30;
 const upload = multer({
   storage: multer.memoryStorage(),
+  // Browsers send file names as UTF-8; the default would read them as Latin-1.
+  defParamCharset: "utf8",
   limits: { fileSize: MAX_FILE_BYTES, files: 1, fields: 10, fieldSize: 20_000, parts: 12 },
 }).single("file");
 
@@ -91,6 +93,7 @@ export function vendorRoutes({ ai }) {
       if (req.file) {
         if (!group || !canPost(store.roleOf(req.user), group))
           throw HttpError(403, "FORBIDDEN", "You can't add files to this category's group.");
+        assertRoom(store, event.id, [req.file.size]);
         const record = await saveUpload(store, uploadsDir, {
           buffer: req.file.buffer,
           originalName: req.file.originalname,
@@ -110,24 +113,35 @@ export function vendorRoutes({ ai }) {
       const typed = body.vendorName || body.perGuestText || body.fixedText;
       if (!typed && !body.text?.trim() && !file)
         throw HttpError(400, "BAD_REQUEST", "Add the quote as text, a file or details.");
-      const read =
-        typed && !file
-          ? {
-              ...quoteFromExtracted(fromFields(body), {
-                categoryId: body.categoryId,
+      let read;
+      try {
+        read =
+          typed && !file
+            ? {
+                ...quoteFromExtracted(fromFields(body), {
+                  categoryId: body.categoryId,
+                  profile: event,
+                  fileId: null,
+                }),
+                rationale: "",
+                offline: false,
+              }
+            : await extractQuote({
                 profile: event,
-                fileId: null,
-              }),
-              rationale: "",
-              offline: false,
-            }
-          : await extractQuote({
-              profile: event,
-              categoryId: body.categoryId,
-              template,
-              text: body.text ?? "",
-              file,
-            });
+                categoryId: body.categoryId,
+                template,
+                text: body.text ?? "",
+                file,
+              });
+      } catch (err) {
+        // The file was saved before it was read; without a quote nothing refers to it.
+        if (file) {
+          const record = store.files.get(file.id);
+          store.files.delete(file.id);
+          if (record) store.discardFiles([record]);
+        }
+        throw err;
+      }
       const quote = read.quote ?? read.extractedQuote;
       // A person typed these themselves, so there is nothing to confirm.
       if (typed && !file && (quote.perGuestMinor || quote.fixedMinor)) quote.status = "confirmed";
@@ -194,6 +208,8 @@ export function vendorRoutes({ ai }) {
       const state = requireBudget(store, event);
       if (quote.status === "extracted")
         throw HttpError(400, "BAD_REQUEST", "Please confirm what was read from this quote first.");
+      if (quote.status === "accepted")
+        throw HttpError(400, "BAD_REQUEST", "This quote has already been accepted.");
       const template = getTemplate(event.eventType);
       const events = [{ type: "quote_accepted", quoteId: quote.id, confidence: 1 }];
       const withQuotes = { ...state, quotes: eventQuotes(store, event.id) };
@@ -207,7 +223,12 @@ export function vendorRoutes({ ai }) {
       });
       const changeId =
         described.consequences.rejected.length === 0
-          ? storePending(store, event, state, events)
+          ? storePending(store, event, state, events, {
+              quoteId: quote.id,
+              perGuestMinor: quote.perGuestMinor,
+              fixedMinor: quote.fixedMinor,
+              taxBps: quote.taxBps,
+            })
           : null;
       res.json({
         changeId,

@@ -1,11 +1,11 @@
 import { api } from "./api.js";
-import { clear, el, formatMoney } from "./dom.js";
+import { announce, clear, el, formatMoney } from "./dom.js";
 
 const $ = (id) => document.getElementById(id);
 const ANSWERS = [
   ["staffing", "confirm-staffing"],
   ["setupHours", "confirm-setup"],
-  ["cancellationTerms", "confirm-cancel"],
+  ["cancellationTerms", "confirm-cancellation"],
   ["dietary", "confirm-dietary"],
 ];
 
@@ -68,11 +68,12 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
       });
       dialog.close();
       await onConfirmed();
+      announce("Quote confirmed.");
+      $("vendors-title").focus();
     } catch (err) {
       const box = $("confirm-error");
       box.textContent = err.message;
-      $("confirm-per-guest").setAttribute("aria-describedby", "confirm-error");
-      $("confirm-per-guest").focus();
+      box.focus();
     }
   };
   dialog.showModal();

@@ -90,11 +90,20 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
  * @param {{id: string}} event The event.
  * @param {object} state The budget the change was worked out against.
  * @param {object[]} events The change events.
+ * @param {{quoteId: string, perGuestMinor: number, fixedMinor: number, taxBps: number} | null}
+ *   [quoteGuard] For accepting a quote: the prices the manager was shown. If the quote is edited
+ *   afterwards, applying is refused, so the manager only ever accepts what they reviewed.
  * @returns {string} The change id.
  */
-export function storePending(store, event, state, events) {
+export function storePending(store, event, state, events, quoteGuard = null) {
   const changeId = `c-${randomUUID().slice(0, 8)}`;
-  store.pendingChanges.set(changeId, { id: changeId, eventId: event.id, events, baseState: state });
+  store.pendingChanges.set(changeId, {
+    id: changeId,
+    eventId: event.id,
+    events,
+    baseState: state,
+    quoteGuard,
+  });
   const own = pendingOf(store, event.id);
   if (own.length > MAX_PENDING_PER_EVENT) store.pendingChanges.delete(own[0].id);
   return changeId;
@@ -161,6 +170,14 @@ export function budgetRoutes({ ai }) {
       const pending = store.pendingChanges.get(req.valid.params.changeId);
       if (!pending || pending.eventId !== event.id)
         throw HttpError(404, "NOT_FOUND", "That change is no longer available.");
+      const guard = pending.quoteGuard;
+      const quoteNow = guard && store.quotes.get(guard.quoteId);
+      if (
+        guard &&
+        (!quoteNow ||
+          ["perGuestMinor", "fixedMinor", "taxBps"].some((key) => quoteNow[key] !== guard[key]))
+      )
+        throw HttpError(400, "BAD_REQUEST", "The quote changed since. Please ask again.");
       if (pending.baseState !== before)
         throw HttpError(400, "BAD_REQUEST", "The budget has changed since. Please ask again.");
 

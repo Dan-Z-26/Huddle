@@ -10,6 +10,7 @@ import { messageRoutes } from "./routes/messages.js";
 import { sessionRoutes } from "./routes/session.js";
 import { streamRoutes } from "./routes/stream.js";
 import { createHub } from "./sse.js";
+import { removeUploads } from "./store/files.js";
 import { timelineRoutes } from "./routes/timeline.js";
 import { vendorRoutes } from "./routes/vendors.js";
 
@@ -30,6 +31,7 @@ export function createApp({ store, uploadsDir = DEFAULT_UPLOADS }) {
   const hub = createHub();
   app.locals.hub = hub;
   store.publish = (event) => hub.send(store, event);
+  store.discardFiles = (records) => removeUploads(uploadsDir, records);
   // A hop count, never `true`, which would let clients spoof the IP the rate limits key on.
   app.set("trust proxy", Number(process.env.TRUST_PROXY_HOPS) || 0);
 

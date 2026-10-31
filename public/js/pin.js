@@ -39,6 +39,8 @@ export function openPin(message, { group, members }, onPinned) {
     const button = $("pin-send");
     if (chosen.length === 0) {
       $("pin-error").textContent = "Choose at least one person.";
+      people.setAttribute("aria-describedby", "pin-error");
+      people.querySelector("input")?.focus();
       return;
     }
     button.disabled = true;
