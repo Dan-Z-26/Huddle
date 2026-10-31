@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { computeBudget } from "../../server/core/budgetEngine.js";
-import { buildBudgetState, missingProfileFields } from "../../server/core/profile.js";
+import { buildBudgetState, emptyProfile, missingProfileFields } from "../../server/core/profile.js";
 
 const ORDER = [
   "name",
@@ -248,5 +248,22 @@ describe("buildBudgetState: rankings and counts that could lose money", () => {
   it("refuses a fractional or text guest count", () => {
     assert.throws(() => build(["a"], 10.5), /confirmed guest count/);
     assert.throws(() => build(["a"], "10"), /confirmed guest count/);
+  });
+});
+
+describe("emptyProfile", () => {
+  it("starts with every field unanswered, in question order", () => {
+    assert.deepEqual(missingProfileFields(emptyProfile("wedding", "e1")), ORDER);
+  });
+
+  it("carries the event type and id, and does not share nested objects between profiles", () => {
+    const first = emptyProfile("wedding", "e1");
+    const second = emptyProfile("birthday", "e2");
+    first.constraints.dietary.push("veg");
+    first.priorities.push("venue");
+    assert.deepEqual([first.eventType, first.id], ["wedding", "e1"]);
+    assert.deepEqual(second.constraints.dietary, []);
+    assert.deepEqual(second.priorities, []);
+    assert.equal(second.budget.currency, "INR");
   });
 });

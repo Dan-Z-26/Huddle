@@ -1,5 +1,9 @@
 const BPS_DENOMINATOR = 10000;
 
+// Caps keep perGuest price x guests (and sums of a few drivers) inside Number.MAX_SAFE_INTEGER.
+export const MAX_MINOR = 5e10;
+export const MAX_GUESTS = 100000;
+
 /**
  * Formats integer minor units as display money, with en-IN grouping for INR.
  * shortcut: assumes a two-decimal currency, upgrade when a zero-decimal currency is supported.

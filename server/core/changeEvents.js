@@ -1,3 +1,4 @@
+import { MAX_GUESTS, MAX_MINOR } from "./money.js";
 import { quotePricesWithTax } from "./quoteScoring.js";
 
 const DRIVER_KINDS = ["perGuest", "fixed", "perUnit", "stepped"];
@@ -8,9 +9,6 @@ const applied = (state) => ({ state });
 const rejected = (reason) => ({ reason });
 // Rejection reasons echo hostile values, so show a short string or just the type.
 const show = (value) => (typeof value === "string" ? value.slice(0, 40) : typeof value);
-// Caps keep perGuest price x guests (and sums of a few drivers) inside Number.MAX_SAFE_INTEGER.
-const MAX_MINOR = 5e10;
-const MAX_GUESTS = 100000;
 const isAmount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= MAX_MINOR;
 const isCount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= MAX_GUESTS;
 const isLabel = (value) => typeof value === "string" && value.trim() !== "";

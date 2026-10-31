@@ -109,3 +109,31 @@ export function buildBudgetState(profile, template) {
     quotes: [],
   };
 }
+
+/**
+ * Creates the blank EventProfile that intake fills in.
+ * @param {string} eventType corporate_launch, wedding, birthday or community.
+ * @param {string} id Event id.
+ * @returns {object} A profile where every field is still unanswered.
+ */
+export function emptyProfile(eventType, id) {
+  return {
+    id,
+    eventType,
+    name: "",
+    purpose: "",
+    date: "",
+    city: "",
+    venueType: "",
+    guests: { min: 0, max: 0, suggested: 0, confirmed: null },
+    budget: { totalMinor: 0, currency: "INR" },
+    priorities: [],
+    attendeeExperience: "",
+    mustHaves: [],
+    absoluteMustHaveId: null,
+    constraints: { deadlines: [], dietary: [], accessibility: [], brand: [], venue: [] },
+    vendorNeeds: {},
+    skippedFields: [],
+    intakeStatus: "in_progress",
+  };
+}
