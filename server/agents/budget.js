@@ -73,7 +73,7 @@ function estimatesOf(events) {
 async function askModel(input, generate, nowIso) {
   const { profile, state, actor, template, text } = input;
   const facts = budgetFacts(state, profile, input.expenses);
-  const demo = async () => budgetOutput.parse(demoBudget({ text, template, facts }));
+  const demo = () => budgetOutput.parse(demoBudget({ text, template, facts }));
   const tools = buildTools({ actor, profile, template, state, nowIso }).filter(({ name }) =>
     BUDGET_TOOLS.has(name),
   );
@@ -95,9 +95,11 @@ async function askModel(input, generate, nowIso) {
     demo,
   });
   // A model can try a change with the tool, then leave it out of its final answer.
-  const tried = toolCalls.find(({ name }) => name === "compute_consequences")?.args?.proposals;
-  const dropped = data.proposals.length === 0 && !data.answer && Array.isArray(tried);
-  return { data: dropped ? { ...data, proposals: tried } : data, offline };
+  const tried = budgetOutput.shape.proposals.safeParse(
+    toolCalls.find(({ name }) => name === "compute_consequences")?.args?.proposals,
+  );
+  const dropped = data.proposals.length === 0 && !data.answer && tried.success;
+  return { data: dropped ? { ...data, proposals: tried.data } : data, offline };
 }
 
 const refusal = {

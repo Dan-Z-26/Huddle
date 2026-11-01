@@ -65,3 +65,17 @@ export const FIELD_META = {
 };
 
 export const FIELD_ORDER = Object.keys(FIELD_META);
+
+/** The first question, before any field is asked. */
+export const OPENING = {
+  title: "Your event",
+  question: "What's this event about?",
+  hint: "A sentence is plenty.",
+};
+/** A hint for that first question, by event type. */
+export const EXAMPLES = {
+  corporate_launch: "A launch for our new headphones, for partners and press",
+  wedding: "Anu and Rahul's wedding, with both families together",
+  birthday: "A surprise 60th birthday for my father",
+  community: "A neighbourhood food festival to raise funds for the school",
+};

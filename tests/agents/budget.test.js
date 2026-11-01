@@ -322,6 +322,17 @@ describe("interpretChange: a proposal only tried with the tool", () => {
     const result = await ask("what if 50 more people come", {}, { generate });
     assert.equal(result.changeEvents[0].delta, 50);
   });
+
+  it("validates it like any other model output", async () => {
+    for (const proposals of [[{ type: "guest_count", delta: 50 }], [{ type: "nope" }], "x"]) {
+      const generate = async () => ({
+        data: { proposals: [], explanation: "", rationale: "ok" },
+        toolCalls: [{ name: "compute_consequences", args: { proposals } }],
+      });
+      const result = await ask("what if 50 more people come", {}, { generate });
+      assert.deepEqual(result.changeEvents, []);
+    }
+  });
 });
 
 describe("interpretChange: insight on a change", () => {

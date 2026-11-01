@@ -33,6 +33,33 @@ function viewFor(store, event, role) {
   };
 }
 
+// Whether this person may spend from this place, in code, whatever the page offered them.
+function refuseExpenseFrom({ role, state, categoryId, fromBuffer }) {
+  if (fromBuffer && !canSeeBudget(role, "total"))
+    throw HttpError(403, "FORBIDDEN", "Only the event manager can use the buffer.");
+  if (!fromBuffer && !categoryId) throw HttpError(400, "BAD_REQUEST", "Please choose a category.");
+  if (categoryId && !state.categories.some(({ id }) => id === categoryId))
+    throw HttpError(400, "BAD_REQUEST", "Unknown category.");
+  if (categoryId && !canSeeBudget(role, { categoryId }))
+    throw HttpError(403, "FORBIDDEN", "That category belongs to someone else.");
+}
+
+function readExpenseAmount(amount, state, fromBuffer) {
+  const parsed = parseMoneyField(amount, state.currency);
+  if (!parsed || parsed.minor <= 0)
+    throw HttpError(400, "BAD_REQUEST", "I couldn't read that amount.");
+  if (parsed.currency && parsed.currency !== state.currency)
+    throw HttpError(400, "BAD_REQUEST", `Please give the amount in ${state.currency}.`);
+  const { availableMinor } = contingencyOf(state);
+  if (fromBuffer && parsed.minor > availableMinor)
+    throw HttpError(
+      400,
+      "BAD_REQUEST",
+      `The buffer has only ${wholeMoney(availableMinor, state.currency)} left.`,
+    );
+  return parsed.minor;
+}
+
 /** Expense tracking and the contingency buffer. Amounts are parsed here, never taken from a client as numbers. */
 export function expenseRoutes({ ai }) {
   const router = Router();
@@ -55,33 +82,15 @@ export function expenseRoutes({ ai }) {
       const state = requireBudget(store, event);
       const role = store.roleOf(req.user);
       const { description, amount, categoryId, fromBuffer = false } = req.valid.body;
-      if (fromBuffer && !canSeeBudget(role, "total"))
-        throw HttpError(403, "FORBIDDEN", "Only the event manager can use the buffer.");
-      if (!fromBuffer && !categoryId)
-        throw HttpError(400, "BAD_REQUEST", "Please choose a category.");
-      if (categoryId && !state.categories.some(({ id }) => id === categoryId))
-        throw HttpError(400, "BAD_REQUEST", "Unknown category.");
-      if (categoryId && !canSeeBudget(role, { categoryId }))
-        throw HttpError(403, "FORBIDDEN", "That category belongs to someone else.");
-      const parsed = parseMoneyField(amount, state.currency);
-      if (!parsed || parsed.minor <= 0)
-        throw HttpError(400, "BAD_REQUEST", "I couldn't read that amount.");
-      if (parsed.currency && parsed.currency !== state.currency)
-        throw HttpError(400, "BAD_REQUEST", `Please give the amount in ${state.currency}.`);
-      const { availableMinor } = contingencyOf(state);
-      if (fromBuffer && parsed.minor > availableMinor)
-        throw HttpError(
-          400,
-          "BAD_REQUEST",
-          `The buffer has only ${wholeMoney(availableMinor, state.currency)} left.`,
-        );
+      refuseExpenseFrom({ role, state, categoryId, fromBuffer });
+      const amountMinor = readExpenseAmount(amount, state, fromBuffer);
       const expense = logExpense({
         store,
         event,
         user: req.user,
         fields: {
           description,
-          amountMinor: parsed.minor,
+          amountMinor,
           categoryId: categoryId ?? null,
           fromBuffer,
         },

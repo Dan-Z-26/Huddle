@@ -1,6 +1,7 @@
 import { mentionsMoney } from "../core/amount.js";
 import { postSpoken } from "./agentPost.js";
 import { categoryGroup, eventQuotes } from "./vendorSupport.js";
+import { groupPeople } from "../views.js";
 
 /**
  * Tells the category's room, and so the event manager, that a quote has been added and is ready to
@@ -12,7 +13,12 @@ import { categoryGroup, eventQuotes } from "./vendorSupport.js";
 export function announceQuote({ store, event, template, quote, user }) {
   store.publish({ type: "quotes.updated", eventId: event.id });
   store.publish({ type: "attention.updated", eventId: event.id });
-  const room = categoryGroup(store, event, template, quote.categoryId);
+  const own = categoryGroup(store, event, template, quote.categoryId);
+  if (!own) return;
+  // A booked vendor reads their category's room, and must not learn a rival's name.
+  const room = groupPeople(store, own).some(({ kind }) => kind === "vendor")
+    ? store.groups.get(`g-${event.id}-core-team`)
+    : own;
   if (!room) return;
   const category = template.categories.find(({ id }) => id === quote.categoryId);
   const vendor = mentionsMoney(quote.vendorName) ? "a vendor" : quote.vendorName;

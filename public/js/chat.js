@@ -12,6 +12,7 @@ import {
 } from "./dom.js";
 import { isCurrent, generation } from "./session.js";
 import { setUpComposer } from "./composer.js";
+import { directiveCard } from "./directiveCard.js";
 import { openPin } from "./pin.js";
 
 const $ = (id) => document.getElementById(id);
@@ -21,6 +22,7 @@ const ABOUT = {
   category: "A working room for the people who own this area.",
 };
 const BADGE = { agent: "AI", system: "Automatic notice" };
+const ROW_KIND = { agent: " ai", system: " system" };
 const SAME_BREATH_MS = 5 * 60_000;
 
 // The group on screen, and what is drawn for it. Live events update these in place.
@@ -31,49 +33,7 @@ let last = null;
 
 const nameOf = (id) => current?.members.find((member) => member.id === id)?.name ?? "Someone";
 
-function directiveCard(directive, where) {
-  const { me, isManager } = current;
-  const status = directive.status;
-  const mine = directive.addressedUserIds.includes(me.id);
-  const acked = directive.acks.some(({ userId }) => userId === me.id);
-  const card = el(
-    "div",
-    { class: "directive" },
-    el("strong", { text: "Directive" }),
-    el("span", {
-      class: "directive-status",
-      tabindex: "-1",
-      "data-focus-after": `ack:${directive.id}:${where}`,
-      text: status.label,
-    }),
-  );
-  if (isManager && status.pending.length)
-    card.append(
-      el("span", { class: "muted", text: `Waiting for ${status.pending.map(nameOf).join(", ")}` }),
-    );
-  if (mine && !acked)
-    card.append(
-      el("button", {
-        type: "button",
-        class: "button primary small",
-        text: "Got it",
-        "aria-label": `Got it: ${directive.text ?? "this directive"}`.slice(0, 120),
-        "data-focus-key": `ack:${directive.id}:${where}`,
-        onclick: () => acknowledge(directive.id),
-      }),
-    );
-  if (mine && acked) card.append(el("span", { class: "tag", text: "You've acknowledged this" }));
-  return card;
-}
-
-async function acknowledge(id) {
-  try {
-    await api.ack(id);
-    announce("Acknowledged. Thank you.");
-  } catch (err) {
-    announceError(err.message);
-  }
-}
+const cardFor = (directive, where) => directiveCard(directive, where, { ...current, nameOf });
 
 // A follow-up from the same person, moments later, drops the repeated name and avatar.
 function continues(message) {
@@ -109,33 +69,32 @@ function pinActions(message) {
   );
 }
 
-function messageRow(message, cont = false) {
+function attachmentList(files) {
+  return el(
+    "ul",
+    { class: "attachments", "aria-label": "Attachments" },
+    ...files.map((file) =>
+      el(
+        "li",
+        {},
+        el("a", {
+          href: `/api/files/${encodeURIComponent(file.id)}`,
+          download: "",
+          text: `${file.name} (${formatSize(file.size)})`,
+        }),
+      ),
+    ),
+  );
+}
+
+function messageBody(message, name) {
   const badge = BADGE[message.authorKind];
-  const name = current.members.find((member) => member.id === message.authorId)?.name ?? "Huddle";
   const byline = el("div", { class: "byline" }, el("strong", { text: name }));
   if (badge) byline.append(el("span", { class: "ai-badge", text: badge }));
   byline.append(el("time", { datetime: message.createdAt, text: formatTime(message.createdAt) }));
   const body = [byline, el("p", { class: "message-text", text: message.text })];
-  if (message.files?.length) {
-    body.push(
-      el(
-        "ul",
-        { class: "attachments", "aria-label": "Attachments" },
-        ...message.files.map((file) =>
-          el(
-            "li",
-            {},
-            el("a", {
-              href: `/api/files/${encodeURIComponent(file.id)}`,
-              download: "",
-              text: `${file.name} (${formatSize(file.size)})`,
-            }),
-          ),
-        ),
-      ),
-    );
-  }
-  if (message.directive) body.push(directiveCard(message.directive, `row:${message.id}`));
+  if (message.files?.length) body.push(attachmentList(message.files));
+  if (message.directive) body.push(cardFor(message.directive, `row:${message.id}`));
   else if (current.isManager && message.authorKind === "human") body.push(pinActions(message));
   if (message.rationale)
     body.push(
@@ -146,14 +105,19 @@ function messageRow(message, cont = false) {
         el("p", { text: message.rationale }),
       ),
     );
+  return body;
+}
+
+function messageRow(message, cont = false) {
+  const name = current.members.find((member) => member.id === message.authorId)?.name ?? "Huddle";
   const isAi = message.authorKind === "agent";
-  const kind = message.authorKind === "system" ? " system" : isAi ? " ai" : "";
+  const kind = ROW_KIND[message.authorKind] ?? "";
   const mine = message.authorId === current.me.id ? " mine" : "";
   const row = el(
     "article",
     { class: `message${kind}${mine}${cont ? " is-cont" : ""}` },
     el("span", { class: "avatar", "aria-hidden": "true", text: isAi ? "✦" : initials(name) }),
-    el("div", { class: "message-body" }, ...body),
+    el("div", { class: "message-body" }, ...messageBody(message, name)),
   );
   rows.set(message.id, { row, message, cont });
   return row;
@@ -176,7 +140,7 @@ function drawPinned() {
   clear(list);
   $("pinned").hidden = pinned.size === 0;
   for (const { directive, text } of pinned.values()) {
-    const card = directiveCard({ ...directive, text }, `pinned:${directive.id}`);
+    const card = cardFor({ ...directive, text }, `pinned:${directive.id}`);
     card.prepend(
       el("span", {
         class: "directive-text",
@@ -213,12 +177,17 @@ export function updateLiveMessage(message) {
 
 // Only the card changes, so an acknowledgement isn't announced as a whole new message.
 function placeDirective({ row, message }, directive) {
-  const card = directiveCard(directive, `row:${message.id}`);
+  const card = cardFor(directive, `row:${message.id}`);
   const old = row.querySelector(".directive");
-  if (old) return old.replaceWith(card);
+  if (old) {
+    old.replaceWith(card);
+    return;
+  }
   const body = row.lastElementChild;
   body.querySelector(".message-actions")?.remove();
-  body.querySelector(".why")?.before(card) ?? body.append(card);
+  const why = body.querySelector(".why");
+  if (why) why.before(card);
+  else body.append(card);
 }
 
 /** Updates a directive's card and the pinned list as people acknowledge it. */

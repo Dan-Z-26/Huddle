@@ -9,6 +9,7 @@ import {
 } from "../llm/index.js";
 import { groundedOr, isGrounded } from "./grounded.js";
 import { ideasOutput } from "./schemas.js";
+import { categoryName } from "../core/templates.js";
 
 const MAX_IDEAS = 5;
 const SYSTEM = agentPrompt({
@@ -36,7 +37,7 @@ const SYSTEM = agentPrompt({
 function offlineIdeas(profile, template) {
   const feeling = profile.attendeeExperience || "welcome";
   return profile.priorities.slice(0, 3).map((categoryId, index) => {
-    const name = template.categories.find(({ id }) => id === categoryId).name;
+    const name = categoryName(template, categoryId);
     const must = profile.mustHaves.find((item) => item.categoryId === categoryId);
     const reason = `You ranked ${name} as your #${index + 1} priority and want guests to feel: ${feeling.slice(0, 120)}.`;
     return {
@@ -64,7 +65,7 @@ export async function generateIdeas(
   { profile, state, template, files = [] },
   { generate = realGenerate } = {},
 ) {
-  const demo = async () => ({
+  const demo = () => ({
     ideas: offlineIdeas(profile, template),
     rationale: "These follow your own priorities and what you want guests to feel.",
   });

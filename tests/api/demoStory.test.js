@@ -6,14 +6,11 @@ import { runDailyDigests } from "../../server/reminders.js";
 import { createStore } from "../../server/store/index.js";
 import { DEMO_EVENT_ID as ID, seedDemo } from "../../server/store/seed.js";
 import { addMessage, createEvent } from "../../server/store/workspace.js";
-import { addEvent, serve, sessionCookie } from "./helpers.js";
+import { addEvent, serve, sessionCookie, settle } from "./helpers.js";
 
 const NOW = new Date().toISOString();
 const PAST = new Date(Date.now() - 2 * 86400000).toISOString();
 const MANAGER = `user-manager@${ID}`;
-const settle = async (store) => {
-  while (store.background.size) await Promise.all([...store.background]);
-};
 
 function demoStore() {
   const store = createStore();

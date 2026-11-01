@@ -125,10 +125,31 @@ const MONEY_WORDS =
   /[₹$€£]|\b(?:rs\.?|inr|usd|eur|gbp|rupees?|dollars?|euros?|pounds?|lakhs?|lacs?|crores?|thousand|million|grand)\b/i;
 // Four digits are money unless they look like a year (1900 to 2099).
 const BIG_NUMBER = /\d{5,}|\d{1,3}(?:,\d{2,3})+|\b(?!(?:19|20)\d\d\b)\d{4}\b|\d\s*\/-/;
-const SHORT_AMOUNT = /\b\d+(?:\.\d+)?\s*(?:k|m|mn|cr|l|lac)\b/i;
-const RATE = /\b\d[\d,.]*\s*(?:\/|per|a)\s*(?:plate|head|guest|person|pax|hour|day)\b/i;
+// A currency run straight into its figure, as in "Rs850", has no word boundary between them.
+const CODE_THEN_FIGURE = /\b(?:rs|inr|usd|eur|gbp)\.?\s*\d/i;
+// \b doesn't work on Devanagari, and हज़ार can be typed either way.
+const HINDI_MONEY = /रुपय|रुपए|लाख|करोड|हजार|हज\u093cार|ह\u095bार/;
+const SHORT_AMOUNT = /\b\d+(?:\.\d+)?\s*(?:k|m|mn|cr|l|lac|lk|lks|lkh)\b/i;
+// Bounded, so a long run of digits and commas can't make this scan quadratic.
+const RATE =
+  /\b\d[\d,.]{0,20}\s*(?:\/|per|a)\s*(?:plate|cover|seat|table|kit|unit|item|head|guest|person|pax|hour|day|night)\b/i;
+const EACH = /\b\d[\d,.]{0,20}\s*(?:each|apiece)\b/i;
+// Straight after the verb: "paid [amount] for 200 chairs" has already had its amount taken out.
+const VERB_THEN_FIGURE = /\b(?:quoted|charged|charges|paid)\s+\d/i;
 const NEAR_MONEY_WORD =
   /\b(?:budget|cost|costs|spend|spending|price|fee|cap|capped)\b[^.]{0,30}\d/i;
+
+const MONEY_PATTERNS = [
+  MONEY_WORDS,
+  CODE_THEN_FIGURE,
+  HINDI_MONEY,
+  BIG_NUMBER,
+  SHORT_AMOUNT,
+  RATE,
+  EACH,
+  VERB_THEN_FIGURE,
+  NEAR_MONEY_WORD,
+];
 
 /**
  * Says whether free text seems to state an amount of money, so it can be kept from people who may
@@ -138,7 +159,6 @@ const NEAR_MONEY_WORD =
  * @returns {boolean} True when the text looks like it holds an amount.
  */
 export function mentionsMoney(text) {
-  return [MONEY_WORDS, BIG_NUMBER, SHORT_AMOUNT, RATE, NEAR_MONEY_WORD].some((pattern) =>
-    pattern.test(String(text ?? "").slice(0, MAX_MONEY_SCAN)),
-  );
+  const read = String(text ?? "").slice(0, MAX_MONEY_SCAN);
+  return MONEY_PATTERNS.some((pattern) => pattern.test(read));
 }

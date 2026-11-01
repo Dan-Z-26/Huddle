@@ -10,6 +10,7 @@ import {
 } from "../llm/index.js";
 import { groundedOr } from "./grounded.js";
 import { insightOutput } from "./schemas.js";
+import { categoryName } from "../core/templates.js";
 
 // Dividing a budget per guest leaves a little over; that isn't money anyone can plan with.
 const PETTY_MINOR = 100000;
@@ -38,6 +39,13 @@ const SYSTEM = agentPrompt({
   ],
 });
 
+function positionLine(remainingMinor, money) {
+  if (remainingMinor < 0) return `Over budget by ${money(-remainingMinor)}`;
+  return remainingMinor < PETTY_MINOR
+    ? "Fully allocated"
+    : `Not yet committed: ${money(remainingMinor)}`;
+}
+
 /**
  * Lists the budget as plain facts with exact figures from code. The model answers from this, and
  * anything it says is checked against it.
@@ -51,12 +59,7 @@ export function budgetFacts(state, profile, expenses = []) {
   const spending = expenseSummary(state, expenses);
   const money = (minor) => wholeMoney(minor, state.currency);
   const perGuest = state.guestCount ? Math.round(budget.committedMinor / state.guestCount) : 0;
-  const position =
-    budget.remainingMinor < 0
-      ? `Over budget by ${money(-budget.remainingMinor)}`
-      : budget.remainingMinor < PETTY_MINOR
-        ? "Fully allocated"
-        : `Not yet committed: ${money(budget.remainingMinor)}`;
+  const position = positionLine(budget.remainingMinor, money);
   const lines = [
     `Guests: ${state.guestCount}`,
     `Total budget: ${money(budget.totalMinor)}`,
@@ -126,7 +129,7 @@ function keyPoints({ state, after, consequences, nameOf, money, events }) {
 export async function explainChange(input, { generate = realGenerate } = {}) {
   const { state, after, consequences, consequenceText, profile, template, text } = input;
   const money = (minor) => wholeMoney(minor, state.currency);
-  const nameOf = (id) => template.categories.find((item) => item.id === id)?.name ?? id;
+  const nameOf = (id) => categoryName(template, id);
   const points = keyPoints({
     state,
     after,
@@ -161,7 +164,7 @@ export async function explainChange(input, { generate = realGenerate } = {}) {
     system: SYSTEM,
     messages: [{ role: "user", content }],
     schema: insightOutput,
-    demo: async () => ({ headline: plainHeadline, insight: "", optionNotes: [], rationale: "" }),
+    demo: () => ({ headline: plainHeadline, insight: "", optionNotes: [], rationale: "" }),
   });
   const allowed = `${facts} ${text} ${JSON.stringify(profile.mustHaves)}`;
   const optionNotes = {};

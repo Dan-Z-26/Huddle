@@ -1,4 +1,4 @@
-import { colorOf } from "./budgetChart.js";
+import { colorOf } from "./budgetSlices.js";
 import { el } from "./dom.js";
 
 function cutTags(cut, mustHaveText) {

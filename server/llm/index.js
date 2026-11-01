@@ -205,18 +205,18 @@ export async function generate(request) {
 }
 
 /**
- * Calls `generate`, and when the model fails (an LlmError) answers from the agent's own offline
+ * Calls the model, and when it fails (an LlmError) answers from the agent's own offline
  * heuristic instead, so the app keeps working. Other errors still throw.
- * @param {Function} generate The model call, `generate` from this module or a test double.
+ * @param {Function} call The model call, `generate` from this module or a test double.
  * @param {object} request The same request `generate` takes; it must include `schema` and `demo`.
  * @returns {Promise<{data: *, fellBack: boolean, offline: boolean, toolCalls: object[]}>} The
  *   validated answer; the tools it called; whether it
  *   came from the offline heuristic after a model failure (callers should not cache such an answer);
  *   and whether no model answered at all, either way, so the UI can say so.
  */
-export async function generateOrDemo(generate, request) {
+export async function generateOrDemo(call, request) {
   try {
-    const { data, demo = false, toolCalls = [] } = await generate(request);
+    const { data, demo = false, toolCalls = [] } = await call(request);
     return { data, fellBack: false, offline: demo, toolCalls };
   } catch (err) {
     if (err.name !== "LlmError") throw err;

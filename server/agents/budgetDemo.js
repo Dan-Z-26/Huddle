@@ -69,7 +69,9 @@ function adjustProposal(text, template) {
  *   template, and the budget as facts, which answer a plain question.
  * @returns {object} An object shaped like the budget output schema.
  */
-export function demoBudget({ text, template, facts = [] }) {
+export function demoBudget({ text: asked, template, facts = [] }) {
+  // Long runs of spaces would make the patterns above take minutes to give up.
+  const text = asked.replace(/\s+/g, " ");
   const found =
     shiftProposal(text, template) ??
     adjustProposal(text, template) ??

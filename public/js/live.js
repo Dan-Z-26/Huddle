@@ -73,7 +73,7 @@ export function startLive(ctx) {
       "message.updated": ({ message }) => updateLiveMessage(message),
       "directive.updated": ({ directive }) => updateLiveDirective(directive),
       "budget.updated": refetchPlan,
-      "quotes.updated": once(async () => latest.onQuotes()),
+      "quotes.updated": once(() => latest.onQuotes()),
       "timeline.updated": refetchTimeline,
       "attention.updated": refetchAttention,
       "groups.updated": () => latest.onGroupsChanged(),

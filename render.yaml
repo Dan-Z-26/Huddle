@@ -9,6 +9,9 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22
+      # Makes the session cookie HTTPS-only.
+      - key: NODE_ENV
+        value: production
       - key: TRUST_PROXY_HOPS
         value: 1
       # First-time visitors land on "Start a new event" instead of the demo event.

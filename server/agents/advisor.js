@@ -89,7 +89,7 @@ export async function advise(input, { generate = realGenerate } = {}) {
     system: SYSTEM,
     messages: [{ role: "user", content }],
     schema: adviceOutput,
-    demo: async () => ({ items: [], summary: "", rationale: "" }),
+    demo: () => ({ items: [], summary: "", rationale: "" }),
   });
   const allowed = `${facts} ${JSON.stringify(profile.mustHaves)} ${profile.purpose} ${profile.attendeeExperience}`;
   const seen = new Set();

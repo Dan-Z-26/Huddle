@@ -35,6 +35,27 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
   const nameOf = (id) => currentBudget().categories.find((item) => item.id === id)?.name ?? id;
   const mustHaveText = (id) => event.mustHaves.find((item) => item.id === id)?.text ?? id;
 
+  function drawFigures(card, { plan, open, gap, buffer, options }) {
+    const { id } = card.dataset;
+    const figures = card.querySelector(".option-figures");
+    if (id === "buffer") {
+      figures.textContent = `Uses ${money(Math.min(gap, buffer))} of the ${money(buffer)} left. No category changes.`;
+      return;
+    }
+    if (id === "raise") {
+      figures.textContent = `Adds ${money(raise ? plan.left : open)} to the total. No category changes.`;
+      return;
+    }
+    const cost = optionCost(options.find(({ categoryId }) => categoryId === id));
+    const take = plan.taken.get(id) ?? Math.min(open, cost);
+    figures.textContent = take
+      ? `${money(cost)} to ${money(cost - take)}, ${Math.round((take / cost) * 100)}% less`
+      : `Stays at ${money(cost)}. The gap is already covered.`;
+    card
+      .querySelector(".option-bar span")
+      .style.setProperty("--fill", `${Math.round(((cost - take) / cost) * 100)}%`);
+  }
+
   function updateChoice() {
     const { options, shortfall, bufferAvailableMinor: buffer } = result.consequences;
     const gap = shortfall.highMinor;
@@ -52,25 +73,7 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
       const on = id in special ? special[id] : chosen.includes(id);
       card.setAttribute("aria-pressed", String(on));
       card.querySelector(".option-state").textContent = on ? "Chosen" : "Choose";
-      if (id === "buffer") {
-        card.querySelector(".option-figures").textContent =
-          `Uses ${money(Math.min(gap, buffer))} of the ${money(buffer)} left. No category changes.`;
-        continue;
-      }
-      if (id === "raise") {
-        card.querySelector(".option-figures").textContent =
-          `Adds ${money(raise ? plan.left : open)} to the total. No category changes.`;
-        continue;
-      }
-      const option = options.find(({ categoryId }) => categoryId === id);
-      const cost = optionCost(option);
-      const take = plan.taken.get(id) ?? Math.min(open, cost);
-      card.querySelector(".option-figures").textContent = take
-        ? `${money(cost)} to ${money(cost - take)}, ${Math.round((take / cost) * 100)}% less`
-        : `Stays at ${money(cost)}. The gap is already covered.`;
-      card
-        .querySelector(".option-bar span")
-        .style.setProperty("--fill", `${Math.round(((cost - take) / cost) * 100)}%`);
+      drawFigures(card, { plan, open, gap, buffer, options });
     }
     const names = chosen.map(nameOf);
     const parts = [];
@@ -83,13 +86,7 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
     renderBudget(previewOf(result, currentBudget(), plan, raise), { preview: true });
   }
 
-  function show(text, data) {
-    result = data;
-    changeId = data.changeId;
-    chosen = [];
-    raise = false;
-    useBuffer = false;
-    $("consequences").classList.remove("is-loading");
+  function drawAnswer(text, data) {
     $("result-request").textContent = `You asked: ${text}`;
     $("result-title").textContent =
       data.answer || data.clarifyingQuestion || data.insight?.headline || "";
@@ -101,54 +98,56 @@ export function setUpWhatIf(event, { currentBudget, onApplied }) {
     if (data.consequences && data.clarifyingQuestion)
       points.append(el("li", { text: data.clarifyingQuestion }));
     $("result-estimate").hidden = !data.estimates?.length;
-    const gap = data.consequences?.shortfall.highMinor ?? 0;
-    $("gap").hidden = !(gap > 0 && changeId);
+  }
+
+  function drawOptions(data) {
     const list = $("options");
     clear(list);
-    if (gap > 0 && changeId) {
-      if (data.consequences.bufferAvailableMinor > 0)
-        list.append(
-          el(
-            "li",
-            {},
-            plainCard("buffer", "Use the contingency buffer", () => {
-              useBuffer = !useBuffer;
-              updateChoice();
-            }),
-          ),
-        );
-      for (const option of data.consequences.options) {
-        const toggle = () => {
-          const { categoryId } = option;
-          chosen = chosen.includes(categoryId)
-            ? chosen.filter((id) => id !== categoryId)
-            : [...chosen, categoryId];
+    const item = (card) => list.append(el("li", {}, card));
+    if (data.consequences.bufferAvailableMinor > 0)
+      item(
+        plainCard("buffer", "Use the contingency buffer", () => {
+          useBuffer = !useBuffer;
           updateChoice();
-        };
-        const context = {
-          nameOf,
-          mustHaveText,
-          note: result.insight?.optionNotes?.[option.categoryId],
-        };
-        list.append(el("li", {}, optionCard(option, context, toggle)));
-      }
-      list.append(
-        el(
-          "li",
-          {},
-          plainCard("raise", "Raise the budget", () => {
-            raise = !raise;
-            updateChoice();
-          }),
-        ),
+        }),
       );
+    for (const option of data.consequences.options) {
+      const { categoryId } = option;
+      const toggle = () => {
+        chosen = chosen.includes(categoryId)
+          ? chosen.filter((id) => id !== categoryId)
+          : [...chosen, categoryId];
+        updateChoice();
+      };
+      const note = data.insight?.optionNotes?.[categoryId];
+      item(optionCard(option, { nameOf, mustHaveText, note }, toggle));
     }
+    item(
+      plainCard("raise", "Raise the budget", () => {
+        raise = !raise;
+        updateChoice();
+      }),
+    );
+  }
+
+  function show(text, data) {
+    result = data;
+    changeId = data.changeId;
+    chosen = [];
+    raise = false;
+    useBuffer = false;
+    $("consequences").classList.remove("is-loading");
+    drawAnswer(text, data);
+    const hasGap = (data.consequences?.shortfall.highMinor ?? 0) > 0 && Boolean(changeId);
+    $("gap").hidden = !hasGap;
+    if (hasGap) drawOptions(data);
+    else clear($("options"));
     $("result-apply").hidden = !changeId;
     $("result-discard").textContent = changeId ? "Discard" : "Close";
     $("result-apply").textContent = "Apply this change";
     $("consequences").hidden = false;
     $("consequences").focus();
-    if (gap > 0 && changeId) updateChoice();
+    if (hasGap) updateChoice();
     else if (changeId) {
       const preview = { taken: new Map(), left: 0 };
       renderBudget(previewOf(data, currentBudget(), preview, false), { preview: true });

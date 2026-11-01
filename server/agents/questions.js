@@ -1,5 +1,5 @@
-const names = (template, ids) =>
-  ids.map((id) => template.categories.find((category) => category.id === id)?.name ?? id);
+import { categoryName } from "../core/templates.js";
+const names = (template, ids) => ids.map((id) => categoryName(template, id));
 
 const QUESTIONS = {
   name: (_p, t) => `What should we call this ${t.label.toLowerCase()}?`,

@@ -25,14 +25,28 @@ Node 20.19 or newer.
 npm install
 npm start        # http://localhost:3000
 npm test         # runs offline, no key needed
-npm run lint
+npm run test:coverage  # fails below 95% of lines
+npm run lint     # also enforces limits on complexity and file size
+npm run format:check
 ```
+
+CI runs all of these and `npm audit` on every push.
 
 **No API key is needed.** Without one, every agent falls back to plain rules and the sample quotes have stored readings, so the whole demo works. To turn on real AI, copy `.env.example` to `.env` and add a `GEMINI_API_KEY`.
 
 ## Deploy
 
 [render.yaml](render.yaml) deploys it to Render as one Node web service: push to GitHub, choose New > Blueprint, pick the repo, and paste `GEMINI_API_KEY` in the dashboard (the key is never in the repo). `START_ON=new` is set there, so a first-time visitor lands on "Start a new event"; cancel the chooser to reach the demo event. Run exactly one instance: the store, the live updates (SSE) and uploaded files all live in that process, so a restart resets the demo event, and the free plan sleeps after idle time and wakes on the next visit.
+
+## Testing
+
+Every test runs offline with `node:test`, with no extra tools.
+
+- **Pure logic** (`tests/core/`): money, consequences, timelines, scoring and permissions are plain functions with no I/O, tested directly.
+- **Agents** (`tests/agents/`): each takes its model call as a parameter, so tests pass a fake one, including tool calls and bad output.
+- **Providers** (`tests/llm/`): the real Gemini and Anthropic SDKs run with only the network faked.
+- **Routes** (`tests/api/`): the real app on a random port, including who may see what.
+- **Browser code** (`tests/ui/`): pure modules are tested directly, and every element id and import the scripts use is checked. Drawing the page in a real browser is checked by hand.
 
 ## Try the demo (5 minutes)
 
@@ -94,11 +108,11 @@ These live in `server/agents/` and run inside the app.
 
 ## Security
 
-- Sign-in is a server-side session; the httpOnly, SameSite cookie holds only a random id. The role is worked out on the server on every route.
+- Sign-in is a server-side session; the httpOnly, SameSite=Lax cookie holds only a random id and is HTTPS-only in production, and writes a browser marks as cross-site are refused. The role is worked out on the server on every route.
 - Budget visibility: the manager sees everything, a lead sees their own categories, a vendor sees none.
 - Everything sent to a vendor passes redaction, including live updates. Briefs never contain money.
 - Uploads are checked by their bytes, limited to PDF, PNG, JPG and WEBP up to 5 MB, stored under random names outside `public/`, and downloaded only through a route that checks membership.
-- User and document text is treated as untrusted data in prompts. Helmet with a strict Content-Security-Policy, rate limits on AI routes, and text rendered with `textContent` only.
+- User and document text is treated as untrusted data in prompts. Helmet with a strict Content-Security-Policy, a rate limit on every API route with tighter ones on AI routes, and text rendered with `textContent` only.
 
 ## Assumptions
 

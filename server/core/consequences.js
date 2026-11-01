@@ -100,6 +100,12 @@ export function computeConsequences(state, events, profile) {
   };
 }
 
+function costOfCut(options, categoryId) {
+  const cut = options.find((option) => option.categoryId === categoryId);
+  const chosen = cut?.atHigh ?? cut?.atLow;
+  return chosen ? chosen.newTotalMinor + chosen.cutMinor : null;
+}
+
 /**
  * Turns the manager's choice into the extra events that close the gap: the buffer goes first if
  * chosen, then the chosen categories are cut in the order given, each only as far as the gap still
@@ -122,10 +128,8 @@ export function resolutionEvents(
     remainingMinor -= drawn;
   }
   for (const categoryId of new Set(cuts)) {
-    const cut = options.find((option) => option.categoryId === categoryId);
-    const chosen = cut?.atHigh ?? cut?.atLow;
-    if (!chosen || remainingMinor === 0) continue;
-    const costMinor = chosen.newTotalMinor + chosen.cutMinor;
+    const costMinor = costOfCut(options, categoryId);
+    if (costMinor === null || remainingMinor === 0) continue;
     const takenMinor = Math.min(remainingMinor, costMinor);
     events.push({
       type: "category_amount",

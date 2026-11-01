@@ -4,8 +4,8 @@ export const SESSION_COOKIE = "huddle_session";
 const SESSION_MS = 24 * 3_600_000;
 
 /**
- * Signs a person in: a new server-side session, with only its random id in the cookie. Lax is
- * enough: no GET route changes state except a vendor's invite link, which is meant to be followed.
+ * Signs a person in: a new server-side session, with only its random id in the cookie. Lax, because
+ * an invite link has to see who is already signed in; `refuseCrossSite` covers what Strict would.
  * @param {import("express").Response} res The response.
  * @param {object} store The store.
  * @param {string} userId The person.
@@ -58,6 +58,9 @@ function readSessionCookie(header = "") {
  */
 export const readSessionId = (req) => readSessionCookie(req.headers.cookie);
 
+/** Whether a session has passed its lifetime. */
+export const sessionExpired = ({ startedAt }) => Date.now() - startedAt > SESSION_MS;
+
 /**
  * The live session behind a request, if any. The role always comes from the session's user, so a
  * client can never choose or upgrade it.
@@ -69,7 +72,7 @@ export function sessionOf(req) {
   const id = readSessionId(req);
   const session = id === undefined ? undefined : store.sessions.get(id);
   if (!session) return null;
-  if (Date.now() - session.startedAt > SESSION_MS) {
+  if (sessionExpired(session)) {
     store.sessions.delete(id);
     return null;
   }
@@ -153,11 +156,11 @@ export function validate(schema) {
 }
 
 /**
- * Creates a rate limiter with its own in-memory counters, for routes that can call a model.
+ * Creates a rate limiter with its own in-memory counters, keyed by client address.
  * @param {{ windowMs: number, max: number }} options
  * @returns {import("express").RequestHandler}
  */
-export function createAiLimiter({ windowMs, max }) {
+export function createLimiter({ windowMs, max }) {
   return rateLimit({
     windowMs,
     limit: max,
@@ -166,6 +169,19 @@ export function createAiLimiter({ windowMs, max }) {
     handler: (_req, _res, next) =>
       next(HttpError(429, "RATE_LIMITED", "Too many requests. Please try again shortly.")),
   });
+}
+
+/**
+ * Refuses a write that a browser says came from another site, which a page there can't fake. Tools
+ * send no such header, and they have no cookie for a page to borrow.
+ * @type {import("express").RequestHandler}
+ */
+export function refuseCrossSite(req, _res, next) {
+  const from = req.get("sec-fetch-site");
+  const isWrite = !["GET", "HEAD", "OPTIONS"].includes(req.method);
+  if (isWrite && from && from !== "same-origin" && from !== "none")
+    return next(HttpError(403, "FORBIDDEN", "This request came from another site."));
+  return next();
 }
 
 /**
@@ -188,8 +204,9 @@ function describeError(err, req) {
   if (err.status >= 400 && err.status < 500) {
     return { status: 400, code: "BAD_REQUEST", message: "Invalid request." };
   }
-  // Only the name: error messages can carry message contents or provider keys.
-  console.error(`Unhandled ${err.name} on ${req.method} ${req.path}`);
+  // Only the name and the route's pattern: messages can carry contents or keys, and real paths
+  // can carry invite tokens and ids.
+  console.error(`Unhandled ${err.name} on ${req.method} ${req.route?.path ?? "(no route)"}`);
   return { status: 500, code: "INTERNAL", message: "Something went wrong." };
 }
 

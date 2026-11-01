@@ -5,7 +5,7 @@ import { getTemplate } from "../core/templates.js";
 import { HttpError } from "../http.js";
 import { addExpense, eventExpenses, postAgentMessage } from "../store/workspace.js";
 import { postSpoken } from "./agentPost.js";
-import { groupPeople } from "./views.js";
+import { groupPeople } from "../views.js";
 
 const MAX_EXPENSES_PER_EVENT = 500;
 

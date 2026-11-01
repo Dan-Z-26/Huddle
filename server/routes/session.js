@@ -3,9 +3,9 @@ import { attentionFor } from "../core/directives.js";
 import { expenseSummary, spendingWatch } from "../core/expenses.js";
 import { quotesToReview } from "../core/hiring.js";
 import { canManageGroups, canMarkDirective, canSeeBudget, canView } from "../core/permissions.js";
-import { getTemplate } from "../core/templates.js";
+import { categoryName, getTemplate } from "../core/templates.js";
 import {
-  createAiLimiter,
+  createLimiter,
   HttpError,
   readSessionId,
   requireUser,
@@ -15,7 +15,7 @@ import {
 } from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
 import { eventExpenses } from "../store/workspace.js";
-import { noMoneyForVendor, publicUser } from "./views.js";
+import { noMoneyForVendor, publicUser } from "../views.js";
 import { signIn } from "../validation/schemas.js";
 
 // A person's role in words. A vendor isn't one of the template's roles.
@@ -74,7 +74,7 @@ function briefsWaiting(store, eventId) {
     .filter((brief) => brief.eventId === eventId && brief.status === "pending")
     .map(({ categoryId }) => ({
       categoryId,
-      name: template.categories.find(({ id }) => id === categoryId)?.name ?? categoryId,
+      name: categoryName(template, categoryId),
     }));
 }
 
@@ -86,7 +86,7 @@ function quotesWaiting(store, eventId) {
   ).map(({ categoryId, count }) => ({
     categoryId,
     count,
-    name: template.categories.find(({ id }) => id === categoryId)?.name ?? categoryId,
+    name: categoryName(template, categoryId),
   }));
 }
 
@@ -129,7 +129,7 @@ function attentionView(store, user) {
 /** The demo sign-in, and who is signed in. Real authentication is future work. */
 export function sessionRoutes() {
   const router = Router();
-  const signIns = createAiLimiter({ windowMs: 60_000, max: 60 });
+  const signIns = createLimiter({ windowMs: 60_000, max: 60 });
 
   router.get("/people", (req, res) => {
     const { store } = req.app.locals;

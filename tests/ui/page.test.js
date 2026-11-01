@@ -37,3 +37,25 @@ describe("index.html", () => {
     }
   });
 });
+
+describe("the scripts", () => {
+  it("import only names that exist, which only a browser would otherwise find out", async () => {
+    const dir = new URL("../../public/js/", import.meta.url);
+    const files = await readdir(dir);
+    const sources = new Map(
+      await Promise.all(files.map(async (f) => [f, await readFile(new URL(f, dir), "utf8")])),
+    );
+    const broken = [];
+    for (const [file, code] of sources)
+      for (const [, names, target] of code.matchAll(/import \{([^}]*)\} from "\.\/([^"]+)"/g))
+        for (const name of names
+          .split(",")
+          .map((part) => part.trim())
+          .filter(Boolean)) {
+          const exported = new RegExp(`export (?:async )?(?:function|const) ${name}\\b`);
+          if (!exported.test(sources.get(target) ?? ""))
+            broken.push(`${file}: ${name} from ${target}`);
+        }
+    assert.deepEqual(broken, []);
+  });
+});

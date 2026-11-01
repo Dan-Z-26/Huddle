@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { HttpError } from "../http.js";
 import { detectFileType, safeFileName } from "../validation/uploads.js";
+import { newId } from "./ids.js";
 
 const MAX_EVENT_BYTES = 50 * 1024 * 1024;
 const MAX_EVENT_FILES = 40;
@@ -25,19 +26,27 @@ export async function saveUpload(
   const type = detectFileType(buffer);
   if (!type) return null;
   const storedName = `${randomUUID()}.${type.ext}`;
-  await mkdir(uploadsDir, { recursive: true });
-  await writeFile(join(uploadsDir, storedName), buffer, { flag: "wx" });
+  // Named for what the bytes are: a download keeps this name, and "quote.html" would open as a page.
+  const base = safeFileName(originalName).replace(/\.[^.]*$/, "") || "file";
   const record = {
-    id: `f-${randomUUID().slice(0, 8)}`,
+    id: newId("f"),
     groupId,
-    originalName: safeFileName(originalName),
+    originalName: `${base}.${type.ext}`,
     mime: type.mime,
     size: buffer.length,
     storedName,
     uploadedBy: userId,
     createdAt: nowIso,
   };
+  // Counted before the first wait, so uploads running side by side can't all pass assertRoom.
   store.files.set(record.id, record);
+  try {
+    await mkdir(uploadsDir, { recursive: true });
+    await writeFile(join(uploadsDir, storedName), buffer, { flag: "wx" });
+  } catch (err) {
+    store.files.delete(record.id);
+    throw err;
+  }
   return record;
 }
 

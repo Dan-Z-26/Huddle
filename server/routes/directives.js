@@ -1,13 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { Router } from "express";
-import { taskFromDirective as wordTask } from "../agents/planner.js";
+import { taskFromDirective as wordTask } from "../agents/directiveTask.js";
 import { mentionsMoney } from "../core/amount.js";
 import { canMarkDirective, canView } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
 import { taskFromDirective } from "../core/timelinePlanner.js";
 import { HttpError, requireUser, validate } from "../http.js";
 import { pinDirective, quoteParam } from "../validation/schemas.js";
-import { directiveView, groupPeople } from "./views.js";
+import { directiveView, groupPeople } from "../views.js";
+import { newId } from "../store/ids.js";
 
 const GENERIC_TITLE = "Follow up on the manager's directive (details in the group)";
 
@@ -65,7 +65,7 @@ export function directiveRoutes({ ai }) {
       const nowIso = new Date().toISOString();
       const event = store.events.get(group.eventId);
       const directive = {
-        id: `d-${randomUUID().slice(0, 8)}`,
+        id: newId("d"),
         messageId: message.id,
         groupId: group.id,
         addressedUserIds: addressed.map(({ id }) => id),

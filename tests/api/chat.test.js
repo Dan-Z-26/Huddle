@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readdir } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
-import { assertError, startDemo, cookieAt } from "./helpers.js";
+import { assertError, cookieAt, settle, startDemo } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
@@ -12,7 +12,6 @@ const PDF = Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n");
 const g = (slug) => `/groups/g-${ID}-${slug}/messages`;
 const post = (call, slug, text, as = MANAGER) =>
   call(g(slug), { as, method: "POST", body: { text } });
-const settle = (store) => Promise.all([...store.background]);
 
 async function withFiles(base, slug, as, files, text = "") {
   const form = new FormData();

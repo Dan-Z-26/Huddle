@@ -1,9 +1,12 @@
 import { canView } from "./core/permissions.js";
-import { redactEventForVendor } from "./routes/views.js";
+import { sessionExpired } from "./http.js";
+import { redactEventForVendor } from "./views.js";
 
 const HEARTBEAT_MS = 25_000;
 const MAX_CLIENTS = 200;
 const MAX_PER_USER = 5;
+// A new event makes new people, so a per-person limit alone would let one client take them all.
+const MAX_PER_ADDRESS = 30;
 const MAX_BUFFERED_BYTES = 1024 * 1024;
 const GROUP_EVENTS = new Set([
   "message.created",
@@ -58,11 +61,18 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
      * @param {import("express").Response} res The response to stream on.
      * @param {object} user The person.
      * @param {string} [sessionId] Their session: the stream ends with it.
-     * @returns {boolean} False when there are too many connections, in total or for this person.
+     * @param {string} [address] Where they connect from.
+     * @returns {boolean} False when there are too many connections, in total, for this person or
+     *   from this address.
      */
-    add(res, user, sessionId) {
-      const mine = [...clients].filter((client) => client.userId === user.id).length;
-      if (clients.size >= MAX_CLIENTS || mine >= MAX_PER_USER) return false;
+    add(res, user, sessionId, address) {
+      const all = [...clients];
+      if (
+        clients.size >= MAX_CLIENTS ||
+        all.filter((client) => client.userId === user.id).length >= MAX_PER_USER ||
+        all.filter((client) => client.address === address).length >= MAX_PER_ADDRESS
+      )
+        return false;
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-store",
@@ -70,7 +80,7 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
         "X-Accel-Buffering": "no",
       });
       res.write("retry: 3000\n\n");
-      const client = { res, userId: user.id, sessionId };
+      const client = { res, userId: user.id, sessionId, address };
       clients.add(client);
       res.on("close", () => clients.delete(client));
       return true;
@@ -84,7 +94,8 @@ export function createHub({ heartbeatMs = HEARTBEAT_MS } = {}) {
       const frame = (payload) => `event: ${payload.type}\ndata: ${JSON.stringify(payload)}\n\n`;
       const data = frame(event);
       for (const client of clients) {
-        if (client.sessionId && !store.sessions.has(client.sessionId)) {
+        const session = store.sessions.get(client.sessionId);
+        if (client.sessionId && (!session || sessionExpired(session))) {
           client.res.end();
           clients.delete(client);
           continue;

@@ -6,7 +6,8 @@ import { uncoverEvents } from "../core/expenses.js";
 import { buildBudgetState, emptyProfile } from "../core/profile.js";
 import { getTemplate } from "../core/templates.js";
 import { planTimeline } from "../core/timelinePlanner.js";
-import { messageView } from "../routes/views.js";
+import { messageView } from "../views.js";
+import { newId } from "./ids.js";
 
 /**
  * Creates an event and its seeded people (the manager, the core roles and the four AI members).
@@ -125,7 +126,7 @@ export function postAgentMessage(
   { groupId, authorId, authorKind = "agent", text, rationale = null, digest = false, nowIso },
 ) {
   return addMessage(store, {
-    id: `m-${randomUUID().slice(0, 8)}`,
+    id: newId("m"),
     groupId,
     authorId,
     authorKind,
@@ -149,12 +150,18 @@ export function deleteEvent(store, eventId) {
   );
   const inGroup = ({ groupId }) => groupIds.has(groupId);
   const inEvent = (item) => item.eventId === eventId;
+  const files = [...store.files.values()].filter(inGroup);
+  // Before the users go: an invite names only its vendor.
+  for (const [hash, { vendorUserId }] of store.invites)
+    if (store.users.get(vendorUserId)?.eventId === eventId) store.invites.delete(hash);
   for (const [map, belongs] of [
     [store.users, inEvent],
     [store.tasks, inEvent],
     [store.quotes, inEvent],
     [store.expenses, inEvent],
     [store.pendingChanges, inEvent],
+    [store.briefs, inEvent],
+    [store.deliverables, inEvent],
     [store.groups, inEvent],
     [store.messages, inGroup],
     [store.directives, inGroup],
@@ -166,6 +173,7 @@ export function deleteEvent(store, eventId) {
     for (const key of keyed.keys()) if (key.startsWith(`${eventId}:`)) keyed.delete(key);
   store.budgets.delete(eventId);
   store.events.delete(eventId);
+  store.discardFiles(files);
 }
 
 /**
@@ -205,7 +213,7 @@ export const eventExpenses = (store, eventId) =>
  * @returns {object} The stored expense.
  */
 export function addExpense(store, fields, nowIso) {
-  const expense = { id: `x-${randomUUID().slice(0, 8)}`, ...fields, createdAt: nowIso };
+  const expense = { id: newId("x"), ...fields, createdAt: nowIso };
   store.expenses.set(expense.id, expense);
   if (expense.fromBuffer) adjustBufferSpend(store, expense.eventId, expense.amountMinor);
   return expense;

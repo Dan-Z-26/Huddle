@@ -1,20 +1,9 @@
 import { api } from "./api.js";
 import { announce, announceError, clear, el } from "./dom.js";
-import { FIELD_META, FIELD_ORDER } from "./fields.js";
+import { EXAMPLES, FIELD_META, FIELD_ORDER, OPENING } from "./fields.js";
 import { createPicker } from "./rankPicker.js";
 
 const $ = (id) => document.getElementById(id);
-const OPENING = {
-  title: "Your event",
-  question: "What's this event about?",
-  hint: "A sentence is plenty.",
-};
-const EXAMPLES = {
-  corporate_launch: "A launch for our new headphones, for partners and press",
-  wedding: "Anu and Rahul's wedding, with both families together",
-  birthday: "A surprise 60th birthday for my father",
-  community: "A neighbourhood food festival to raise funds for the school",
-};
 const isBlank = ({ name, purpose, date, city }) => !name && !purpose && !date && !city;
 const toItems = (text) =>
   text
@@ -139,6 +128,27 @@ export async function startIntake(event, template, { onProfile, onConfirmed, foc
     showTextBox({ long: true, placeholder: EXAMPLES[event.eventType] });
   }
 
+  // Buttons wherever they can do the job; a text box only where typing is needed.
+  function showInput(meta, options) {
+    if (meta.kind === "date") {
+      date.min = new Date().toISOString().slice(0, 10);
+      $("intake-date-wrap").hidden = false;
+      send.hidden = false;
+    } else if (meta.kind === "rank") {
+      picker.draw();
+      $("intake-picker").hidden = false;
+      send.hidden = false;
+    } else if (meta.kind === "multi") {
+      send.hidden = false;
+      if (options.length === 0) showTextBox(meta);
+      else $("intake-other").hidden = false;
+    } else if (meta.kind === "text" || options.length === 0) {
+      showTextBox(meta);
+    } else if (meta.typed) {
+      $("intake-other").hidden = false;
+    }
+  }
+
   function show(step) {
     onProfile(step.profile);
     setProgress(step);
@@ -157,26 +167,9 @@ export async function startIntake(event, template, { onProfile, onConfirmed, foc
     $("intake-done").hidden = !step.complete;
     if (step.complete) return;
 
-    const options = step.options ?? [];
-    drawChoices(options, meta);
+    drawChoices(step.options ?? [], meta);
     $("intake-skip").hidden = !meta.skippable;
-    if (meta.kind === "date") {
-      date.min = new Date().toISOString().slice(0, 10);
-      $("intake-date-wrap").hidden = false;
-      send.hidden = false;
-    } else if (meta.kind === "rank") {
-      picker.draw();
-      $("intake-picker").hidden = false;
-      send.hidden = false;
-    } else if (meta.kind === "multi") {
-      send.hidden = false;
-      if (options.length === 0) showTextBox(meta);
-      else $("intake-other").hidden = false;
-    } else if (meta.kind === "text" || options.length === 0) {
-      showTextBox(meta);
-    } else if (meta.typed) {
-      $("intake-other").hidden = false;
-    }
+    showInput(meta, step.options ?? []);
   }
 
   function focusStep() {

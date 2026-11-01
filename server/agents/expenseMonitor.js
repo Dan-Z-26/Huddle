@@ -65,7 +65,7 @@ export function alertFacts({ alert, description, actorName }) {
  */
 export async function wordAlert({ facts }, { generate = realGenerate } = {}) {
   const plain = facts.join(" ");
-  const demo = async () => ({ wording: plain, rationale: RATIONALE });
+  const demo = () => ({ wording: plain, rationale: RATIONALE });
   const { data } = await generateOrDemo(generate, {
     agent: "notices",
     system: SYSTEM,

@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
-import { assertError, cookieAt, startDemo } from "./helpers.js";
+import { assertError, cookieAt, settle, startDemo } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const PR = `user-pr-head@${ID}`;
 const FB = `user-fb-lead@${ID}`;
-const settle = (store) => Promise.all([...store.background]);
 const fresh = async (t) => {
   const ctx = await startDemo(t);
   ctx.store.briefs.clear();

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { answerVendorQuestion, buildRfq, extractQuote } from "../../server/agents/vendor.js";
+import { answerVendorQuestion, buildRfq } from "../../server/agents/vendor.js";
+import { extractQuote } from "../../server/agents/vendorQuotes.js";
 import { emptyProfile } from "../../server/core/profile.js";
 import { getTemplate } from "../../server/core/templates.js";
 import { generate as realGenerate } from "../../server/llm/index.js";

@@ -47,7 +47,7 @@ async function ask({ system, content, schema, demo, generate }) {
  *   model's wording was safe (known id, no invented numbers).
  */
 export async function wordTasks({ profile, tasks }, { generate = realGenerate } = {}) {
-  const demo = async () => ({
+  const demo = () => ({
     tasks: tasks.map(({ id, title }) => ({ id, title })),
     rationale: "Task titles are unchanged.",
   });
@@ -120,7 +120,7 @@ export async function digest(
   { generate = realGenerate } = {},
 ) {
   const facts = digestFacts({ tasks, directives, members, nowIso });
-  const demo = async () => ({
+  const demo = () => ({
     digestText: "Here is today's summary.",
     rationale: "A routine summary.",
   });
@@ -143,7 +143,7 @@ export async function digest(
  */
 export async function reminder({ directiveText, pendingNames }, { generate = realGenerate } = {}) {
   const mentions = pendingNames.map((name) => `@${name}`);
-  const demo = async () => ({
+  const demo = () => ({
     reminderText: "A quick reminder to tap Got it on this.",
     rationale: "A routine reminder.",
   });

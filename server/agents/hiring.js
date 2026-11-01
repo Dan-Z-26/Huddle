@@ -163,7 +163,7 @@ export async function draftBrief({ profile, category, answers }, { generate = re
     system: BRIEF_SYSTEM,
     messages: [{ role: "user", content }],
     schema: briefOutput,
-    demo: async () => ({ ...plain, deliverables: DEFAULT_DELIVERABLES }),
+    demo: () => ({ ...plain, deliverables: DEFAULT_DELIVERABLES }),
   });
   const allowed = `${event} ${given}`;
   const fit = (text) => !mentionsMoney(text) && isGrounded(text, allowed);
@@ -179,7 +179,7 @@ export async function draftBrief({ profile, category, answers }, { generate = re
     .filter((item) => item && !mentionsMoney(item))
     .slice(0, MAX_DELIVERABLES);
   const asked = listOf(answers.deliverables).filter((item) => !mentionsMoney(item));
-  const deliverables = asked.length ? asked : suggested.length ? suggested : DEFAULT_DELIVERABLES;
+  const deliverables = [asked, suggested, DEFAULT_DELIVERABLES].find(({ length }) => length);
   const sections = {
     about: choose("about"),
     scope: choose("scope"),
@@ -214,7 +214,7 @@ export async function draftDecline(
       },
     ],
     schema: declineOutput,
-    demo: async () => ({ text: plain }),
+    demo: () => ({ text: plain }),
   });
   return data.text && !mentionsMoney(data.text) ? data.text : plain;
 }

@@ -21,8 +21,8 @@ const store = createStore();
 const startedAt = new Date();
 seedDemo(store, new Date(startedAt - DEMO_PAST_MS).toISOString());
 seedHistory(store, startedAt.toISOString());
-createApp({ store, uploadsDir: fileURLToPath(uploadsDir) }).listen(port, (err) => {
-  if (err) throw err;
+createApp({ store, uploadsDir: fileURLToPath(uploadsDir) }).listen(port, (listenError) => {
+  if (listenError) throw listenError;
   // Demo storage is not persistent. This runs only once we hold the port, so a second start on a
   // busy port can't delete the running server's files. Sync on purpose: awaiting fs/promises
   // before listen made a busy port exit 0 silently (Node 26).

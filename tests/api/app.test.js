@@ -28,8 +28,18 @@ test("sets the exact strict CSP and security headers", async (t) => {
   assert.doesNotMatch(csp, /unsafe-inline/);
   assert.doesNotMatch(csp, /upgrade-insecure-requests/);
   assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(res.headers.get("x-frame-options"), "DENY");
+  assert.match(res.headers.get("permissions-policy"), /camera=\(\), microphone=\(\)/);
   assert.equal(res.headers.get("x-powered-by"), null);
   assert.equal(res.headers.get("access-control-allow-origin"), null);
+});
+
+test("every API route shares a ceiling, so a route with no limit of its own can't be hammered", async (t) => {
+  const base = await serve(t);
+  for (let i = 0; i < 600; i += 1) await fetch(`${base}/api/nope`);
+  await assertError(await fetch(`${base}/api/nope`), 429, "RATE_LIMITED");
+  // Refused before the body is read, so a flood can't make the server parse anything.
+  await assertError(await postJson(`${base}/api/nope`, "{not json"), 429, "RATE_LIMITED");
 });
 
 test("unknown API paths return 404 JSON for any method", async (t) => {
@@ -100,6 +110,20 @@ test("thrown errors return a generic 500 and log nothing sensitive", async (t) =
   assert.doesNotMatch(output, /sk-secret/);
 });
 
+test("the log names a route's pattern, never a token or id in the real path", async (t) => {
+  const logged = t.mock.method(console, "error", () => {});
+  const base = await serve(t, {
+    mount: (app) =>
+      app.get("/t/join/:token", () => {
+        throw new TypeError("boom");
+      }),
+  });
+  await fetch(`${base}/t/join/secret-invite-token`);
+  const output = logged.mock.calls.flatMap((call) => call.arguments).join(" ");
+  assert.match(output, /GET \/t\/join\/:token/);
+  assert.doesNotMatch(output, /secret-invite-token/);
+});
+
 test("createApp's own handler turns an unknown error into a safe 500", async (t) => {
   const logged = t.mock.method(console, "error", () => {});
   const app = createApp({ store: createStore() });
@@ -128,6 +152,7 @@ test("createApp's own handler turns an unknown error into a safe 500", async (t)
   }
 
   const output = logged.mock.calls.flatMap((call) => call.arguments).join(" ");
-  assert.match(output, /Unhandled TypeError on GET \/api\/anything/);
+  assert.match(output, /Unhandled TypeError on GET \(no route\)/);
+  assert.doesNotMatch(output, /anything/);
   assert.doesNotMatch(output, /sk-secret/);
 });

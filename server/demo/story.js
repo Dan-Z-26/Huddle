@@ -1,13 +1,13 @@
-import { randomUUID } from "node:crypto";
 import { hideAmounts } from "../core/amount.js";
 import { canPost } from "../core/permissions.js";
 import { runReminders } from "../reminders.js";
 import { ackDirective } from "../routes/directives.js";
 import { sendBrief } from "../routes/hiringSupport.js";
 import { replyAsPlanner } from "../routes/plannerReply.js";
-import { groupPeople } from "../routes/views.js";
+import { groupPeople } from "../views.js";
 import { DEMO_EVENT_ID as ID } from "../store/seed.js";
 import { addMessage } from "../store/workspace.js";
+import { newId } from "../store/ids.js";
 
 const PRODUCTION = `user-production-lead@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
@@ -42,7 +42,7 @@ export function createStory(store, { speed = 1 } = {}) {
     // A viewer can have removed them from the room since; they don't speak where they can't.
     if (!group || !user || !canPost(store.roleOf(user), group)) return null;
     const message = addMessage(store, {
-      id: `m-${randomUUID().slice(0, 8)}`,
+      id: newId("m"),
       groupId: group.id,
       authorId: user.id,
       authorKind: "human",

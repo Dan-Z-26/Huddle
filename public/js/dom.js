@@ -113,3 +113,17 @@ export function keepFocus(redraw) {
     document.querySelector(`[data-focus-after="${q}"]`)
   )?.focus();
 }
+
+/**
+ * Copies text and says whether it worked.
+ * @param {string} text What to copy.
+ * @returns {Promise<void>} Resolves once it is announced; it never rejects.
+ */
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    announce("Copied.");
+  } catch {
+    announce("Couldn't reach the clipboard. Please select the text and copy it.");
+  }
+}

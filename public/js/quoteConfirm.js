@@ -19,19 +19,7 @@ const LABEL = {
 // The exact figure: confirming a quote unchanged mustn't round its price.
 const priceText = (minor) => (minor ? String(minor / 100) : "");
 
-/**
- * Opens the "check this quote" dialog, prefilled with what was read. Nothing from a document is
- * used until the person confirms it here. Calls `onConfirmed` once the server has saved it.
- * @param {object} quote The quote as read.
- * @param {{warnings?: string[], mustHaves: object[], onConfirmed: () => Promise<void>}} context
- *   Anything the reader couldn't make out, the category's must-haves, and what to do afterwards.
- */
-export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
-  const dialog = $("confirm-dialog");
-  $("confirm-source").textContent =
-    quote.status === "extracted"
-      ? "This was read from the quote. Please check every figure against the original."
-      : "Change anything that is wrong, then confirm.";
+function drawWarnings(quote, warnings) {
   const list = $("confirm-warnings");
   clear(list);
   const notStated = [
@@ -45,12 +33,18 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
       : []),
   ];
   for (const warning of shown) list.append(el("li", { text: warning }));
+}
+
+function drawSources(quote) {
   const sources = Object.entries(quote.sources ?? {}).filter(([, text]) => text);
   $("confirm-sources-box").hidden = sources.length === 0;
   $("confirm-sources-box").open = sources.length > 0;
   const quoted = $("confirm-sources");
   clear(quoted);
   for (const [key, text] of sources) quoted.append(el("li", { text: `${key}: "${text}"` }));
+}
+
+function fillFields(quote) {
   $("confirm-vendor").value = quote.vendorName ?? "";
   $("confirm-per-guest").value = priceText(quote.perGuestMinor);
   $("confirm-fixed").value = priceText(quote.fixedMinor);
@@ -61,7 +55,9 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
   $("confirm-exclusions").value = (quote.exclusions ?? []).join(", ");
   $("confirm-min-guests").value = quote.minGuests ?? "";
   $("confirm-valid").value = quote.validUntil ?? "";
+}
 
+function drawMustHaves(quote, mustHaves) {
   const musts = $("confirm-musts");
   musts.replaceChildren(musts.querySelector("legend"));
   musts.hidden = mustHaves.length === 0;
@@ -73,6 +69,51 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
     });
     musts.append(el("label", { class: "check" }, box, text));
   }
+}
+
+const listIn = (text) =>
+  text
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+function readForm() {
+  const field = (id) => $(id).value.trim();
+  const tax = field("confirm-tax");
+  const minGuests = Number(field("confirm-min-guests"));
+  return {
+    vendorName: field("confirm-vendor"),
+    perGuestText: field("confirm-per-guest") || undefined,
+    fixedText: field("confirm-fixed") || undefined,
+    ...(tax ? { taxPercent: Number(tax) } : {}),
+    includes: listIn(field("confirm-includes")),
+    exclusions: listIn(field("confirm-exclusions")),
+    ...(Number.isInteger(minGuests) && minGuests > 0 ? { minGuests } : {}),
+    validUntil: field("confirm-valid"),
+    mustHaveIdsMet: [...$("confirm-musts").querySelectorAll("input:checked")].map(
+      (box) => box.value,
+    ),
+    answers: Object.fromEntries(ANSWERS.map(([key, id]) => [key, field(id) || null])),
+  };
+}
+
+/**
+ * Opens the "check this quote" dialog, prefilled with what was read. Nothing from a document is
+ * used until the person confirms it here. Calls `onConfirmed` once the server has saved it.
+ * @param {object} quote The quote as read.
+ * @param {{warnings?: string[], mustHaves: object[], onConfirmed: () => Promise<void>}} context
+ *   Anything the reader couldn't make out, the category's must-haves, and what to do afterwards.
+ */
+export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
+  const dialog = $("confirm-dialog");
+  $("confirm-source").textContent =
+    quote.status === "extracted"
+      ? "This was read from the quote. Please check every figure against the original."
+      : "Change anything that is wrong, then confirm.";
+  drawWarnings(quote, warnings);
+  drawSources(quote);
+  fillFields(quote);
+  drawMustHaves(quote, mustHaves);
   $("confirm-error").textContent = "";
 
   dialog.onclose = () => {
@@ -81,29 +122,8 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
   $("confirm-cancel").onclick = () => dialog.close();
   $("confirm-form").onsubmit = async (e) => {
     e.preventDefault();
-    const field = (id) => $(id).value.trim();
-    const answers = Object.fromEntries(ANSWERS.map(([key, id]) => [key, field(id) || null]));
-    const tax = field("confirm-tax");
-    const minGuests = Number(field("confirm-min-guests"));
     try {
-      await api.confirmQuote(quote.id, {
-        vendorName: field("confirm-vendor"),
-        perGuestText: field("confirm-per-guest") || undefined,
-        fixedText: field("confirm-fixed") || undefined,
-        ...(tax ? { taxPercent: Number(tax) } : {}),
-        includes: field("confirm-includes")
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        exclusions: field("confirm-exclusions")
-          .split(",")
-          .map((item) => item.trim())
-          .filter(Boolean),
-        ...(Number.isInteger(minGuests) && minGuests > 0 ? { minGuests } : {}),
-        validUntil: field("confirm-valid"),
-        mustHaveIdsMet: [...musts.querySelectorAll("input:checked")].map((box) => box.value),
-        answers,
-      });
+      await api.confirmQuote(quote.id, readForm());
       dialog.close();
       await onConfirmed();
       announce("Quote confirmed.");

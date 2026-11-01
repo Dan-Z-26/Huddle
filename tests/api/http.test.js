@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
 import {
-  createAiLimiter,
+  createLimiter,
   errorHandler,
   HttpError,
   requireUser,
@@ -145,7 +145,7 @@ test("HttpError reaches the client with its status, code and message", async (t)
 
 test("the limiter returns 429 in the error shape after max, per instance", async (t) => {
   const mountLimited = (app) =>
-    app.get("/t/ai", createAiLimiter({ windowMs: 60_000, max: 2 }), (_req, res) => res.end());
+    app.get("/t/ai", createLimiter({ windowMs: 60_000, max: 2 }), (_req, res) => res.end());
   const base = await serve(t, { mount: mountLimited });
   const otherBase = await serve(t, { mount: mountLimited });
 

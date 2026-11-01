@@ -98,8 +98,11 @@ export function createStore() {
     openSession(userId, { invited = false } = {}) {
       const id = randomUUID();
       this.sessions.set(id, { userId, invited, startedAt: Date.now() });
-      if (this.sessions.size > MAX_SESSIONS)
-        this.sessions.delete(this.sessions.keys().next().value);
+      if (this.sessions.size > MAX_SESSIONS) {
+        // The same person's oldest first, so signing in over and over only pushes out oneself.
+        const own = [...this.sessions].find(([key, s]) => s.userId === userId && key !== id);
+        this.sessions.delete(own?.[0] ?? this.sessions.keys().next().value);
+      }
       return id;
     },
     pendingChanges: new Map(),

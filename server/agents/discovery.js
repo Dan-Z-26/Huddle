@@ -15,6 +15,7 @@ const NONE =
 const MAX_ANSWER = 2000;
 const MAX_PURPOSE = 500;
 const INTAKE_TOOLS = new Set(["parse_guest_count", "missing_profile_fields"]);
+const FIRST_RATIONALE = "Let's start with the basics.";
 
 async function extractWithModel(input, generate, nowIso, { useTools = true } = {}) {
   const { profile, template } = input;
@@ -62,16 +63,15 @@ function settle(profile) {
 
 function chooseQuestion({ working, template, nextField, model, rejected, progressed }) {
   const base = questionFor(nextField, working, template);
-  if (nextField === "guests") {
-    const waiting = working.guests.suggested > 0 && working.guests.confirmed === null;
-    if (waiting) return guestConfirmation(working.guests);
-    return groundedOr(working.suggestedQuestions?.guests ?? "", "") || base;
-  }
-  const usable = model?.nextField === nextField;
   // Written for this event when the user described it, so a tapped answer needs no model call.
   const written = groundedOr(working.suggestedQuestions?.[nextField] ?? "", "");
-  const question = (usable && groundedOr(model.nextQuestion, "")) || written || base;
-  return rejected.length || !progressed ? written || base : question;
+  if (nextField === "guests") {
+    const waiting = working.guests.suggested > 0 && working.guests.confirmed === null;
+    return waiting ? guestConfirmation(working.guests) : written || base;
+  }
+  if (rejected.length || !progressed) return written || base;
+  const usable = model?.nextField === nextField && groundedOr(model.nextQuestion, "");
+  return usable || written || base;
 }
 
 // What to tell the user before repeating a question: why the last answer wasn't used.
@@ -82,6 +82,82 @@ function feedbackFor({ rejected, progressed }) {
 
 const valueOf = (profile, key) =>
   key === "absoluteMustHave" ? profile.absoluteMustHaveId : profile[key];
+
+// A free description of the whole event. Anything unusable here is simply asked for in its turn, so
+// nothing is refused out loud.
+async function readOpening({ working, template, answer, nowIso }, generate) {
+  const text = answer.slice(0, MAX_ANSWER);
+  const model = await extractWithModel(
+    { profile: working, template, field: "opening", answer: text },
+    generate,
+    nowIso,
+    { useTools: false },
+  );
+  const { profile, accepted } = applyExtracted(working, model.extracted, {
+    template,
+    nowIso,
+    answer: text,
+    field: "opening",
+  });
+  // Their description is what the event is about, even if the model didn't lift a purpose out.
+  if (!profile.purpose) profile.purpose = text.trim().slice(0, MAX_PURPOSE);
+  const options = cleanOptions(model.options, template);
+  if (Object.keys(options).length) profile.suggestedOptions = options;
+  if (model.questions) profile.suggestedQuestions = model.questions;
+  return {
+    working: profile,
+    accepted,
+    rejected: [],
+    rationale: groundedOr(model.rationale, "", FIRST_RATIONALE),
+    model,
+  };
+}
+
+// An answer to one question: guest counts and skips are read in code, tapped answers need no model.
+async function readFieldAnswer({ working, template, field, answer, mode, nowIso }, generate) {
+  const text = answer.slice(0, MAX_ANSWER);
+  const context = { template, nowIso, answer: text, field };
+  if (field === "guests") {
+    const { profile, understood } = resolveGuests(working, text);
+    return {
+      working: profile,
+      accepted: understood ? ["guests"] : [],
+      rejected: [],
+      rationale: understood ? "Noted your guest count." : "I couldn't find a guest number in that.",
+      model: null,
+    };
+  }
+  if (SKIPPABLE.has(field) && NONE.test(text))
+    return {
+      working: { ...working, skippedFields: [...new Set([...working.skippedFields, field])] },
+      accepted: [field],
+      rejected: [],
+      rationale: "Okay, we'll leave that for now.",
+      model: null,
+    };
+  if (mode === "direct") {
+    const direct = directExtract({ profile: working, template, field, answer: text });
+    const { profile, accepted, rejected } = applyExtracted(working, direct, context);
+    return { working: profile, accepted, rejected, rationale: FIRST_RATIONALE, model: null };
+  }
+  const model = await extractWithModel(
+    { profile: working, template, field, answer: text },
+    generate,
+    nowIso,
+  );
+  const { profile, accepted, rejected } = applyExtracted(working, model.extracted, context);
+  const rationale = groundedOr(model.rationale, "", FIRST_RATIONALE);
+  return { working: profile, accepted, rejected, rationale, model };
+}
+
+function readGiven({ working, template, field, answer, mode, nowIso }, generate) {
+  const nothing = { working, accepted: [], rejected: [], rationale: FIRST_RATIONALE, model: null };
+  if (typeof answer !== "string") return nothing;
+  if (mode === "opening") return readOpening({ working, template, answer, nowIso }, generate);
+  return field
+    ? readFieldAnswer({ working, template, field, answer, mode, nowIso }, generate)
+    : nothing;
+}
 
 /**
  * Takes the user's answer to the current intake question, updates the EventProfile and returns the
@@ -101,73 +177,14 @@ export async function nextStep(
   { generate = realGenerate } = {},
 ) {
   const field = missingProfileFields(profile)[0] ?? null;
-  let working = structuredClone(profile);
-  let accepted = [];
-  let rejected = [];
-  let rationale = "Let's start with the basics.";
-  let model = null;
-
   const opening = mode === "opening" && typeof answer === "string";
-  if (opening) {
-    const text = answer.slice(0, MAX_ANSWER);
-    model = await extractWithModel(
-      { profile: working, template, field: "opening", answer: text },
-      generate,
-      nowIso,
-      { useTools: false },
-    );
-    // Anything unusable here is simply asked for in its turn, so nothing is refused out loud.
-    ({ profile: working, accepted } = applyExtracted(working, model.extracted, {
-      template,
-      nowIso,
-      answer: text,
-      field: "opening",
-    }));
-    // Their description is what the event is about, even if the model didn't lift a purpose out.
-    if (!working.purpose) working.purpose = text.trim().slice(0, MAX_PURPOSE);
-    const options = cleanOptions(model.options, template);
-    if (Object.keys(options).length) working.suggestedOptions = options;
-    if (model.questions) working.suggestedQuestions = model.questions;
-    rationale = groundedOr(model.rationale, "", rationale);
-  } else if (typeof answer === "string" && field) {
-    const text = answer.slice(0, MAX_ANSWER);
-    if (field === "guests") {
-      const result = resolveGuests(working, text);
-      working = result.profile;
-      accepted = result.understood ? ["guests"] : [];
-      rationale = result.understood
-        ? "Noted your guest count."
-        : "I couldn't find a guest number in that.";
-    } else if (SKIPPABLE.has(field) && NONE.test(text)) {
-      working.skippedFields = [...new Set([...working.skippedFields, field])];
-      accepted = [field];
-      rationale = "Okay, we'll leave that for now.";
-    } else if (mode === "direct") {
-      ({
-        profile: working,
-        accepted,
-        rejected,
-      } = applyExtracted(
-        working,
-        directExtract({ profile: working, template, field, answer: text }),
-        { template, nowIso, answer: text, field },
-      ));
-    } else {
-      model = await extractWithModel(
-        { profile: working, template, field, answer: text },
-        generate,
-        nowIso,
-      );
-      ({
-        profile: working,
-        accepted,
-        rejected,
-      } = applyExtracted(working, model.extracted, { template, nowIso, answer: text, field }));
-      rationale = groundedOr(model.rationale, "", rationale);
-    }
-  }
+  const read = await readGiven(
+    { working: structuredClone(profile), template, field, answer, mode, nowIso },
+    generate,
+  );
+  const { accepted, rejected, rationale, model } = read;
 
-  working = settle(working);
+  const working = settle(read.working);
   const missing = missingProfileFields(working);
   const nextField = missing[0] ?? null;
   const complete = nextField === null;

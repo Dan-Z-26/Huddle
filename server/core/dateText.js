@@ -24,13 +24,13 @@ function monthNumber(name) {
 
 function readParts(text) {
   let match = text.match(ISO);
-  if (match) return { year: +match[1], month: +match[2], day: +match[3] };
+  if (match) return { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) };
   match = text.match(DAY_FIRST_NUMERIC);
-  if (match) return { year: +match[3], month: +match[2], day: +match[1] };
+  if (match) return { year: Number(match[3]), month: Number(match[2]), day: Number(match[1]) };
   match = text.match(DAY_MONTH_YEAR);
-  if (match) return { year: +match[3], month: monthNumber(match[2]), day: +match[1] };
+  if (match) return { year: Number(match[3]), month: monthNumber(match[2]), day: Number(match[1]) };
   match = text.match(MONTH_DAY_YEAR);
-  if (match) return { year: +match[3], month: monthNumber(match[1]), day: +match[2] };
+  if (match) return { year: Number(match[3]), month: monthNumber(match[1]), day: Number(match[2]) };
   return null;
 }
 

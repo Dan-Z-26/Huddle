@@ -22,11 +22,12 @@ No service layers, classes, dependency injection, generic frameworks or event bu
 server/
   app.js          createApp({ store }) returns the Express app, without listening
   index.js        entry: load .env, clean data/uploads/, seed, listen, start reminder timer
-  http.js         requireUser, validate(schema), HttpError, error handler
+  http.js         requireUser, validate(schema), HttpError, refuseCrossSite, error handler
+  views.js        what each person may see of messages, directives and profiles
   sse.js          Set of clients, broadcast(event), heartbeat
   reminders.js    runReminders(store, nowIso), called by the timer and tests
-  routes/         session, events, budget, expenses, timeline, groups, messages, vendors, hiring, vendorAccess, stream
-  store/          index.js (createStore), seed.js
+  routes/         session, events, budget, budgetNotices, expenses, timeline, groups, messages, files, multipart, vendors, hiring, vendorAccess, stream
+  store/          index.js (createStore), ids.js, seed.js
   validation/     schemas.js (requests), uploads.js (signature check)
 ```
 

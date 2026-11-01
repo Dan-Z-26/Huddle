@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { resolutionEvents } from "../../server/core/consequences.js";
-import { optionCost, planOf } from "../../public/js/gapPlan.js";
+import { optionCost, planOf, previewOf } from "../../public/js/gapPlan.js";
 
 // The browser previews the chosen cuts and the server applies them. Both must agree to the paisa,
 // or the chart would show one figure and applying would give another.
@@ -37,4 +37,47 @@ describe("gapPlan agrees with resolutionEvents", () => {
       assert.equal(server.remainingMinor, preview.left);
     });
   }
+});
+
+describe("previewOf", () => {
+  const after = {
+    totalMinor: 1000,
+    categories: [
+      { id: "food", committedMinor: 600, lowMinor: 600, highMinor: 600 },
+      { id: "stage", committedMinor: 400, lowMinor: 300, highMinor: 500 },
+    ],
+    contingency: { reservedMinor: 100, availableMinor: 100 },
+  };
+  const current = {
+    currency: "INR",
+    categories: [
+      { id: "food", rank: 2, tierLabel: "Sit-down" },
+      { id: "stage", rank: 1, tierLabel: "Full wrap" },
+    ],
+  };
+  const preview = (plan, raise = false) =>
+    previewOf({ consequences: { budgetAfter: after } }, current, plan, raise);
+
+  it("takes each cut from its own category and forgets a tier that no longer holds", () => {
+    const { categories, committedMinor } = preview({ taken: new Map([["stage", 150]]), left: 0 });
+    const [food, stage] = categories;
+    assert.deepEqual(
+      [stage.committedMinor, stage.lowMinor, stage.highMinor, stage.tierLabel],
+      [250, 150, 350, null],
+    );
+    assert.equal(food.tierLabel, "Sit-down");
+    assert.equal(committedMinor, 850);
+  });
+
+  it("adds what is left to the total only when the budget is raised", () => {
+    const plan = { taken: new Map(), left: 200 };
+    assert.equal(preview(plan).totalMinor, 1000);
+    assert.equal(preview(plan, true).totalMinor, 1200);
+  });
+
+  it("draws on the buffer, which frees that money for the plan", () => {
+    const { contingency, remainingMinor } = preview({ taken: new Map(), left: 0, drawn: 60 });
+    assert.deepEqual([contingency.reservedMinor, contingency.availableMinor], [40, 40]);
+    assert.equal(remainingMinor, 1000 - 40 - 1000);
+  });
 });

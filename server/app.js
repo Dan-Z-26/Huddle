@@ -1,9 +1,10 @@
 import { fileURLToPath } from "node:url";
 import express from "express";
 import helmet from "helmet";
-import { createAiLimiter, errorHandler, HttpError } from "./http.js";
+import { createLimiter, errorHandler, HttpError, refuseCrossSite } from "./http.js";
 import { budgetRoutes } from "./routes/budget.js";
 import { expenseRoutes } from "./routes/expenses.js";
+import { fileRoutes } from "./routes/files.js";
 import { hiringRoutes } from "./routes/hiring.js";
 import { joinRoute, vendorAccessRoutes } from "./routes/vendorAccess.js";
 import { directiveRoutes } from "./routes/directives.js";
@@ -19,6 +20,7 @@ import { vendorRoutes } from "./routes/vendors.js";
 
 const PUBLIC_DIR = fileURLToPath(new URL("../public", import.meta.url));
 const DEFAULT_UPLOADS = fileURLToPath(new URL("../data/uploads", import.meta.url));
+const API_PER_MINUTE = 600;
 
 /**
  * Builds the Express app without listening, so tests can run it on port 0.
@@ -57,8 +59,16 @@ export function createApp({ store, uploadsDir = DEFAULT_UPLOADS }) {
           frameAncestors: ["'none'"],
         },
       },
+      xFrameOptions: { action: "deny" },
     }),
   );
+  app.use((_req, res, next) => {
+    res.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=(), usb=()");
+    next();
+  });
+  // A ceiling on everything, high enough for a whole team behind one address. It comes before the
+  // body is read, so a flood can't make the server parse anything.
+  app.use("/api", createLimiter({ windowMs: 60_000, max: API_PER_MINUTE }), refuseCrossSite);
   app.use(express.json({ limit: "100kb" }));
   app.use("/api", (_req, res, next) => {
     res.set("Cache-Control", "no-store");
@@ -66,8 +76,8 @@ export function createApp({ store, uploadsDir = DEFAULT_UPLOADS }) {
   });
 
   // One budget of AI calls per client across every route, because they all draw on one API key.
-  const ai = createAiLimiter({ windowMs: 60_000, max: 30 });
-  const chat = createAiLimiter({ windowMs: 60_000, max: 120 });
+  const ai = createLimiter({ windowMs: 60_000, max: 30 });
+  const chat = createLimiter({ windowMs: 60_000, max: 120 });
   app.use(
     "/api",
     sessionRoutes(),
@@ -82,6 +92,7 @@ export function createApp({ store, uploadsDir = DEFAULT_UPLOADS }) {
     groupRoutes(),
     directiveRoutes({ ai }),
     messageRoutes({ ai, chat }),
+    fileRoutes(),
   );
   app.use("/api", (_req, _res, next) => next(HttpError(404, "NOT_FOUND", "Not found.")));
   app.use(joinRoute());

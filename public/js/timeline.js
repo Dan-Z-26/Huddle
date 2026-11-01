@@ -36,7 +36,7 @@ function drawFlow(tasks) {
     if (isNext) classes.push("is-next");
     if (late) classes.push("at-risk");
     if (index === steps.length - 1) classes.push("is-final");
-    const state = done ? "Done" : isNext ? "Next" : "";
+    const state = (done && "Done") || (isNext && "Next") || "";
     rail.append(
       el(
         "li",

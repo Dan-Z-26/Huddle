@@ -1,13 +1,6 @@
 import { api } from "./api.js";
-import {
-  announce,
-  announceError,
-  clear,
-  el,
-  formatShortDate,
-  keepFocus,
-  drawBriefDoc,
-} from "./dom.js";
+import { drawBooked } from "./bookedVendor.js";
+import { announce, announceError, clear, copyText, el, keepFocus, drawBriefDoc } from "./dom.js";
 
 const $ = (id) => document.getElementById(id);
 const STATUS = {
@@ -20,13 +13,9 @@ const AUTO_STEPS = new Set(["brief", "quotes", "shortlist"]);
 const ANSWERS = ["scope", "deliverables", "dates", "mustHaves", "judging"];
 const answerInput = (key) => $(`brief-${key.toLowerCase()}`);
 
-async function copy(text) {
-  try {
-    await navigator.clipboard.writeText(text);
-    announce("Copied.");
-  } catch {
-    announce("Couldn't reach the clipboard. Please select the text and copy it.");
-  }
+function stepNote(step) {
+  if (step.taskId || step.done) return "";
+  return AUTO_STEPS.has(step.key) ? "ticks itself" : "after booking";
 }
 
 /**
@@ -93,28 +82,38 @@ export function setUpHiring({ event, isManager, category, onSelect, onChanged })
     }
   }
 
-  function drawBrief(row) {
-    const { brief } = row;
-    $("brief-status").textContent = brief ? STATUS[brief.status] : "Not started";
-    $("brief-note").textContent = brief?.note ? `The event manager asked: ${brief.note}` : "";
-    const editable = !brief || brief.status === "draft" || brief.status === "changes";
+  function drawBriefAnswers(brief, editable) {
     $("brief-form").hidden = !editable;
     for (const key of ANSWERS) {
       const input = answerInput(key);
       if (document.activeElement !== input) input.value = brief?.answers?.[key] ?? "";
     }
     $("brief-draft").textContent = brief ? "Redraft with these answers" : "Draft the brief";
+  }
+
+  function drawBriefResult(brief, editable) {
     $("brief-result").hidden = !brief;
     drawBriefDoc($("brief-text"), brief?.text ?? "");
     $("brief-send").hidden = !brief || !editable;
     $("brief-export").hidden = !brief;
     if (brief) $("brief-export").href = `/api/briefs/${encodeURIComponent(brief.id)}/export`;
-    const deciding = isManager && brief?.status === "pending";
-    $("brief-decide").hidden = !deciding;
-    $("brief-waiting").hidden = isManager || brief?.status !== "pending";
-    $("rfq-step").hidden = brief?.status !== "approved";
-    $("quote-locked").hidden = brief?.status === "approved";
-    $("quote-form").hidden = brief?.status !== "approved";
+  }
+
+  function drawBriefStage(status) {
+    $("brief-decide").hidden = !(isManager && status === "pending");
+    $("brief-waiting").hidden = isManager || status !== "pending";
+    $("rfq-step").hidden = status !== "approved";
+    $("quote-locked").hidden = status === "approved";
+    $("quote-form").hidden = status !== "approved";
+  }
+
+  function drawBrief({ brief }) {
+    $("brief-status").textContent = brief ? STATUS[brief.status] : "Not started";
+    $("brief-note").textContent = brief?.note ? `The event manager asked: ${brief.note}` : "";
+    const editable = !brief || brief.status === "draft" || brief.status === "changes";
+    drawBriefAnswers(brief, editable);
+    drawBriefResult(brief, editable);
+    drawBriefStage(brief?.status);
   }
 
   function drawChecklist(row) {
@@ -141,8 +140,7 @@ export function setUpHiring({ event, isManager, category, onSelect, onChanged })
           }
         },
       });
-      const auto = AUTO_STEPS.has(step.key);
-      const note = step.taskId || step.done ? "" : auto ? "ticks itself" : "after booking";
+      const note = stepNote(step);
       list.append(
         el(
           "li",
@@ -159,54 +157,6 @@ export function setUpHiring({ event, isManager, category, onSelect, onChanged })
     }
   }
 
-  function drawBooked(row) {
-    const { vendor } = row;
-    $("booked-box").hidden = !vendor;
-    if (!vendor) return;
-    $("booked-name").textContent = vendor.name;
-    const done = vendor.deliverables.filter((item) => item.done).length;
-    $("booked-progress").textContent =
-      `${done} of ${vendor.deliverables.length} deliverables handed over`;
-    const list = $("booked-deliverables");
-    clear(list);
-    for (const item of vendor.deliverables)
-      list.append(el("li", { text: `${item.done ? "Handed over" : "Waiting"}: ${item.text}` }));
-    $("invite-status").textContent = vendor.inviteExpiresAt
-      ? `A link is active until ${formatShortDate(vendor.inviteExpiresAt)}.`
-      : "No invite link yet. They can't sign in on their own until you make one.";
-    $("invite-revoke").hidden = !vendor.inviteExpiresAt;
-    $("invite-create").textContent = vendor.inviteExpiresAt ? "Replace the link" : "Create a link";
-    $("invite-create").onclick = (e) =>
-      act(
-        e.target,
-        "Creating…",
-        async () => {
-          const { path } = await api.createInvite(vendor.id);
-          $("invite-link").value = `${location.origin}${path}`;
-          $("invite-link-box").hidden = false;
-        },
-        "Invite link created. It's ready to copy.",
-      ).then(() => $("invite-link").focus());
-    $("invite-revoke").onclick = (e) =>
-      act(
-        e.target,
-        "Revoking…",
-        async () => {
-          await api.revokeInvite(vendor.id);
-          $("invite-link-box").hidden = true;
-        },
-        "Invite link revoked.",
-      );
-    $("invite-copy").onclick = () => copy($("invite-link").value);
-    $("revision-ask").onclick = (e) =>
-      act(
-        e.target,
-        "Asking…",
-        () => api.requestRevision(vendor.quoteId),
-        `Asked ${vendor.name} for a revised quote.`,
-      );
-  }
-
   function answers() {
     return Object.fromEntries(
       ANSWERS.map((key) => [key, answerInput(key).value.trim()]).filter(([, value]) => value),
@@ -220,7 +170,7 @@ export function setUpHiring({ event, isManager, category, onSelect, onChanged })
     drawBoard(rows, stages);
     drawBrief(current);
     drawChecklist(current);
-    drawBooked(current);
+    drawBooked(current, act);
     return current;
   }
 
@@ -251,6 +201,6 @@ export function setUpHiring({ event, isManager, category, onSelect, onChanged })
       "Changes requested.",
     );
   };
-  $("brief-copy").onclick = () => copy(current.brief.text);
+  $("brief-copy").onclick = () => copyText(current.brief.text);
   return { refresh };
 }

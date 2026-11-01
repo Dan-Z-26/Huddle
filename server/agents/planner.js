@@ -1,6 +1,4 @@
 import { canMarkDirective, canSeeBudget } from "../core/permissions.js";
-import { parseDueDate } from "../core/dateText.js";
-import { groupsForCategory } from "../core/templates.js";
 import {
   agentPrompt,
   generate as realGenerate,
@@ -10,16 +8,15 @@ import {
 import { advise } from "./advisor.js";
 import { interpretChange } from "./budget.js";
 import { categoriesMentioned } from "./discoveryDemo.js";
-import { groundedOr, isGrounded } from "./grounded.js";
+import { groundedOr } from "./grounded.js";
 import { generateIdeas } from "./ideas.js";
 import { demoIntent } from "./plannerDemo.js";
-import { directiveTaskOutput, plannerOutput } from "./schemas.js";
+import { plannerOutput } from "./schemas.js";
 import { digest } from "./timeline.js";
 import { answerVendorQuestion, buildRfq } from "./vendor.js";
+import { categoryName } from "../core/templates.js";
 
 const MAX_TEXT = 1000;
-const DEFAULT_DUE_DAYS = 2;
-const DAY_MS = 86400000;
 const HELP =
   "I can help with budget changes (try 'what if we add 50 guests?'), vendor questions, your timeline and ideas. What would you like?";
 const DELEGATE = {
@@ -57,17 +54,8 @@ const PLANNER_SYSTEM = agentPrompt({
   ],
 });
 
-const TASK_SYSTEM = agentPrompt({
-  role: "You are Planner. You turn a manager's directive into one timeline task title, and pick which group owns it.",
-  steps: ["read the directive", "write a short task title", "pick the owning group"],
-  rules: [
-    "The title is a short imperative sentence using only words and numbers from the directive.",
-    "ownerGroupSlug must be one of the group slugs listed.",
-  ],
-});
-
 async function classify({ text, profile, template, generate }) {
-  const demo = async () =>
+  const demo = () =>
     plannerOutput.parse({
       ...demoIntent(text),
       categoryId: null,
@@ -113,7 +101,7 @@ async function vendorReply(input, plan, deps) {
       reply: `Which category should I prepare vendor questions for? ${template.categories.map(({ name }) => name).join(", ")}.`,
     };
   const rfq = await buildRfq({ profile, categoryId, template }, deps);
-  const name = template.categories.find(({ id }) => id === categoryId).name;
+  const name = categoryName(template, categoryId);
   const fallback = `Vendor checklist for ${name}:\n${bullet(rfq.checklist)}\nQuestions to ask every vendor:\n${bullet(rfq.rfqQuestions)}`;
   return {
     reply: await answerVendorQuestion({ text, categoryName: name, profile, rfq, fallback }, deps),
@@ -203,16 +191,16 @@ export async function handleMention(input, deps = {}) {
     ideas: () => ideasReply(call, { generate }),
     advice: () => adviceReply(call, { generate }),
     // Saving a brief belongs to the route, which knows who is asking and in which group.
-    vendor_brief: async () => ({ reply: "", result: { categoryId: plan.categoryId ?? null } }),
+    vendor_brief: () => ({ reply: "", result: { categoryId: plan.categoryId ?? null } }),
     // So does recording an expense: code reads the amount from the person's own words.
-    log_expense: async () => ({
+    log_expense: () => ({
       reply: "",
       result: {
         categoryId: plan.categoryId ?? null,
         description: groundedOr(plan.expenseDescription, text) || null,
       },
     }),
-    question: async () => ({
+    question: () => ({
       reply: groundedOr(plan.reply, `${context} ${text}`, HELP),
     }),
   };
@@ -224,55 +212,5 @@ export async function handleMention(input, deps = {}) {
     suggestDirective: plan.suggestDirective && canMarkDirective(input.actor),
     rationale: groundedOr(plan.rationale, ""),
     ...(result && { result }),
-  };
-}
-
-/**
- * Turns a manager's directive into a timeline task. The due date is read from the directive in code
- * (or defaults to two days out); the model only words the title and picks the owning group.
- * @param {{directiveText: string, template: object, nowIso?: string}} input The directive and template.
- * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
- * @returns {Promise<{title: string, ownerGroupSlug: string, dueDate: string, rationale: string}>} The task details.
- */
-export async function taskFromDirective(
-  { directiveText, template, nowIso = new Date().toISOString() },
-  { generate = realGenerate } = {},
-) {
-  const text = directiveText.slice(0, MAX_TEXT);
-  const slugs = template.groups.map(({ slug }) => slug);
-  const guessed = categoriesMentioned(text, template)[0];
-  const fallbackOwner = guessed
-    ? groupsForCategory(template.categoryGroupMap, guessed)[0]
-    : "core-team";
-  const demo = async () => ({
-    title:
-      text
-        .split(/[.!?\n]/)[0]
-        .trim()
-        .slice(0, 100) || "Follow up",
-    ownerGroupSlug: fallbackOwner,
-    rationale: "I used your own words for the task.",
-  });
-  const content = [`Group slugs: ${slugs.join(", ")}`, wrapUntrusted("directive", text)].join("\n");
-  const { data } = await generateOrDemo(generate, {
-    agent: "planner",
-    system: TASK_SYSTEM,
-    messages: [{ role: "user", content }],
-    schema: directiveTaskOutput,
-    demo,
-  });
-  const title =
-    isGrounded(data.title, text) && data.title.trim() ? data.title.trim() : (await demo()).title;
-  const today = new Date(nowIso).toISOString().slice(0, 10);
-  const parsed = parseDueDate(text, nowIso);
-  const dueDate =
-    parsed && parsed.slice(0, 10) >= today
-      ? parsed
-      : new Date(Date.parse(`${today}T00:00:00.000Z`) + DEFAULT_DUE_DAYS * DAY_MS).toISOString();
-  return {
-    title,
-    ownerGroupSlug: slugs.includes(data.ownerGroupSlug) ? data.ownerGroupSlug : fallbackOwner,
-    dueDate,
-    rationale: groundedOr(data.rationale, ""),
   };
 }

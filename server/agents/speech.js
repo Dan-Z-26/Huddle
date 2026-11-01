@@ -62,7 +62,7 @@ export async function speak(
       },
     ],
     schema: speechOutput,
-    demo: async () => ({ wording: fallback, rationale: "" }),
+    demo: () => ({ wording: fallback, rationale: "" }),
   });
   const wording = groundedOr(data.wording, allowed, fallback);
   return {
@@ -90,7 +90,7 @@ export async function rewordLines({ lines, context }, { generate = realGenerate 
       },
     ],
     schema: linesOutput,
-    demo: async () => ({ lines }),
+    demo: () => ({ lines }),
   });
   if (data.lines?.length !== lines.length) return lines;
   return lines.map((line, index) => {

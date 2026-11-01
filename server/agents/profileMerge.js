@@ -76,6 +76,104 @@ export function resolveGuests(profile, answer) {
   return { profile: next, understood: true };
 }
 
+// What one answer is doing to the profile: the copy being changed, and what was taken or refused.
+function take(change, key, value, acceptedAs = key) {
+  change.next[key] = value;
+  change.accepted.add(acceptedAs);
+}
+
+const refuse = (change, field, reason) => change.rejected.push({ field, reason });
+const inAnswer = (change, text) => isGrounded(text, change.answer);
+
+function readText(change, extracted) {
+  for (const [key, max] of TEXT_FIELDS) {
+    const text = clean(extracted[key], max);
+    if (text) take(change, key, text);
+  }
+}
+
+function readDate(change, { date }) {
+  if (!date || (change.answering !== "date" && change.next.date)) return;
+  const iso = inAnswer(change, date) ? parseEventDate(date) : null;
+  if (!iso) refuse(change, "date", "I need the full date, including the year");
+  else if (iso.slice(0, 10) < change.nowIso.slice(0, 10))
+    refuse(change, "date", "that date has already passed");
+  else take(change, "date", iso);
+}
+
+function readBudget(change, { budgetText }) {
+  const { next } = change;
+  if (!budgetText || (change.answering !== "budget" && next.budget.totalMinor)) return;
+  const amount = inAnswer(change, budgetText) ? parseAmount(budgetText) : null;
+  if (!amount) refuse(change, "budget", "I couldn't read that budget");
+  else
+    take(change, "budget", {
+      totalMinor: amount.minor,
+      currency: amount.currency ?? next.budget.currency,
+    });
+}
+
+function readGuests(change, { guestText }) {
+  if (!guestText || !inAnswer(change, guestText) || change.next.guests.confirmed !== null) return;
+  const { profile, understood } = resolveGuests(change.next, guestText);
+  if (understood) take(change, "guests", profile.guests);
+}
+
+function readPriorities(change, { priorities }) {
+  if (!priorities) return;
+  const categoryIds = change.template.categories.map(({ id }) => id);
+  const ranking = normalisePriorities(priorities, categoryIds);
+  if (ranking.length === 0) refuse(change, "priorities", "I didn't recognise those categories");
+  else take(change, "priorities", ranking);
+}
+
+function readMustHaves(change, { mustHaves, absoluteMustHave }) {
+  if (mustHaves?.length) {
+    addMustHaves(change.next, mustHaves, change.template);
+    change.accepted.add("mustHaves");
+  }
+  if (!absoluteMustHave) return;
+  const wanted = absoluteMustHave.toLowerCase();
+  const match = change.next.mustHaves.find(
+    ({ text }) => text.toLowerCase().includes(wanted) || wanted.includes(text.toLowerCase()),
+  );
+  if (match) take(change, "absoluteMustHaveId", match.id, "absoluteMustHave");
+  else refuse(change, "absoluteMustHave", "that isn't one of your must-haves");
+}
+
+function readConstraints(change, { constraints }) {
+  const known = change.next.constraints;
+  for (const key of CONSTRAINT_KEYS) {
+    const merged = mergeUnique(known[key], constraints?.[key]);
+    if (merged.length !== known[key].length) {
+      known[key] = merged;
+      change.accepted.add("constraints");
+    }
+  }
+}
+
+function readVendorNeeds(change, { vendorNeeds }) {
+  for (const [categoryId, need] of Object.entries(vendorNeeds ?? {})) {
+    const text = clean(need, 300);
+    if (change.template.categories.some(({ id }) => id === categoryId) && text) {
+      change.next.vendorNeeds[categoryId] = text;
+      change.accepted.add("vendorNeeds");
+    }
+  }
+}
+
+// In this order: a must-have named as the absolute one can arrive in the same answer.
+const READERS = [
+  readText,
+  readDate,
+  readBudget,
+  readGuests,
+  readPriorities,
+  readMustHaves,
+  readConstraints,
+  readVendorNeeds,
+];
+
 /**
  * Validates what the Discovery model extracted and merges the good parts into a copy of the
  * profile. Dates, money and guest counts are parsed here, and only when the model's copy is made of
@@ -90,70 +188,15 @@ export function resolveGuests(profile, answer) {
  *   The updated copy, the fields that changed, and what was refused and why.
  */
 export function applyExtracted(profile, extracted, { template, nowIso, answer, field }) {
-  const next = structuredClone(profile);
-  const accepted = new Set();
-  const rejected = [];
-  const take = (field, value, key = field) => {
-    next[field] = value;
-    accepted.add(key);
+  const change = {
+    next: structuredClone(profile),
+    accepted: new Set(),
+    rejected: [],
+    template,
+    nowIso,
+    answer,
+    answering: field,
   };
-  const categoryIds = template.categories.map(({ id }) => id);
-
-  for (const [field, max] of TEXT_FIELDS) {
-    const text = clean(extracted[field], max);
-    if (text) take(field, text);
-  }
-  const fromAnswer = (text) => isGrounded(text, answer);
-  if (extracted.date && (field === "date" || !next.date)) {
-    const iso = fromAnswer(extracted.date) ? parseEventDate(extracted.date) : null;
-    if (!iso) rejected.push({ field: "date", reason: "I need the full date, including the year" });
-    else if (iso.slice(0, 10) < nowIso.slice(0, 10))
-      rejected.push({ field: "date", reason: "that date has already passed" });
-    else take("date", iso);
-  }
-  if (extracted.budgetText && (field === "budget" || !next.budget.totalMinor)) {
-    const amount = fromAnswer(extracted.budgetText) ? parseAmount(extracted.budgetText) : null;
-    if (!amount) rejected.push({ field: "budget", reason: "I couldn't read that budget" });
-    else {
-      next.budget = { totalMinor: amount.minor, currency: amount.currency ?? next.budget.currency };
-      accepted.add("budget");
-    }
-  }
-  if (extracted.guestText && fromAnswer(extracted.guestText) && next.guests.confirmed === null) {
-    const { profile: withGuests, understood } = resolveGuests(next, extracted.guestText);
-    if (understood) take("guests", withGuests.guests);
-  }
-  if (extracted.priorities) {
-    const ranking = normalisePriorities(extracted.priorities, categoryIds);
-    if (ranking.length === 0)
-      rejected.push({ field: "priorities", reason: "I didn't recognise those categories" });
-    else take("priorities", ranking);
-  }
-  if (extracted.mustHaves?.length) {
-    addMustHaves(next, extracted.mustHaves, template);
-    accepted.add("mustHaves");
-  }
-  if (extracted.absoluteMustHave) {
-    const wanted = extracted.absoluteMustHave.toLowerCase();
-    const match = next.mustHaves.find(
-      ({ text }) => text.toLowerCase().includes(wanted) || wanted.includes(text.toLowerCase()),
-    );
-    if (match) take("absoluteMustHaveId", match.id, "absoluteMustHave");
-    else rejected.push({ field: "absoluteMustHave", reason: "that isn't one of your must-haves" });
-  }
-  for (const key of CONSTRAINT_KEYS) {
-    const merged = mergeUnique(next.constraints[key], extracted.constraints?.[key]);
-    if (merged.length !== next.constraints[key].length) {
-      next.constraints[key] = merged;
-      accepted.add("constraints");
-    }
-  }
-  for (const [categoryId, need] of Object.entries(extracted.vendorNeeds ?? {})) {
-    const text = clean(need, 300);
-    if (categoryIds.includes(categoryId) && text) {
-      next.vendorNeeds[categoryId] = text;
-      accepted.add("vendorNeeds");
-    }
-  }
-  return { profile: next, accepted: [...accepted], rejected };
+  for (const read of READERS) read(change, extracted);
+  return { profile: change.next, accepted: [...change.accepted], rejected: change.rejected };
 }

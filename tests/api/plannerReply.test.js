@@ -2,14 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
 import { runReminders } from "../../server/reminders.js";
-import { startDemo } from "./helpers.js";
+import { settle, startDemo } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
 const GROUP = `g-${ID}-core-team`;
 const post = (call, text, as) =>
   call(`/groups/${GROUP}/messages`, { as, method: "POST", body: { text } });
-const settle = (store) => Promise.all([...store.background]);
 const agentTexts = (store) =>
   store
     .messagesForGroup(GROUP)

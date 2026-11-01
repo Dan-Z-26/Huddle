@@ -1,17 +1,21 @@
 import { contingencyOf, COVER_LABEL } from "./budgetEngine.js";
-import { MAX_GUESTS, MAX_MINOR } from "./money.js";
+import {
+  findDriver,
+  isAmount,
+  isCount,
+  makeDriver,
+  newDriverId,
+  pricingProblem,
+} from "./drivers.js";
+import { MAX_GUESTS } from "./money.js";
 import { quotePricesWithTax } from "./quoteScoring.js";
 
-const DRIVER_KINDS = ["perGuest", "fixed", "perUnit", "stepped"];
-const PRICE_SOURCES = ["quote", "user", "estimate"];
 const ACCEPTABLE_QUOTE_STATUSES = ["confirmed", "accepted"];
 
 const applied = (state) => ({ state });
 const rejected = (reason) => ({ reason });
 // Rejection reasons echo hostile values, so show a short string or just the type.
 const show = (value) => (typeof value === "string" ? value.slice(0, 40) : typeof value);
-const isAmount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= MAX_MINOR;
-const isCount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= MAX_GUESTS;
 const isLabel = (value) => typeof value === "string" && value.trim() !== "";
 const findCategory = (state, id) => state.categories.find((category) => category.id === id);
 
@@ -21,74 +25,6 @@ function replaceDrivers(state, categoryId, drivers) {
     categories: state.categories.map((category) =>
       category.id === categoryId ? { ...category, drivers } : category,
     ),
-  };
-}
-
-function findDriver(category, idOrLabel) {
-  if (typeof idOrLabel !== "string") return undefined;
-  const wanted = idOrLabel.toLowerCase();
-  return category.drivers.find(
-    (driver) => driver.id === idOrLabel || driver.label.toLowerCase() === wanted,
-  );
-}
-
-function newDriverId(category, label) {
-  const slug =
-    label
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "") || "item";
-  const taken = new Set(category.drivers.map((driver) => driver.id));
-  let counter = 1;
-  while (taken.has(`${slug}-${counter}`)) counter += 1;
-  return `${slug}-${counter}`;
-}
-
-function areValidSteps(steps) {
-  return (
-    Array.isArray(steps) &&
-    steps.length > 0 &&
-    steps.every(
-      (step, index) =>
-        isCount(step?.upToGuests) &&
-        step.upToGuests >= 1 &&
-        isAmount(step.amountMinor) &&
-        (index === 0 || step.upToGuests > steps[index - 1].upToGuests),
-    )
-  );
-}
-
-function pricingProblem(pricing) {
-  if (!DRIVER_KINDS.includes(pricing?.kind)) return "unknown driver kind";
-  if (!PRICE_SOURCES.includes(pricing.source)) return "unknown price source";
-  if (pricing.kind === "perUnit" && !isCount(pricing.units)) {
-    return "units must be a non-negative integer";
-  }
-  if (pricing.source === "estimate") {
-    const { lowMinor, highMinor } = pricing.estimate ?? {};
-    const isRange = isAmount(lowMinor) && isAmount(highMinor) && lowMinor <= highMinor;
-    return isRange ? null : "estimate needs integer lowMinor <= highMinor";
-  }
-  if (pricing.kind === "stepped") {
-    return areValidSteps(pricing.steps) ? null : "steps must ascend with integer amounts";
-  }
-  return isAmount(pricing.unitMinor) ? null : "unitMinor must be a non-negative integer";
-}
-
-// Copies only the fields pricingProblem validated for this kind and source.
-function makeDriver(id, label, pricing) {
-  const isEstimate = pricing.source === "estimate";
-  const isStepped = pricing.kind === "stepped";
-  return {
-    id,
-    label,
-    kind: pricing.kind,
-    unitMinor: isEstimate || isStepped ? 0 : pricing.unitMinor,
-    units: pricing.kind === "perUnit" ? pricing.units : 0,
-    steps: !isEstimate && isStepped ? structuredClone(pricing.steps) : [],
-    source: pricing.source,
-    estimate: isEstimate ? { ...pricing.estimate } : null,
-    unpriced: false,
   };
 }
 

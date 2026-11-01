@@ -61,6 +61,11 @@ export async function assertError(res, status, code) {
  */
 export const sessionCookie = (store, userId) => `huddle_session=${store.openSession(userId)}`;
 
+/** Waits for everything running after a response, including work that work started. */
+export async function settle(store) {
+  while (store.background.size) await Promise.all([...store.background]);
+}
+
 const storesByBase = new Map();
 
 /** The same, for a test that only holds the server's base URL. */

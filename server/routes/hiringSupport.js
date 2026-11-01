@@ -1,11 +1,11 @@
-import { randomUUID } from "node:crypto";
 import { draftBrief, defaultAnswers } from "../agents/hiring.js";
 import { mentionsMoney } from "../core/amount.js";
 import { bookedTasks, siteVisitTask } from "../core/hiring.js";
 import { HttpError } from "../http.js";
-import { getTemplate } from "../core/templates.js";
+import { categoryName, getTemplate } from "../core/templates.js";
 import { postSpoken } from "./agentPost.js";
 import { categoryGroup, vendorRoomFor } from "./vendorSupport.js";
+import { newId } from "../store/ids.js";
 
 export const briefId = (eventId, categoryId) => `b-${eventId}-${categoryId}`;
 export const briefOf = (store, eventId, categoryId) =>
@@ -92,9 +92,7 @@ function removeVendor(store, vendor) {
 export function sendBrief({ store, event, brief, user }) {
   brief.status = "pending";
   const core = store.groups.get(`g-${event.id}-core-team`);
-  const name =
-    getTemplate(event.eventType).categories.find(({ id }) => id === brief.categoryId)?.name ??
-    brief.categoryId;
+  const name = categoryName(getTemplate(event.eventType), brief.categoryId) ?? brief.categoryId;
   const facts = [
     `${user.name} sent the ${name} brief for approval.`,
     "The event manager can approve it under Vendors and quotes.",
@@ -138,7 +136,7 @@ export function bookVendor({ store, event, template, quote, nowIso }) {
   group.memberRoleIds.push(vendor.roleId);
   const brief = briefOf(store, event.id, quote.categoryId);
   for (const text of brief?.deliverables ?? []) {
-    const id = `dv-${randomUUID().slice(0, 8)}`;
+    const id = newId("dv");
     store.deliverables.set(id, {
       id,
       eventId: event.id,

@@ -2,7 +2,7 @@ import { reminder } from "./agents/timeline.js";
 import { overdue } from "./core/directives.js";
 import { postSpoken } from "./routes/agentPost.js";
 import { postDigest } from "./routes/timeline.js";
-import { groupPeople } from "./routes/views.js";
+import { groupPeople } from "./views.js";
 import { postAgentMessage } from "./store/workspace.js";
 
 const MAX_PER_RUN = 5;

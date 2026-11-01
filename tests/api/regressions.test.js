@@ -1,15 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { runReminders } from "../../server/reminders.js";
-import { assertError, startDemo } from "./helpers.js";
+import { assertError, settle, startDemo } from "./helpers.js";
 
 const ID = "demo";
 const MANAGER = `user-manager@${ID}`;
 const FOOD_LEAD = `user-fb-lead@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
-const settle = async (store) => {
-  while (store.background.size) await Promise.all([...store.background]);
-};
 const post = async (call, path, body, as = MANAGER) => call(path, { as, method: "POST", body });
 const addQuote = async (call, fields, as = MANAGER) =>
   post(call, `/events/${ID}/quotes`, { vendorName: "Vendor", ...fields }, as);

@@ -1,7 +1,14 @@
 import { createHash, randomBytes } from "node:crypto";
 import { Router } from "express";
 import { getTemplate } from "../core/templates.js";
-import { HttpError, requireUser, startSession, validate } from "../http.js";
+import {
+  createLimiter,
+  HttpError,
+  requireUser,
+  sessionOf,
+  startSession,
+  validate,
+} from "../http.js";
 import * as schemas from "../validation/schemas.js";
 import { briefOf, deliverablesOf } from "./hiringSupport.js";
 import { requireCategory } from "./vendorSupport.js";
@@ -87,13 +94,20 @@ export function vendorAccessRoutes() {
 /** The vendor's invite link: an expiring, revocable way in that signs them in as themselves only. */
 export function joinRoute() {
   const router = Router();
-  router.get("/join/:token", (req, res) => {
+  const joins = createLimiter({ windowMs: 60_000, max: 30 });
+  router.get("/join/:token", joins, (req, res) => {
     const { store } = req.app.locals;
     const hash = hashOf(String(req.params.token).slice(0, 200));
     const invite = store.invites.get(hash);
     const vendor = invite && store.users.get(invite.vendorUserId);
     if (!vendor || invite.expiresAt <= Date.now()) {
       res.redirect("/?invite=invalid");
+      return;
+    }
+    // Nothing else leads back to a private event, so a link someone sent can't sign them out of it.
+    const current = sessionOf(req);
+    if (current && !current.invited && store.users.has(current.userId)) {
+      res.redirect("/?invite=signed-in");
       return;
     }
     startSession(res, store, vendor.id, { invited: true });

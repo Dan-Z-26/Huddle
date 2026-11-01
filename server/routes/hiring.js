@@ -3,7 +3,7 @@ import { draftDecline } from "../agents/hiring.js";
 import { SAMPLE_QUOTES } from "../agents/sampleQuotes.js";
 import { mentionsMoney } from "../core/amount.js";
 import { managerChecklist, PIPELINE, pipelineStage } from "../core/hiring.js";
-import { getTemplate } from "../core/templates.js";
+import { categoryName, getTemplate } from "../core/templates.js";
 import { HttpError, ownEvent, requireUser, requireBudget, validate } from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
 import * as schemas from "../validation/schemas.js";
@@ -143,7 +143,7 @@ export function hiringRoutes({ ai }) {
       const { approve, note } = req.valid.body;
       const template = getTemplate(event.eventType);
       const nowIso = new Date().toISOString();
-      const name = template.categories.find(({ id }) => id === brief.categoryId).name;
+      const name = categoryName(template, brief.categoryId);
       brief.status = approve ? "approved" : "changes";
       brief.note = approve ? null : (note ?? null);
       if (approve) startHiring({ store, event, template, categoryId: brief.categoryId, nowIso });

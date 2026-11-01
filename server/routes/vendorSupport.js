@@ -1,6 +1,9 @@
-import { normaliseQuote } from "../core/quoteScoring.js";
+import { computeBudget } from "../core/budgetEngine.js";
+import { quoteWarnings, scoreReasons } from "../core/hiring.js";
+import { wholeMoney } from "../core/money.js";
+import { normaliseQuote, scoreQuotes } from "../core/quoteScoring.js";
 import { canView } from "../core/permissions.js";
-import { getTemplate, groupsForCategory } from "../core/templates.js";
+import { categoryName, getTemplate, groupsForCategory } from "../core/templates.js";
 import { HttpError } from "../http.js";
 
 /** Who may work on a category's vendors: the manager, and core members who own the category. */
@@ -49,7 +52,7 @@ export function vendorRoomFor(store, event, template, categoryId) {
     id: `g-${event.id}-${slug}`,
     eventId: event.id,
     slug,
-    name: template.categories.find(({ id }) => id === categoryId).name,
+    name: categoryName(template, categoryId),
     kind: "category",
     memberRoleIds: [
       ...owners.map(({ id }) => id),
@@ -98,4 +101,50 @@ export function fromFields(body) {
     mustHaveIdsMet: body.mustHaveIdsMet,
     answers: body.answers,
   };
+}
+
+/**
+ * The comparison table for one category: one row per quote, best fit first, with why it scored as
+ * it did and what to look out for.
+ * @param {{store: object, event: object, state: object, categoryId: string,
+ *   viewerIsManager: boolean}} input The event, its budget, the category, and who is looking.
+ * @returns {object[]} The rows.
+ */
+export function comparisonRows({ store, event, state, categoryId, viewerIsManager }) {
+  const quotes = eventQuotes(store, event.id);
+  const scored = scoreQuotes(quotes, {
+    guestCount: state.guestCount,
+    // Only the manager's score reflects the ranking: rank plus amount would reveal the total.
+    priorities: viewerIsManager ? event.priorities : [],
+    mustHaves: event.mustHaves,
+    categoryId,
+    absoluteMustHaveId: event.absoluteMustHaveId,
+  });
+  const byId = new Map(quotes.map((quote) => [quote.id, quote]));
+  const planMinor = computeBudget(state).categories.find(
+    ({ id }) => id === categoryId,
+  ).committedMinor;
+  const money = (minor) => wholeMoney(minor, state.currency);
+  const cheapest = Math.min(...scored.map(({ totalMinor }) => totalMinor));
+  const mustHaveCount = event.mustHaves.filter((item) => item.categoryId === categoryId).length;
+  return scored
+    .map((row) => {
+      const quote = byId.get(row.quoteId);
+      const { status, includes, answers, mustHaveIdsMet, taxStated } = quote;
+      return {
+        ...row,
+        status,
+        includes,
+        answers,
+        mustHaveIdsMet,
+        reasons: scoreReasons(row, { cheapestMinor: cheapest, mustHaveCount, taxStated }),
+        warnings: quoteWarnings(quote, {
+          guestCount: state.guestCount,
+          totalMinor: row.totalMinor,
+          planMinor,
+          money,
+        }),
+      };
+    })
+    .sort((a, b) => b.score - a.score);
 }

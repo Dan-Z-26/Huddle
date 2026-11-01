@@ -1,5 +1,5 @@
 import { wholeMoney } from "../core/money.js";
-import { groupsForCategory } from "../core/templates.js";
+import { categoryName, groupsForCategory } from "../core/templates.js";
 import {
   agentPrompt,
   generate as realGenerate,
@@ -82,8 +82,7 @@ export function noticeFacts({
   if (hideCosts) return facts;
   const showCosts = mayShowCosts({ template, groupSlug, categoryIds, memberRoleIds });
   for (const delta of deltas.filter(({ categoryId }) => categoryIds.includes(categoryId))) {
-    const name =
-      template.categories.find(({ id }) => id === delta.categoryId)?.name ?? delta.categoryId;
+    const name = categoryName(template, delta.categoryId);
     facts.push(
       showCosts
         ? `${name} cost changes from ${wholeMoney(delta.beforeMinor, currency)} to ${wholeMoney(delta.afterMinor, currency)}.`
@@ -102,7 +101,7 @@ export function noticeFacts({
  */
 export async function word({ facts, groupName }, { generate = realGenerate } = {}) {
   const plain = `Update: ${facts.join(" ")}`;
-  const demo = async () => ({
+  const demo = () => ({
     wording: plain.slice(0, 400),
     rationale: "These are the changes that affect this group.",
   });

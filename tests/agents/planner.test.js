@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { handleMention, taskFromDirective } from "../../server/agents/planner.js";
+import { taskFromDirective } from "../../server/agents/directiveTask.js";
+import { handleMention } from "../../server/agents/planner.js";
 import {
   NOW,
   core,
@@ -12,6 +13,10 @@ import {
   state,
   template,
 } from "./fixtures.js";
+
+// The Planner's choice from the fake model; the advice itself from the app's own offline rules.
+const demoAdvice = (generate) => (request) =>
+  request.agent === "planner" ? generate(request) : demoGenerate(request);
 
 const ask = (text, extra = {}, generate = demoGenerate) =>
   handleMention(
@@ -78,6 +83,28 @@ describe("handleMention: permissions", () => {
     const result = await ask("@huddle add 50 guests", { actor: core });
     assert.equal(result.reply, "Only the event manager can change the budget.");
     assert.deepEqual(result.result.changeEvents, []);
+  });
+
+  it("says so when no idea fits, rather than posting an empty list", async () => {
+    const generate = async (request) =>
+      request.agent === "planner"
+        ? { data: { intent: "ideas", suggestDirective: false, reply: "", rationale: "" } }
+        : { data: { ideas: [], rationale: "" } };
+    const result = await ask("@huddle any ideas?", {}, generate);
+    assert.match(result.reply, /couldn't come up with ideas/);
+  });
+
+  it("lists what to do next for the manager, and sends anyone else to them", async () => {
+    const chooseAdvice = async () => ({
+      data: { intent: "advice", suggestDirective: false, reply: "", rationale: "" },
+    });
+    const late = [{ title: "Book the hall", status: "todo", atRisk: true, dueDate: NOW }];
+    const managerReply = await ask("@huddle what next?", { tasks: late }, demoAdvice(chooseAdvice));
+    assert.equal(managerReply.delegateTo, "planner");
+    assert.match(managerReply.reply, /^What I'd do next:\n- /);
+    assert.match(managerReply.reply, /Book the hall/);
+    const coreReply = await ask("@huddle what next?", { actor: core }, chooseAdvice);
+    assert.match(coreReply.reply, /please ask the event manager/);
   });
 
   it("sends a core member to the manager for ideas, since they use the budget", async () => {

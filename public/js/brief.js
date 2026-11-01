@@ -14,32 +14,40 @@ export function countdown(iso) {
   return days === 0 ? "Today" : "Event date has passed";
 }
 
-function valueOf(field, profile, categories, canSeeBudget) {
-  const names = new Map(categories.map(({ id, name }) => [id, name]));
-  const skipped = profile.skippedFields?.includes(field);
-  const values = {
-    name: profile.name,
-    purpose: profile.purpose,
-    date: profile.date && formatDate(profile.date),
-    city: profile.city,
-    venueType: profile.venueType,
-    guests: profile.guests?.confirmed ? `${profile.guests.confirmed} guests` : "",
-    budget: canSeeBudget
-      ? profile.budget?.totalMinor &&
-        formatMoney(profile.budget.totalMinor, profile.budget.currency)
-      : "Visible to the event manager",
-    priorities: profile.priorities?.map((id, i) => `${i + 1}. ${names.get(id) ?? id}`).join("  "),
-    attendeeExperience: profile.attendeeExperience,
-    mustHaves: profile.mustHaves?.map(({ text }) => text).join(", "),
-    absoluteMustHave: profile.mustHaves?.find(({ id }) => id === profile.absoluteMustHaveId)?.text,
-    constraints: Object.values(profile.constraints ?? {})
+const VISIBLE_TO_MANAGER = "Visible to the event manager";
+
+// How each field reads on the brief. A missing answer gives nothing, and stays off the page.
+const READERS = {
+  name: (profile) => profile.name,
+  purpose: (profile) => profile.purpose,
+  date: (profile) => profile.date && formatDate(profile.date),
+  city: (profile) => profile.city,
+  venueType: (profile) => profile.venueType,
+  guests: ({ guests }) => (guests?.confirmed ? `${guests.confirmed} guests` : ""),
+  budget: ({ budget }, { canSeeBudget }) => {
+    if (!canSeeBudget) return VISIBLE_TO_MANAGER;
+    return budget?.totalMinor && formatMoney(budget.totalMinor, budget.currency);
+  },
+  priorities: ({ priorities }, { categories }) => {
+    const names = new Map(categories.map(({ id, name }) => [id, name]));
+    return priorities?.map((id, i) => `${i + 1}. ${names.get(id) ?? id}`).join("  ");
+  },
+  attendeeExperience: (profile) => profile.attendeeExperience,
+  mustHaves: ({ mustHaves }) => mustHaves?.map(({ text }) => text).join(", "),
+  absoluteMustHave: ({ mustHaves, absoluteMustHaveId }) =>
+    mustHaves?.find(({ id }) => id === absoluteMustHaveId)?.text,
+  constraints: ({ constraints }) =>
+    Object.values(constraints ?? {})
       .flat()
       .join(", "),
-    vendorNeeds: Object.values(profile.vendorNeeds ?? {}).join(", "),
-  };
-  if (values[field]) return values[field];
-  if (skipped) return "Skipped";
-  return canSeeBudget ? "" : "Visible to the event manager";
+  vendorNeeds: ({ vendorNeeds }) => Object.values(vendorNeeds ?? {}).join(", "),
+};
+
+function valueOf(field, profile, categories, canSeeBudget) {
+  const value = READERS[field](profile, { categories, canSeeBudget });
+  if (value) return value;
+  if (profile.skippedFields?.includes(field)) return "Skipped";
+  return canSeeBudget ? "" : VISIBLE_TO_MANAGER;
 }
 
 /** Draws the event brief: every answer so far. What isn't answered yet stays off the page. */

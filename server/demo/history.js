@@ -1,8 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { rewordLines } from "../agents/speech.js";
 import { taskFromDirective } from "../core/timelinePlanner.js";
 import { DEMO_EVENT_ID as ID } from "../store/seed.js";
 import { addMessage } from "../store/workspace.js";
+import { newId } from "../store/ids.js";
 
 const HOUR_MS = 3600000;
 const MANAGER = `user-manager@${ID}`;
@@ -40,7 +40,7 @@ export function seedHistory(store, nowIso) {
   const at = (hours) => new Date(now - hours * HOUR_MS).toISOString();
   const say = (hours, slug, authorId, text) =>
     addMessage(store, {
-      id: `m-${randomUUID().slice(0, 8)}`,
+      id: newId("m"),
       groupId: `g-${ID}-${slug}`,
       authorId,
       authorKind: "human",
@@ -53,7 +53,7 @@ export function seedHistory(store, nowIso) {
 
   const message = say(0.75, "announcements", MANAGER, SHORTLIST);
   const directive = {
-    id: `d-${randomUUID().slice(0, 8)}`,
+    id: newId("d"),
     messageId: message.id,
     groupId: message.groupId,
     addressedUserIds: [DESIGNER, PRODUCTION, FOOD, PRESS],

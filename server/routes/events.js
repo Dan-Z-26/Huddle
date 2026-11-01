@@ -9,7 +9,7 @@ import { mentionsMoney } from "../core/amount.js";
 import { planningSignals } from "../core/signals.js";
 import { nextStep } from "../agents/discovery.js";
 import {
-  createAiLimiter,
+  createLimiter,
   HttpError,
   managerOnly,
   ownEvent,
@@ -28,7 +28,7 @@ import {
 } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
 import { eventQuotes } from "./vendorSupport.js";
-import { profileFor, publicUser } from "./views.js";
+import { profileFor, publicUser } from "../views.js";
 
 const MAX_EVENTS = 50;
 /** The user's groups, each saying whether they may post there, so the screen can offer a composer. */
@@ -40,16 +40,18 @@ export function groupsFor(store, user) {
 /** Event-scoped routes: the user's own event only, and managers only where it changes things. */
 export function eventRoutes({ ai }) {
   const router = Router();
-  const newEvents = createAiLimiter({ windowMs: 3_600_000, max: 20 });
+  const newEvents = createLimiter({ windowMs: 3_600_000, max: 20 });
 
   router.get("/event-types", (_req, res) => res.json({ eventTypes: listEventTypes() }));
 
   router.post("/events", newEvents, validate(schemas.createEvent), (req, res) => {
     const { store } = req.app.locals;
     if (store.events.size >= MAX_EVENTS) {
-      // Replace the oldest event rather than refuse, so nobody can block the demo for everyone.
-      const oldest = [...store.events.keys()].find((id) => id !== DEMO_EVENT_ID);
-      deleteEvent(store, oldest);
+      // Replace one rather than refuse, so nobody can block the demo for everyone. Unfinished ones
+      // go first, so a burst of new events can't push out an event somebody has set up.
+      const others = [...store.events.values()].filter(({ id }) => id !== DEMO_EVENT_ID);
+      const spare = others.find(({ intakeStatus }) => intakeStatus === "in_progress") ?? others[0];
+      deleteEvent(store, spare.id);
     }
     const { event, users } = createEvent(store, { eventType: req.valid.body.eventType });
     const manager = users.find(({ kind }) => kind === "manager");

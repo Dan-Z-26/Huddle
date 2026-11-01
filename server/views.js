@@ -1,6 +1,6 @@
-import { mentionsMoney } from "../core/amount.js";
-import { ackStatus } from "../core/directives.js";
-import { canSeeBudget } from "../core/permissions.js";
+import { mentionsMoney } from "./core/amount.js";
+import { ackStatus } from "./core/directives.js";
+import { canSeeBudget } from "./core/permissions.js";
 
 const HIDDEN = "(contains an amount; visible to the event manager)";
 const noMoney = (text) => (mentionsMoney(text) ? HIDDEN : text);

@@ -39,3 +39,25 @@ export function groupsForCategory(categoryGroupMap, categoryId) {
   const slugs = Object.hasOwn(categoryGroupMap, categoryId) ? categoryGroupMap[categoryId] : [];
   return slugs.length > 0 ? [...slugs] : ["core-team"];
 }
+
+/**
+ * Finds a category in the template.
+ * @param {{categories: object[]}} template The event template.
+ * @param {string} categoryId The category.
+ * @returns {object} The category.
+ * @throws {RangeError} When it does not exist.
+ */
+export function categoryOf(template, categoryId) {
+  const category = template.categories.find(({ id }) => id === categoryId);
+  if (!category) throw new RangeError(`unknown category: ${categoryId}`);
+  return category;
+}
+
+/**
+ * A category's name for showing to people, or its id if the template has no such category.
+ * @param {{categories: object[]}} template The event template.
+ * @param {string} categoryId The category.
+ * @returns {string} The name.
+ */
+export const categoryName = (template, categoryId) =>
+  template.categories.find(({ id }) => id === categoryId)?.name ?? categoryId;

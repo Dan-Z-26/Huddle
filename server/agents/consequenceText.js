@@ -1,4 +1,5 @@
 import { wholeMoney } from "../core/money.js";
+import { categoryName } from "../core/templates.js";
 
 const range = (low, high, currency) =>
   low === high
@@ -46,7 +47,7 @@ function optionLine(option, nameOf, mustHaves, currency) {
  * @returns {string} Lines separated by newlines.
  */
 export function consequenceText(consequences, { profile, template, currency }) {
-  const nameOf = (id) => template.categories.find((category) => category.id === id)?.name ?? id;
+  const nameOf = (id) => categoryName(template, id);
   const { shortfall, surplusMinor, deltas, options, increaseBudget, bufferAvailableMinor } =
     consequences;
   const lines = [];
