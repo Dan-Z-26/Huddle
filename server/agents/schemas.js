@@ -212,7 +212,11 @@ export const INTENTS = [
   "question",
 ];
 export const briefOutput = z.object({
-  text: short(1800),
+  about: short(400),
+  scope: short(500),
+  dates: short(200),
+  mustHaves: z.array(short(120)).max(10),
+  howWeChoose: short(300),
   deliverables: z.array(short(80)).max(8),
 });
 export const declineOutput = z.object({ text: short(600) });

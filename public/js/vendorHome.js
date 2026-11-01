@@ -1,12 +1,12 @@
 import { api } from "./api.js";
-import { announce, announceError, clear, el, keepFocus } from "./dom.js";
+import { announce, announceError, clear, el, keepFocus, drawBriefDoc } from "./dom.js";
 
 const $ = (id) => document.getElementById(id);
 
 /** Draws what a booked vendor sees beside their group: the brief, and what to hand over. */
 export async function renderVendorHome() {
   const { brief, deliverables } = await api.vendorHome();
-  $("vendor-brief").textContent = brief;
+  drawBriefDoc($("vendor-brief"), brief ?? "");
   const done = deliverables.filter((item) => item.done).length;
   $("vendor-progress").textContent = `${done} of ${deliverables.length} handed over`;
   keepFocus(() => {

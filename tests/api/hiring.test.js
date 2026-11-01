@@ -545,3 +545,70 @@ describe("what the security review checked", () => {
     assert.ok(store.sessions.size > 0);
   });
 });
+
+describe("telling the manager about a quote", () => {
+  const roomTexts = (store, slug) =>
+    store
+      .messagesForGroup(`g-${ID}-${slug}`)
+      .messages.filter(({ authorId }) => authorId === `agent-vendor@${ID}`)
+      .map(({ text }) => text);
+  const attention = async (call, as) => (await (await call("/me", { as })).json()).attention.quotes;
+
+  it("posts when a read file is confirmed, not when it is only uploaded, and shows no amount", async (t) => {
+    const { call, base, store } = await fresh(t);
+    await approved(call);
+    await settle(store);
+    const before = roomTexts(store, "pr-media").length;
+    const { quote } = await (await upload(base, PR, "pr-northstar.pdf")).json();
+    await settle(store);
+    assert.equal(roomTexts(store, "pr-media").length, before);
+    assert.deepEqual(await attention(call, MANAGER), []);
+
+    await post(call, `/quotes/${quote.id}/confirm`, PR, confirmBody(quote));
+    await settle(store);
+    const told = roomTexts(store, "pr-media").slice(before);
+    assert.equal(told.length, 1);
+    assert.match(told[0], /Northstar Media/);
+    assert.match(told[0], /PR & media/);
+    assert.match(told[0], /uploaded file/);
+    assert.doesNotMatch(told[0], /₹|lakh|\d{3}/);
+    assert.deepEqual(await attention(call, MANAGER), [
+      { categoryId: "pr", count: 1, name: "PR & media" },
+    ]);
+    assert.deepEqual(await attention(call, PR), []);
+  });
+
+  it("counts the next quote, and stays quiet when a confirmed quote is only edited", async (t) => {
+    const { call, base, store } = await fresh(t);
+    await approved(call);
+    const [first] = await threeQuotes({ call, base });
+    await settle(store);
+    assert.match(roomTexts(store, "pr-media").at(-1), /3 quotes to compare/);
+    const count = roomTexts(store, "pr-media").length;
+    await post(call, `/quotes/${first.id}/confirm`, PR, confirmBody(first));
+    await settle(store);
+    assert.equal(roomTexts(store, "pr-media").length, count);
+  });
+
+  it("goes once the manager has accepted a quote", async (t) => {
+    const { call, base } = await fresh(t);
+    await approved(call);
+    const [first] = await threeQuotes({ call, base });
+    assert.equal((await accept(call, first)).status, 200);
+    assert.deepEqual(await attention(call, MANAGER), []);
+  });
+
+  it("tells a typed quote's room straight away", async (t) => {
+    const { call, store } = await fresh(t);
+    await approved(call);
+    const res = await post(call, `/events/${ID}/quotes`, PR, {
+      categoryId: "pr",
+      vendorName: "Pink City PR",
+      fixedText: "₹80,000",
+      taxPercent: 18,
+    });
+    assert.equal(res.status, 201);
+    await settle(store);
+    assert.match(roomTexts(store, "pr-media").at(-1), /Pink City PR/);
+  });
+});

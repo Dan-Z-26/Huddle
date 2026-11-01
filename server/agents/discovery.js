@@ -42,6 +42,8 @@ async function extractWithModel(input, generate, nowIso, { useTools = true } = {
     ],
     schema: discoveryOutput,
     tools,
+    // Each tool call is a model call, and someone answering questions shouldn't use up the minute.
+    maxToolCalls: 1,
     demo: demoOutput,
   });
   return data;

@@ -65,6 +65,23 @@ export const bookedTasks = (context, vendorName) =>
   BOOKED_STEPS.map(([key, , title, days]) => hireTask(context, key, title(vendorName), days));
 
 /**
+ * The categories with confirmed quotes the manager hasn't decided on yet. A category drops off once
+ * one of its quotes is accepted.
+ * @param {object[]} quotes The event's quotes.
+ * @returns {Array<{categoryId: string, count: number}>} How many are waiting, per category.
+ */
+export function quotesToReview(quotes) {
+  const decided = new Set(
+    quotes.filter(({ status }) => status === "accepted").map(({ categoryId }) => categoryId),
+  );
+  const counts = new Map();
+  for (const { categoryId, status } of quotes)
+    if (status === "confirmed" && !decided.has(categoryId))
+      counts.set(categoryId, (counts.get(categoryId) ?? 0) + 1);
+  return [...counts].map(([categoryId, count]) => ({ categoryId, count }));
+}
+
+/**
  * Where a category's hiring stands, worked out from what has actually happened.
  * @param {{brief?: object, quotes?: object[], tasks?: object[], deliverables?: object[]}} state The
  *   category's brief, quotes, tasks and the booked vendor's deliverables.

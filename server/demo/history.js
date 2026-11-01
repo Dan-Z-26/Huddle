@@ -91,9 +91,11 @@ export function seedHistory(store, nowIso) {
  */
 export async function freshenOpeningLines(store, deps) {
   const event = store.events.get(ID);
-  const opening = [...store.messages.values()].filter(
+  const fromPlanner = [...store.messages.values()].filter(
     ({ authorKind, authorId }) => authorKind === "agent" && authorId === `agent-planner@${ID}`,
   );
+  // The seed posts them all at one moment. Anything later is a real reply, which stays as written.
+  const opening = fromPlanner.filter(({ createdAt }) => createdAt === fromPlanner[0]?.createdAt);
   const lines = await rewordLines(
     {
       lines: opening.map(({ text }) => text),

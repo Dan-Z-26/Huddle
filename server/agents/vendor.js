@@ -242,6 +242,17 @@ export async function extractQuote(
     schema: quoteExtraction,
     demo,
   });
+  // A real file the model failed on must never come back looking read: someone would confirm a
+  // vendor and prices that aren't in it. They get an empty form and the reason instead.
+  if (file && fellBack && !seededReading(file.buffer)) {
+    const { quote } = quoteFromExtracted({}, { categoryId, profile, fileId: file.id });
+    return {
+      extractedQuote: { ...quote, vendorName: "" },
+      warnings: [UNREAD_FILE],
+      rationale: "",
+      offline: false,
+    };
+  }
   const { quote, warnings } = quoteFromExtracted(data.extracted, {
     categoryId,
     profile,
@@ -254,6 +265,9 @@ export async function extractQuote(
     !fellBack,
   );
 }
+
+const UNREAD_FILE =
+  "The AI couldn't read this file just now. Please add the quote again in a moment, or type the figures here";
 
 /**
  * Answers what someone actually asked about vendors, using the event and its checklist, rather than

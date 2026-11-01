@@ -233,3 +233,24 @@ describe("the event's currency", () => {
     assert.match(questions[0].reason, /in INR/);
   });
 });
+
+describe("a category named a little differently", () => {
+  it("is still that category, whatever its accents or capitals", () => {
+    const state = { currency: "INR", guestCount: 100, totalMinor: 1000, categories: [] };
+    const { events, questions } = toChangeEvents(
+      [{ type: "category_amount", category: "Décor", amountText: "₹5,000", confidence: 0.9 }],
+      { categoryIds: ["decor", "catering"], state },
+    );
+    assert.deepEqual(questions, []);
+    assert.equal(events[0].category, "decor");
+  });
+
+  it("still asks about one that doesn't exist", () => {
+    const { events, questions } = toChangeEvents(
+      [{ type: "category_amount", category: "fireworks", amountText: "₹5,000", confidence: 0.9 }],
+      { categoryIds: ["decor"] },
+    );
+    assert.deepEqual(events, []);
+    assert.equal(questions.length, 1);
+  });
+});

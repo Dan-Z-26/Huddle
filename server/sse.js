@@ -19,7 +19,9 @@ function mayReceive(store, user, event) {
     const group = store.groups.get(event.groupId);
     return Boolean(group) && canView(store.roleOf(user), { type: "group", group });
   }
-  if (event.type === "budget.updated") return user.kind === "manager" || user.kind === "core";
+  // Only a nudge to refetch, which routes that filter by role answer.
+  if (event.type === "budget.updated" || event.type === "quotes.updated")
+    return user.kind === "manager" || user.kind === "core";
   return true;
 }
 

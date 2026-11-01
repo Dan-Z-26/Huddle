@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { attentionFor } from "../core/directives.js";
 import { expenseSummary, spendingWatch } from "../core/expenses.js";
+import { quotesToReview } from "../core/hiring.js";
 import { canManageGroups, canMarkDirective, canSeeBudget, canView } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
 import {
@@ -77,6 +78,18 @@ function briefsWaiting(store, eventId) {
     }));
 }
 
+// Quotes waiting for the manager to compare, by category.
+function quotesWaiting(store, eventId) {
+  const template = getTemplate(store.events.get(eventId).eventType);
+  return quotesToReview(
+    [...store.quotes.values()].filter((quote) => quote.eventId === eventId),
+  ).map(({ categoryId, count }) => ({
+    categoryId,
+    count,
+    name: template.categories.find(({ id }) => id === categoryId)?.name ?? categoryId,
+  }));
+}
+
 function attentionView(store, user) {
   const { directives, tasks } = attentionFor(
     user.id,
@@ -94,6 +107,7 @@ function attentionView(store, user) {
   return {
     spending: spendingView(store, user),
     briefs: user.kind === "manager" ? briefsWaiting(store, user.eventId) : [],
+    quotes: user.kind === "manager" ? quotesWaiting(store, user.eventId) : [],
     directives: visible.map((directive) => ({
       id: directive.id,
       groupId: directive.groupId,

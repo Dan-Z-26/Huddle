@@ -22,17 +22,19 @@ const STATUS = {
 /**
  * The Vendors screen: a checklist and questions per category, quotes added as text, a file or
  * typed details, a confirm step, a comparison, and accepting one through the budget's own flow.
- * @param {{event: object, categories: Array<{id: string, name: string}>, isManager: boolean,
- *   showProposal: (text: string, data: object) => void}} context The event, the categories this
- *   person works on, and how to show the consequences of accepting a quote.
+ * @param {{event: object, categories: Array<{id: string, name: string}>, startOn?: string,
+ *   isManager: boolean, showProposal: (text: string, data: object) => void}} context The event, the
+ *   categories this person works on, the one to open first, and how to show the consequences of
+ *   accepting a quote.
  */
-export function setUpVendors({ event, categories, isManager, showProposal }) {
+export function setUpVendors({ event, categories, startOn, isManager, showProposal }) {
   const select = $("vendor-category");
   // A live reload lands here too, and mustn't move someone off the category they are working on.
   const was = select.value;
   clear(select);
   for (const { id, name } of categories) select.append(el("option", { value: id, text: name }));
-  if (categories.some(({ id }) => id === was)) select.value = was;
+  const opening = was || startOn;
+  if (categories.some(({ id }) => id === opening)) select.value = opening;
   const currency = event.budget?.currency ?? event.currency;
   const category = () => select.value;
   const mustHaves = () => event.mustHaves.filter((item) => item.categoryId === category());

@@ -27,21 +27,11 @@ export async function saveDraftBrief({ store, event, template, categoryId, user,
     throw HttpError(400, "BAD_REQUEST", "This brief is waiting for approval.");
   const category = template.categories.find(({ id }) => id === categoryId);
   const merged = { ...defaultAnswers(event, category), ...existing?.answers, ...answers };
-  const {
-    text,
-    deliverables: suggested,
-    offline,
-  } = await draftBrief({
+  const { text, deliverables, offline } = await draftBrief({
     profile: event,
     category,
     answers: merged,
   });
-  // What the lead asked for wins over what the AI suggested.
-  const asked = merged.deliverables
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-  const deliverables = asked.length ? asked : suggested;
   const brief = {
     id: briefId(event.id, categoryId),
     eventId: event.id,

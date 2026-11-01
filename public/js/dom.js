@@ -75,6 +75,29 @@ export const formatMoney = (minor, currency = "INR") =>
   );
 
 /**
+ * Draws a hiring brief from its plain text: blank lines separate the parts, a part's first line is
+ * its heading, and lines starting "- " are a list. Text with no parts stays a paragraph.
+ * @param {HTMLElement} box Where to draw it.
+ * @param {string} text The brief.
+ */
+export function drawBriefDoc(box, text) {
+  clear(box);
+  for (const block of text.split(/\n{2,}/).filter(Boolean)) {
+    const [first, ...rest] = block.split("\n");
+    if (rest.length === 0) {
+      box.append(el("p", { class: "brief-doc-title", text: first }));
+      continue;
+    }
+    box.append(el("h4", { text: first }));
+    box.append(
+      rest.every((line) => line.startsWith("- "))
+        ? el("ul", {}, ...rest.map((line) => el("li", { text: line.slice(2) })))
+        : el("p", { text: rest.join("\n") }),
+    );
+  }
+}
+
+/**
  * Runs a redraw and puts keyboard focus back afterwards. A control marked `data-focus-key` is
  * found again by its key; if it is gone (a "Got it" that was pressed), the element marked
  * `data-focus-after` with the same key takes focus, so focus is never dropped to the page.

@@ -25,8 +25,10 @@ function once(work) {
  * always come from routes that filter by role.
  * @param {{userId: string, eventId: string, isManager: boolean, activeGroupId: () => string | null,
  *   hasPreview: () => boolean, openGroup: (id: string) => void, openBudget: () => void,
+ *   openVendors: (categoryId: string) => void,
  *   onUnread: (groupId: string) => void,
- *   onGroupsChanged: () => void, onReconnect: () => void, onBudget: (budget: object) => void}} ctx
+ *   onGroupsChanged: () => void, onReconnect: () => void, onBudget: (budget: object) => void,
+ *   onQuotes: () => Promise<void>}} ctx
  *   The person, what is on screen, and how to react.
  */
 export function startLive(ctx) {
@@ -51,7 +53,12 @@ export function startLive(ctx) {
     if (!latest.isVendor) renderTimeline((await api.timeline(latest.eventId)).tasks);
   });
   const refetchAttention = once(async () =>
-    renderAttention((await api.me()).attention, latest.openGroup, latest.openBudget),
+    renderAttention(
+      (await api.me()).attention,
+      latest.openGroup,
+      latest.openBudget,
+      latest.openVendors,
+    ),
   );
   const onMessage = ({ message }) => {
     addToOverview(message);
@@ -66,6 +73,7 @@ export function startLive(ctx) {
       "message.updated": ({ message }) => updateLiveMessage(message),
       "directive.updated": ({ directive }) => updateLiveDirective(directive),
       "budget.updated": refetchPlan,
+      "quotes.updated": once(async () => latest.onQuotes()),
       "timeline.updated": refetchTimeline,
       "attention.updated": refetchAttention,
       "groups.updated": () => latest.onGroupsChanged(),

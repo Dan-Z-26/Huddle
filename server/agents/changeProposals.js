@@ -3,6 +3,8 @@ import { categoryCost } from "../core/budgetEngine.js";
 import { wholeMoney } from "../core/money.js";
 
 export const MIN_CONFIDENCE = 0.7;
+// The model may hand back "Décor" for the id "decor", which is still the same category.
+const plainName = (name) => String(name).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const PAISE_PER_RUPEE = 100;
 
 const toEstimate = ({ lowRupees, highRupees }) => ({
@@ -133,7 +135,14 @@ function convert(proposal, state) {
 export function toChangeEvents(proposals, { categoryIds, state }) {
   const events = [];
   const questions = [];
-  for (const proposal of proposals) {
+  const known = (name) =>
+    name === undefined
+      ? name
+      : (categoryIds.find((id) => plainName(id) === plainName(name)) ?? name);
+  for (const given of proposals) {
+    const proposal = { ...given };
+    for (const key of ["category", "from", "to"])
+      if (key in proposal) proposal[key] = known(proposal[key]);
     const ask = (reason) => questions.push({ proposal, reason });
     if (proposal.confidence < MIN_CONFIDENCE) {
       ask("I'm not sure I understood this change");

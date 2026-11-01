@@ -5,7 +5,12 @@ import { generate } from "../../server/llm/index.js";
 
 const schema = z.object({ answer: z.string(), rationale: z.string() });
 const good = JSON.stringify({ answer: "42", rationale: "because" });
-const ENV = { GEMINI_API_KEY: "k", GEMINI_FAST_MODEL: "fast", GEMINI_SMART_MODEL: "smart" };
+const ENV = {
+  GEMINI_API_KEY: "k",
+  GEMINI_FAST_MODEL: "fast",
+  GEMINI_SMART_MODEL: "smart",
+  LLM_MAX_PER_MINUTE: "1000",
+};
 const messages = [{ role: "user", content: "hi" }];
 
 // A fake provider: `respond(request, callNumber)` decides each reply; `calls` records requests.
@@ -379,5 +384,59 @@ describe("generate: timeouts", () => {
     await run([{ mime: "application/pdf", buffer: Buffer.from("%PDF-"), name: "q.pdf" }]);
     assert.equal(seen.length, 2);
     assert.ok(seen.every((signal) => signal instanceof AbortSignal));
+  });
+});
+
+describe("generate: pacing calls per minute", () => {
+  const answering = () => {
+    const made = [];
+    return {
+      made,
+      gemini: {
+        step: async () => {
+          made.push(Date.now());
+          return { text: '{"ok":true}', toolCalls: [] };
+        },
+      },
+    };
+  };
+  const ask = (model, gemini, perMinute) =>
+    generate({
+      agent: "budget",
+      system: "s",
+      messages: [{ role: "user", content: "hi" }],
+      schema: z.object({ ok: z.boolean() }),
+      demo: async () => ({ ok: false }),
+      env: {
+        GEMINI_API_KEY: "k",
+        GEMINI_FAST_MODEL: model,
+        GEMINI_SMART_MODEL: model,
+        LLM_MAX_PER_MINUTE: String(perMinute),
+      },
+      providers: { gemini },
+    });
+
+  it("lets calls through up to the limit", async () => {
+    const { gemini, made } = answering();
+    await Promise.all([1, 2, 3].map(() => ask("pace-a", gemini, 3)));
+    assert.equal(made.length, 3);
+  });
+
+  it("fails fast past the limit rather than waiting most of a minute", async () => {
+    const { gemini, made } = answering();
+    await ask("pace-b", gemini, 1);
+    await assert.rejects(ask("pace-b", gemini, 1), (err) => {
+      assert.equal(err.name, "LlmError");
+      assert.equal(err.status, 429);
+      return true;
+    });
+    assert.equal(made.length, 1);
+  });
+
+  it("keeps each model's count separate", async () => {
+    const { gemini, made } = answering();
+    await ask("pace-c", gemini, 1);
+    await ask("pace-d", gemini, 1);
+    assert.equal(made.length, 2);
   });
 });

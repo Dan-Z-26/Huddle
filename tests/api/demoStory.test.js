@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { seedHistory } from "../../server/demo/history.js";
+import { freshenOpeningLines, seedHistory } from "../../server/demo/history.js";
 import { installStory } from "../../server/demo/story.js";
 import { runDailyDigests } from "../../server/reminders.js";
 import { createStore } from "../../server/store/index.js";
 import { DEMO_EVENT_ID as ID, seedDemo } from "../../server/store/seed.js";
-import { createEvent } from "../../server/store/workspace.js";
+import { addMessage, createEvent } from "../../server/store/workspace.js";
 import { addEvent, serve, sessionCookie } from "./helpers.js";
 
 const NOW = new Date().toISOString();
@@ -62,6 +62,50 @@ describe("the demo's past", () => {
     createEvent(store, { eventType: "wedding", id: "new" });
     assert.equal(await runDailyDigests(store, NOW), 1);
     assert.ok(!store.digests.has(`new:${NOW.slice(0, 10)}`));
+  });
+});
+
+describe("the demo's opening lines", () => {
+  const rewriting = async ({ messages }) => {
+    const given = messages[0].content.split("<<<UNTRUSTED lines>>>\n")[1];
+    const lines = given.split("\n<<<END")[0].split("\n");
+    return { data: { lines: lines.map(() => "Written for this event.") }, toolCalls: [] };
+  };
+
+  it("are rewritten, but a real Planner reply is left exactly as it was", async () => {
+    const store = demoStore();
+    const reply = addMessage(store, {
+      id: "m-real",
+      groupId: `g-${ID}-core-team`,
+      authorId: `agent-planner@${ID}`,
+      authorKind: "agent",
+      text: "A real answer. ".repeat(40),
+      fileIds: [],
+      createdAt: NOW,
+      rationale: null,
+    });
+    const original = reply.text;
+    await freshenOpeningLines(store, { generate: rewriting });
+    assert.equal(store.messages.get("m-real").text, original);
+    assert.ok(texts(store, "core-team").includes("Written for this event."));
+  });
+
+  it("don't fail when the model can't answer, whatever replies have been posted", async () => {
+    const store = demoStore();
+    addMessage(store, {
+      id: "m-long",
+      groupId: `g-${ID}-core-team`,
+      authorId: `agent-planner@${ID}`,
+      authorKind: "agent",
+      text: "x".repeat(900),
+      fileIds: [],
+      createdAt: NOW,
+      rationale: null,
+    });
+    const down = async () => {
+      throw Object.assign(new Error("down"), { name: "LlmError" });
+    };
+    await freshenOpeningLines(store, { generate: down });
   });
 });
 

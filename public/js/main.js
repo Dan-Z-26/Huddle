@@ -231,7 +231,11 @@ async function load({ focusIntake = false } = {}) {
     if (group) open(group, true);
   };
   const openBudgetPage = () => document.getElementById("budget-nav").click();
-  renderAttention(me.attention, openById, openBudgetPage);
+  const openVendorsOn = (categoryId) => {
+    document.getElementById("vendor-category").value = categoryId;
+    document.getElementById("vendors-nav").click();
+  };
+  renderAttention(me.attention, openById, openBudgetPage, openVendorsOn);
   if (isManager) setUpGroupsAdmin({ event, groups, roles: template.roles, onChanged: load });
   startLive({
     isVendor,
@@ -241,6 +245,7 @@ async function load({ focusIntake = false } = {}) {
     hasPreview: previewOpen,
     openGroup: openById,
     openBudget: openBudgetPage,
+    openVendors: openVendorsOn,
     onUnread: (groupId) => {
       unread.set(groupId, (unread.get(groupId) ?? 0) + 1);
       drawGroups();
@@ -249,6 +254,8 @@ async function load({ focusIntake = false } = {}) {
     // preview is still safe, because the server refuses to apply a change to a moved base.
     onGroupsChanged: () => previewOpen() || load(),
     onReconnect: () => previewOpen() || load(),
+    // The vendors page is redrawn when a teammate adds a quote, if it is the one on screen.
+    onQuotes: async () => view === "vendors" && refreshVendors(),
     onBudget: (budget) => {
       shownBudget = budget;
       if (view === "budget") refreshBudgetPage().catch(() => {});
@@ -271,6 +278,8 @@ async function load({ focusIntake = false } = {}) {
     refreshVendors = setUpVendors({
       event,
       categories: mine,
+      // Starts where something is waiting for this person, not simply on the first category.
+      startOn: me.attention.quotes?.[0]?.categoryId ?? me.attention.briefs?.[0]?.categoryId,
       isManager,
       showProposal: proposeInAsk,
     });

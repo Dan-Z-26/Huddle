@@ -16,6 +16,7 @@ import { MAX_FILE_BYTES } from "../validation/uploads.js";
 import * as schemas from "../validation/schemas.js";
 import { storePending } from "./budget.js";
 import { briefOf } from "./hiringSupport.js";
+import { announceQuote } from "./quoteNotice.js";
 import {
   categoryGroup,
   eventQuotes,
@@ -154,6 +155,9 @@ export function vendorRoutes({ ai }) {
       if (typed && !file && read.warnings.length === 0) quote.status = "confirmed";
       const saved = { ...quote, id: `q-${randomUUID().slice(0, 8)}`, eventId: event.id };
       store.quotes.set(saved.id, saved);
+      if (saved.status === "confirmed")
+        announceQuote({ store, event, template, quote: saved, user: req.user });
+      else store.publish({ type: "quotes.updated", eventId: event.id });
       const { warnings, rationale, offline } = read;
       res.status(201).json({ quote: saved, warnings, rationale, offline });
     },
@@ -178,6 +182,17 @@ export function vendorRoutes({ ai }) {
       sources: existing.sources ?? {},
     };
     store.quotes.set(saved.id, saved);
+    // Told once, when it first becomes usable; later edits to a confirmed quote are quiet.
+    if (existing.status === "confirmed")
+      store.publish({ type: "quotes.updated", eventId: event.id });
+    else
+      announceQuote({
+        store,
+        event,
+        template: getTemplate(event.eventType),
+        quote: saved,
+        user: req.user,
+      });
     res.json({ quote: saved, warnings });
   });
 

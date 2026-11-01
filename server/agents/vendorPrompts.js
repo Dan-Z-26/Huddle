@@ -34,6 +34,8 @@ export const QUOTE_SYSTEM = agentPrompt({
   rules: [
     "Copy prices exactly as written into perGuestText and fixedText (code parses them). Put " +
       "only a per-guest price in perGuestText and only one-off or total charges in fixedText.",
+    "A price per anything other than a guest, plate or head, such as per kit or per hour, is not " +
+      "a per-guest price. Leave it out of both fields and copy it, with its price, into exclusions.",
     "Copy the tax rate as a plain percentage number.",
     "Leave a field out or null when the quote does not say. Never calculate, guess or invent " +
       "anything.",

@@ -4,6 +4,7 @@ import {
   bookedTasks,
   managerChecklist,
   pipelineStage,
+  quotesToReview,
   quoteWarnings,
   scoreReasons,
 } from "../../server/core/hiring.js";
@@ -126,5 +127,32 @@ describe("scoreReasons", () => {
       { ...context, taxStated: false },
     );
     assert.match(reason, /as stated, without tax/);
+  });
+});
+
+describe("quotesToReview", () => {
+  const quote = (categoryId, status) => ({ categoryId, status });
+
+  it("counts confirmed quotes per category, and nothing that is still being checked", () => {
+    assert.deepEqual(
+      quotesToReview([
+        quote("pr", "confirmed"),
+        quote("pr", "confirmed"),
+        quote("pr", "extracted"),
+        quote("decor", "confirmed"),
+      ]),
+      [
+        { categoryId: "pr", count: 2 },
+        { categoryId: "decor", count: 1 },
+      ],
+    );
+    assert.deepEqual(quotesToReview([]), []);
+  });
+
+  it("drops a category once one of its quotes is accepted", () => {
+    assert.deepEqual(
+      quotesToReview([quote("pr", "confirmed"), quote("pr", "accepted"), quote("av", "confirmed")]),
+      [{ categoryId: "av", count: 1 }],
+    );
   });
 });

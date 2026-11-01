@@ -269,6 +269,26 @@ Vegetarian and Jain menus available`;
     assert.equal(request.tools, undefined);
   });
 
+  it("never makes up a reading for a real file the model failed on", async () => {
+    const file = {
+      id: "f",
+      mime: "application/pdf",
+      buffer: Buffer.from("%PDF-1.4 mine"),
+      name: "q.pdf",
+    };
+    const {
+      extractedQuote: quote,
+      warnings,
+      offline,
+    } = await extractQuote({ ...input, file }, { generate: failingModel, cache: new Map() });
+    assert.equal(quote.vendorName, "");
+    assert.equal(quote.perGuestMinor, 0);
+    assert.equal(quote.fixedMinor, 0);
+    assert.equal(quote.status, "extracted");
+    assert.equal(offline, false);
+    assert.match(warnings[0], /couldn't read this file/);
+  });
+
   it("falls back to offline reading on a model failure, and cuts very long text", async () => {
     const failing = async () => {
       throw Object.assign(new Error("x"), { name: "LlmError" });

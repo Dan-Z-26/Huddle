@@ -22,6 +22,30 @@ const LOADERS = {
 // document takes the model longer, so a request with files gets three times as long.
 const DEFAULT_TIMEOUT_MS = 20000;
 const FILE_TIMEOUT_FACTOR = 3;
+// Free-tier keys allow 15 calls a minute per model. Going over fails the call, so a burst waits.
+const DEFAULT_PER_MINUTE = 14;
+const MAX_PACE_WAIT_MS = 45000;
+const MINUTE_MS = 60000;
+const callSlots = new Map();
+
+/**
+ * Takes the next free slot for a model, waiting for it if this minute's calls are used up. A wait
+ * too long to be worth it fails like any other model call, so the agent's plain rules take over.
+ * shortcut: counts this process only, so another server on the same key can still hit the limit.
+ * @param {string} model The model.
+ * @param {Record<string, string | undefined>} env Environment; LLM_MAX_PER_MINUTE sets the rate.
+ * @returns {Promise<void>} Resolves when the call may go.
+ */
+async function paceCall(model, env) {
+  const perMinute = Number(env.LLM_MAX_PER_MINUTE) || DEFAULT_PER_MINUTE;
+  const now = Date.now();
+  const slots = (callSlots.get(model) ?? []).filter((at) => at > now - MINUTE_MS);
+  const at = slots.length < perMinute ? now : slots[slots.length - perMinute] + MINUTE_MS;
+  if (at - now > MAX_PACE_WAIT_MS)
+    throw LlmError("too many model calls this minute", { status: 429 });
+  callSlots.set(model, [...slots, at]);
+  if (at > now) await new Promise((done) => setTimeout(done, at - now));
+}
 
 /**
  * Builds the error thrown when a model call fails or keeps returning invalid output.
@@ -111,16 +135,19 @@ async function runLive(request, target, providers) {
     description,
     parameters: toJsonSchema(parameters),
   }));
-  const call = (extra) =>
-    provider.step({
+  const call = async (extra) => {
+    await paceCall(target.model, env);
+    return provider.step({
       model: target.model,
       apiKey: target.apiKey,
       system,
       files,
       tools: declared,
+      // Only once the call goes: time spent waiting for a slot isn't the model being slow.
       signal: AbortSignal.timeout(timeoutMs),
       ...extra,
     });
+  };
 
   const history = [...messages];
   const runner = createToolRunner(tools, request.maxToolCalls);

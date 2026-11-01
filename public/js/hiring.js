@@ -1,5 +1,13 @@
 import { api } from "./api.js";
-import { announce, announceError, clear, el, formatShortDate, keepFocus } from "./dom.js";
+import {
+  announce,
+  announceError,
+  clear,
+  el,
+  formatShortDate,
+  keepFocus,
+  drawBriefDoc,
+} from "./dom.js";
 
 const $ = (id) => document.getElementById(id);
 const STATUS = {
@@ -97,7 +105,7 @@ export function setUpHiring({ event, isManager, category, onSelect, onChanged })
     }
     $("brief-draft").textContent = brief ? "Redraft with these answers" : "Draft the brief";
     $("brief-result").hidden = !brief;
-    $("brief-text").textContent = brief?.text ?? "";
+    drawBriefDoc($("brief-text"), brief?.text ?? "");
     $("brief-send").hidden = !brief || !editable;
     $("brief-export").hidden = !brief;
     if (brief) $("brief-export").href = `/api/briefs/${encodeURIComponent(brief.id)}/export`;

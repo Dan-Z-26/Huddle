@@ -41,9 +41,6 @@ createApp({ store, uploadsDir: fileURLToPath(uploadsDir) }).listen(port, (err) =
       console.error(`Reminders failed with ${err.name}`),
     );
     postDigests();
-    freshenOpeningLines(store).catch((err) =>
-      console.error(`Opening lines failed with ${err.name}`),
-    );
   }, 60_000).unref();
   if (process.env.DEMO_STORY !== "off") installStory(store);
   console.log(`Huddle listening on http://localhost:${port}`);

@@ -55,13 +55,19 @@ function drawGroups(groups, activeId, onOpen, unread) {
  * Lists what needs the person's attention: directives they haven't acknowledged, and their open
  * tasks. A directive opens its group. An empty list says so plainly.
  * Spending near or over its plan comes first and opens the Budget page.
- * @param {{directives: object[], tasks: object[], spending: object | null, briefs?: object[]}}
- *   attention From the server.
+ * @param {{directives: object[], tasks: object[], spending: object | null, briefs?: object[],
+ *   quotes?: object[]}} attention From the server.
  * @param {(groupId: string) => void} openGroup Opens a group by id.
  * @param {() => void} [openBudget] Opens the Budget page.
+ * @param {(categoryId: string) => void} [openVendors] Opens Vendors on a category.
  */
-export function renderAttention(attention, openGroup, openBudget = () => {}) {
-  keepFocus(() => drawAttention(attention, openGroup, openBudget));
+export function renderAttention(
+  attention,
+  openGroup,
+  openBudget = () => {},
+  openVendors = () => {},
+) {
+  keepFocus(() => drawAttention(attention, openGroup, openBudget, openVendors));
 }
 
 const MAX_ATTENTION = 5;
@@ -97,11 +103,29 @@ function spendingItems(spending, openBudget) {
   ];
 }
 
-function drawAttention({ directives, tasks, spending, briefs = [] }, openGroup, openBudget) {
+function drawAttention(
+  { directives, tasks, spending, briefs = [], quotes = [] },
+  openGroup,
+  openBudget,
+  openVendors,
+) {
   const box = document.getElementById("attention");
   clear(box);
   const items = [
     ...spendingItems(spending, openBudget),
+    ...quotes.map(({ categoryId, name, count }) =>
+      el(
+        "li",
+        {},
+        el("button", {
+          type: "button",
+          class: "link-button",
+          "data-focus-key": `attn:quotes-${categoryId}`,
+          onclick: () => openVendors(categoryId),
+          text: `${name}: ${count} ${count === 1 ? "quote" : "quotes"} to review`,
+        }),
+      ),
+    ),
     ...briefs.map(({ categoryId, name }) =>
       el(
         "li",
@@ -110,7 +134,7 @@ function drawAttention({ directives, tasks, spending, briefs = [] }, openGroup, 
           type: "button",
           class: "link-button",
           "data-focus-key": `attn:brief-${categoryId}`,
-          onclick: () => document.getElementById("vendors-nav").click(),
+          onclick: () => openVendors(categoryId),
           text: `${name} brief is waiting for your approval`,
         }),
       ),

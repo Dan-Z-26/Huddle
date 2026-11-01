@@ -16,6 +16,9 @@ export const SYSTEM = agentPrompt({
   ],
   rules: [
     "Extract only what the user actually said. Never invent values and never do arithmetic.",
+    "In names and descriptions, fix obvious spelling mistakes and shorthand ('vegeterian' to " +
+      "'vegetarian', 'n' to 'and') and use normal capitals, without changing the meaning or adding " +
+      "anything.",
     "Copy dates and money exactly as the user wrote them (date, budgetText, guestText); code " +
       "parses them.",
     "Priorities: only the category ids you are given, in exactly the order the user ranked " +
