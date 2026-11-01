@@ -67,7 +67,7 @@ export const publicUser = ({ id, name, roleId, kind }) => ({ id, name, roleId, k
 export function profileFor(event, role) {
   if (canSeeBudget(role, "total")) return event;
   if (role.kind === "vendor") return vendorProfile(event);
-  const rest = { ...event };
+  const rest = { ...event, currency: event.budget?.currency };
   delete rest.budget;
   delete rest.priorities;
   const owns = (categoryId) => role.categoryIds.includes(categoryId);

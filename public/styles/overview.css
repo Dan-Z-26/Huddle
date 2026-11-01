@@ -1,0 +1,292 @@
+/* First page: the event brief, like a formal invitation. */
+.overview {
+  display: grid;
+  align-content: start;
+  grid-auto-rows: max-content;
+  gap: 1.25rem;
+}
+.stage > section.overview:not(.room, .flow) {
+  background: var(--wash);
+  padding-inline: max(clamp(1rem, 3vw, 2rem), calc((100% - 56rem) / 2));
+}
+.brief-card {
+  position: relative;
+  overflow: hidden;
+  padding: clamp(1.75rem, 4vw, 3rem);
+  background: radial-gradient(60rem 20rem at 100% 0, var(--blush), transparent 70%), #fff;
+  border: 1px solid var(--gold-line);
+  border-radius: 1.1rem;
+  box-shadow: var(--shadow-up);
+}
+/* A hairline just inside the edge, as on engraved cards. */
+.brief-card::before {
+  content: "";
+  position: absolute;
+  inset: 0.55rem;
+  border: 1px solid var(--gold-line);
+  border-radius: 0.7rem;
+  pointer-events: none;
+}
+/* The golden ribbon, across the top corner. */
+.sash {
+  position: absolute;
+  top: 2.05rem;
+  right: -3.35rem;
+  width: 15rem;
+  padding: 0.4rem 0;
+  transform: rotate(38deg);
+  text-align: center;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--on-gold);
+  background: var(--satin);
+  box-shadow: 0 3px 10px rgb(122 90 20 / 0.35);
+}
+.sash:empty {
+  display: none;
+}
+.brief-kind {
+  padding-right: 6rem;
+  color: var(--gold-deep);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.brief-name {
+  max-width: calc(100% - 5.5rem);
+  margin-top: 0.25rem;
+  font-family: var(--display);
+  font-size: clamp(2.1rem, 5vw, 3.25rem);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+}
+.brief-name:focus {
+  outline: none;
+}
+.brief-purpose {
+  max-width: 34rem;
+  margin-top: 0.7rem;
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-style: italic;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.brief-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 1rem 1.5rem;
+  margin-top: 1.75rem;
+  padding-block: 1.1rem;
+  border-block: 1px solid var(--gold-line);
+}
+.brief-fact dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.brief-fact dd {
+  font-family: var(--display);
+  font-size: 1.2rem;
+  line-height: 1.3;
+}
+.brief-feel {
+  margin: 1.75rem 0 0;
+  text-align: center;
+}
+.brief-feel figcaption {
+  color: var(--gold-deep);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.brief-feel blockquote {
+  margin: 0.3rem auto 0;
+  max-width: 32rem;
+  font-family: var(--display);
+  font-size: clamp(1.3rem, 2.6vw, 1.65rem);
+  font-style: italic;
+  line-height: 1.35;
+  color: var(--pink-deep);
+}
+.brief-blocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.5rem 2rem;
+  margin-top: 1.75rem;
+}
+.brief-block h3 {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+.brief-must,
+.brief-notes {
+  display: grid;
+  gap: 0.45rem;
+  font-size: 0.925rem;
+}
+.brief-must li {
+  padding-left: 1rem;
+  background: linear-gradient(var(--gold), var(--gold)) 0 0.6em / 0.4rem 0.4rem no-repeat;
+}
+.seal {
+  display: block;
+  width: fit-content;
+  margin-top: 0.15rem;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--on-gold);
+  background: var(--gold-soft);
+  border-radius: 999px;
+}
+.brief-rank {
+  counter-reset: rank;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.925rem;
+}
+.brief-rank li {
+  counter-increment: rank;
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr);
+}
+.brief-rank li::before {
+  content: counter(rank);
+  font-family: var(--display);
+  color: var(--gold-deep);
+  font-weight: 600;
+}
+.brief-notes {
+  color: var(--muted);
+}
+
+/* Digest and live feed */
+.live-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(19rem, 100%), 1fr));
+  align-items: start;
+  gap: 1.25rem;
+}
+.live-card {
+  padding: 1.15rem 1.25rem;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: var(--shadow);
+}
+.live-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.6rem;
+  margin-bottom: 0.75rem;
+}
+.live-title {
+  font-family: var(--display);
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+.live-head time {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.live-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--pink);
+  align-self: center;
+  animation: breathe 2.4s ease-in-out 2;
+}
+.digest-text {
+  white-space: pre-wrap;
+  font-size: 0.925rem;
+}
+.feed {
+  display: grid;
+  gap: 0.15rem;
+  max-height: 26rem;
+  overflow-y: auto;
+  margin-inline: -0.5rem;
+}
+.feed-item {
+  display: grid;
+  grid-template-columns: 2rem minmax(0, 1fr);
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.5rem;
+  font: inherit;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  border-radius: 0.6rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.feed-item:focus-visible {
+  outline-offset: -2px;
+}
+.feed-item:hover {
+  background: var(--blush);
+}
+.feed-item.is-new {
+  animation: arrive 1.8s ease-out;
+}
+.feed-body {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.feed-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.4rem;
+  font-size: 0.82rem;
+}
+.feed-who strong {
+  font-weight: 600;
+}
+.feed-room,
+.feed-who time {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.feed-text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: 0.875rem;
+  white-space: pre-line;
+}
+.feed-item.is-ai .tile {
+  color: var(--ai);
+  background: var(--ai-bg);
+}
+@keyframes arrive {
+  from {
+    background: var(--gold-soft);
+  }
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feed-item.is-new,
+  .live-dot {
+    animation: none;
+  }
+}
+/* Answers are stored as typed, often in lower case. */
+.brief-fact dd::first-letter,
+.brief-must li::first-letter,
+.brief-notes li::first-letter,
+.brief-purpose::first-letter,
+.brief-feel blockquote::first-letter {
+  text-transform: uppercase;
+}

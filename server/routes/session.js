@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { attentionFor } from "../core/directives.js";
+import { expenseSummary, spendingWatch } from "../core/expenses.js";
 import { canManageGroups, canMarkDirective, canSeeBudget, canView } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
 import {
@@ -12,6 +13,7 @@ import {
   validate,
 } from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
+import { eventExpenses } from "../store/workspace.js";
 import { noMoneyForVendor, publicUser } from "./views.js";
 import { signIn } from "../validation/schemas.js";
 
@@ -49,6 +51,32 @@ export const permissionsOf = (role) => ({
 });
 
 // What is waiting for this person: directives they haven't acknowledged, and their open tasks.
+// Spending near or over plan, limited to what this person may see of the budget.
+function spendingView(store, user) {
+  const state = store.budgets.get(user.eventId);
+  const role = store.roleOf(user);
+  if (!state || user.kind === "vendor") return null;
+  const summary = expenseSummary(state, eventExpenses(store, user.eventId));
+  const isManager = canSeeBudget(role, "total");
+  const shown = isManager
+    ? summary
+    : {
+        categories: summary.categories.filter(({ id }) => canSeeBudget(role, { categoryId: id })),
+      };
+  return { currency: state.currency, ...spendingWatch(shown) };
+}
+
+// Briefs a lead has sent, which only the manager can approve.
+function briefsWaiting(store, eventId) {
+  const template = getTemplate(store.events.get(eventId).eventType);
+  return [...store.briefs.values()]
+    .filter((brief) => brief.eventId === eventId && brief.status === "pending")
+    .map(({ categoryId }) => ({
+      categoryId,
+      name: template.categories.find(({ id }) => id === categoryId)?.name ?? categoryId,
+    }));
+}
+
 function attentionView(store, user) {
   const { directives, tasks } = attentionFor(
     user.id,
@@ -64,6 +92,8 @@ function attentionView(store, user) {
       (!isVendor || store.messages.get(directive.messageId)?.createdAt >= user.joinedAt),
   );
   return {
+    spending: spendingView(store, user),
+    briefs: user.kind === "manager" ? briefsWaiting(store, user.eventId) : [],
     directives: visible.map((directive) => ({
       id: directive.id,
       groupId: directive.groupId,
@@ -108,6 +138,7 @@ export function sessionRoutes() {
       return next(HttpError(404, "NOT_FOUND", "No such person."));
     store.sessions.delete(readSessionId(req));
     startSession(res, store, user.id);
+    store.startDemoStory?.(eventId);
     res.json({ user: publicUser(user) });
   });
 

@@ -1,10 +1,11 @@
 import { api } from "./api.js";
 import { renderBrief, countdown } from "./brief.js";
+import { renderOverview } from "./overview.js";
 import { renderBudget } from "./budgetChart.js";
 import { setUpBudgetPage } from "./budgetPage.js";
 import { hideConsequences, setUpWhatIf } from "./consequences.js";
 import { showGroup } from "./chat.js";
-import { announce, announceError, formatDate } from "./dom.js";
+import { announce, announceError, el, formatDate } from "./dom.js";
 import { setUpGroupsAdmin } from "./groupsAdmin.js";
 import { loadAdvice } from "./advice.js";
 import { hideIdeas, setUpIdeas } from "./ideas.js";
@@ -21,7 +22,6 @@ import { renderAttention, renderGroups } from "./workspace.js";
 const show = (id, visible) => (document.getElementById(id).hidden = !visible);
 let activeGroupId = null;
 let shownBudget = null;
-let wasSettingUp = null;
 let view = null;
 const unread = new Map();
 const previewOpen = () => !document.getElementById("consequences").hidden;
@@ -86,7 +86,16 @@ async function load({ focusIntake = false } = {}) {
   if (!me) return signInAgain();
   const { event, template, groups, members } = await api.event(me.user.eventId);
   const isVendor = me.user.kind === "vendor";
-  document.getElementById("signed-in").textContent = `${me.user.name}, ${me.user.roleName}`;
+  const signedInAs = document.getElementById("signed-in");
+  signedInAs.replaceChildren(
+    me.user.name,
+    el("span", { class: "viewer-role", text: me.user.roleName }),
+  );
+  document.getElementById("viewer-avatar").textContent = me.user.name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((word) => word[0])
+    .join("");
   show("switch-person", !me.invited);
   show("new-event", !isVendor);
   document.getElementById("switch-person").onclick = signInAgain;
@@ -94,11 +103,19 @@ async function load({ focusIntake = false } = {}) {
   document.getElementById("event-title").textContent = event.name || template.label;
   document.title = `${event.name || template.label} · Huddle`;
   document.getElementById("event-countdown").textContent = countdown(event.date);
+  document.getElementById("event-meta").textContent = [
+    event.date && formatDate(event.date),
+    event.city,
+    event.guests?.confirmed && `${event.guests.confirmed} guests`,
+  ]
+    .filter(Boolean)
+    .join(", ");
   if (!isVendor) renderBrief(event, template, me.permissions.seeTotalBudget);
 
   const settingUp = event.intakeStatus === "in_progress";
   const isManager = me.user.kind === "manager";
   show("intake", settingUp && isManager);
+  if (settingUp) show("overview", false);
   // Groups and vendors don't exist yet, so setup shows only what it needs.
   document.querySelector(".side").classList.toggle("is-setup", settingUp);
   if (settingUp) {
@@ -107,14 +124,13 @@ async function load({ focusIntake = false } = {}) {
   }
   show("budget-panel", !settingUp && !isVendor);
   show("vendor-panel", isVendor);
-  show("brief-details", !isVendor);
+  // Afterwards the brief has a page of its own.
+  show("brief-details", settingUp && !isVendor);
+  show("brief-nav", !settingUp && !isVendor);
   show("timeline-nav", !settingUp && !isVendor);
   show("budget-nav", !settingUp && !isVendor);
   show("flow", !settingUp && !isVendor);
-  // Only when setup starts or ends, so a later refresh doesn't close a brief someone opened.
-  const brief = document.getElementById("brief-details");
-  if (wasSettingUp !== settingUp) brief.open = settingUp;
-  wasSettingUp = settingUp;
+  document.getElementById("brief-details").open = settingUp;
   if (settingUp && !isManager) announce("The event manager is still setting this event up.");
   if (settingUp) {
     renderGroups([], null, () => {});
@@ -124,7 +140,7 @@ async function load({ focusIntake = false } = {}) {
         onProfile: (profile) => renderBrief(profile, template, me.permissions.seeTotalBudget),
         onConfirmed: async () => {
           await load();
-          document.getElementById("ask-title").focus();
+          document.getElementById("overview-title").focus();
           announce("Workspace created.");
         },
       });
@@ -145,6 +161,16 @@ async function load({ focusIntake = false } = {}) {
       if (moveFocus) document.getElementById(titleId).focus();
     };
   const openTimeline = pageOpener("timeline", "timeline-title");
+  const showOverview = pageOpener("overview", "overview-title");
+  const openOverview = async (moveFocus = false) => {
+    // The brief is drawn before the first wait, so it can be shown and focused straight away, and
+    // someone who moves on while the feed loads isn't pulled back.
+    const drawn = renderOverview({ event, template, groups, members, openGroup: openById });
+    showOverview(moveFocus);
+    await drawn;
+  };
+  document.getElementById("brief-nav").onclick = () =>
+    openOverview(true).catch((err) => announceError(err.message));
   const nextStepOpeners = () => ({
     budget: () => document.getElementById("budget-nav").click(),
     timeline: () => document.getElementById("timeline-nav").click(),
@@ -169,6 +195,12 @@ async function load({ focusIntake = false } = {}) {
     isManager,
     budget: () => shownBudget,
     showProposal: proposeInAsk,
+    askAbout: (text) => {
+      openAsk();
+      const input = document.getElementById("what-if-text");
+      input.value = text;
+      input.focus();
+    },
     reload: load,
   });
   const showBudgetPage = pageOpener("budget", "budget-title");
@@ -198,7 +230,8 @@ async function load({ focusIntake = false } = {}) {
     const group = groups.find((item) => item.id === id);
     if (group) open(group, true);
   };
-  renderAttention(me.attention, openById);
+  const openBudgetPage = () => document.getElementById("budget-nav").click();
+  renderAttention(me.attention, openById, openBudgetPage);
   if (isManager) setUpGroupsAdmin({ event, groups, roles: template.roles, onChanged: load });
   startLive({
     isVendor,
@@ -207,6 +240,7 @@ async function load({ focusIntake = false } = {}) {
     activeGroupId: () => (view === "group" ? activeGroupId : null),
     hasPreview: previewOpen,
     openGroup: openById,
+    openBudget: openBudgetPage,
     onUnread: (groupId) => {
       unread.set(groupId, (unread.get(groupId) ?? 0) + 1);
       drawGroups();
@@ -244,9 +278,10 @@ async function load({ focusIntake = false } = {}) {
   }
   document.getElementById("ask-nav").onclick = () => openAsk(true);
   const first = groups.find(({ id }) => id === activeGroupId) ?? groups[0];
-  // The manager opens on Ask Huddle; everyone else on their first group.
-  const wanted = view ?? (isManager ? "ask" : "group");
-  if (wanted === "vendors" && canVendors) await openVendors();
+  // Everyone opens on the event brief; a vendor, who has no brief page, on their group.
+  const wanted = view ?? (isVendor ? "group" : "overview");
+  if (wanted === "overview") await openOverview();
+  else if (wanted === "vendors" && canVendors) await openVendors();
   else if (wanted === "ask" && isManager) openAsk();
   else if (wanted === "timeline") openTimeline();
   else if (wanted === "budget") await openBudget();
@@ -254,12 +289,14 @@ async function load({ focusIntake = false } = {}) {
 }
 
 function showView(name) {
+  show("overview", name === "overview");
   show("group-view", name === "group");
   show("vendors-view", name === "vendors");
   show("ask-view", name === "ask");
   show("timeline-view", name === "timeline");
   show("budget-view", name === "budget");
   show("flow-open", name !== "timeline");
+  document.getElementById("brief-nav").setAttribute("aria-current", String(name === "overview"));
   document.getElementById("vendors-nav").setAttribute("aria-current", String(name === "vendors"));
   document.getElementById("ask-nav").setAttribute("aria-current", String(name === "ask"));
   document.getElementById("timeline-nav").setAttribute("aria-current", String(name === "timeline"));

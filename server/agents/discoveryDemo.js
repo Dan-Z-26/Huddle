@@ -21,7 +21,7 @@ export function categoriesMentioned(answer, template) {
         (w) => w.length > 1,
       );
       const hits = words
-        .map((word) => text.search(new RegExp(`\\b${word}`)))
+        .map((word) => text.search(new RegExp(`\\b${word}s?\\b`)))
         .filter((at) => at >= 0);
       return { id, at: hits.length ? Math.min(...hits) : -1 };
     })

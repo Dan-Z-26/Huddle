@@ -16,10 +16,50 @@ export function requireCategory(req, template, categoryId) {
     throw HttpError(403, "FORBIDDEN", "You don't work on this category.");
 }
 
+const vendorRoomSlug = (categoryId) => `vendor-${categoryId}`;
+
+/**
+ * The room that works on a category: its booked vendor's room if it has one, then the room the
+ * template names, then Core team if the manager has removed that.
+ * @returns {object | undefined} The group.
+ */
 export const categoryGroup = (store, event, template, categoryId) => {
   const slug = groupsForCategory(template.categoryGroupMap, categoryId)[0];
-  return store.groups.get(`g-${event.id}-${slug}`);
+  return (
+    store.groups.get(`g-${event.id}-${vendorRoomSlug(categoryId)}`) ??
+    store.groups.get(`g-${event.id}-${slug}`) ??
+    store.groups.get(`g-${event.id}-core-team`)
+  );
 };
+
+/**
+ * The room a booked vendor joins. Core team talks budgets and rival quotes, so a category with no
+ * room of its own gets one, holding the manager and the category's owners.
+ * @returns {object} The group.
+ */
+export function vendorRoomFor(store, event, template, categoryId) {
+  const existing = categoryGroup(store, event, template, categoryId);
+  if (existing?.kind === "category") return existing;
+  const slug = vendorRoomSlug(categoryId);
+  const owners = template.roles.filter(
+    ({ kind, categoryIds }) => kind === "manager" || categoryIds?.includes(categoryId),
+  );
+  const agents = template.groups.find(({ kind }) => kind === "core")?.memberRoleIds ?? [];
+  const room = {
+    id: `g-${event.id}-${slug}`,
+    eventId: event.id,
+    slug,
+    name: template.categories.find(({ id }) => id === categoryId).name,
+    kind: "category",
+    memberRoleIds: [
+      ...owners.map(({ id }) => id),
+      ...agents.filter((id) => id.startsWith("agent-")),
+    ],
+    categoryIds: [categoryId],
+  };
+  store.groups.set(room.id, room);
+  return room;
+}
 
 export const eventQuotes = (store, eventId) =>
   [...store.quotes.values()].filter((quote) => quote.eventId === eventId);

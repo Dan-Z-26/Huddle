@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { describeChange } from "../agents/budget.js";
-import { parseAmount } from "../core/amount.js";
+import { parseMoneyField } from "../core/amount.js";
 import { contingencyOf } from "../core/budgetEngine.js";
 import { applyChangeEvents } from "../core/changeEvents.js";
 import { coverEvents, expenseSummary } from "../core/expenses.js";
@@ -8,11 +8,11 @@ import { shareOfBps, wholeMoney } from "../core/money.js";
 import { canSeeBudget } from "../core/permissions.js";
 import { getTemplate } from "../core/templates.js";
 import { HttpError, managerOnly, ownEvent, requireBudget, requireUser, validate } from "../http.js";
-import { addExpense, eventExpenses, removeExpense } from "../store/workspace.js";
+import { eventExpenses, removeExpense } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
 import { storePending } from "./budget.js";
+import { logExpense, noticeOfCover } from "./expenseWatch.js";
 
-const MAX_EXPENSES_PER_EVENT = 500;
 const BPS_PER_PERCENT = 100;
 
 /** What a person may see: the manager all of it; core members their own categories, no totals. */
@@ -24,10 +24,11 @@ function viewFor(store, event, role) {
   const own = all.filter((expense) => !expense.fromBuffer && owns(expense));
   return {
     expenses: own,
+    // How much came from the buffer stays with the manager, like the buffer itself.
     summary: {
-      categories: expenseSummary(state, own).categories.filter(({ id }) =>
-        owns({ categoryId: id }),
-      ),
+      categories: expenseSummary(state, own)
+        .categories.filter(({ id }) => owns({ categoryId: id }))
+        .map(({ coveredMinor: _covered, ...row }) => row),
     },
   };
 }
@@ -42,50 +43,52 @@ export function expenseRoutes({ ai }) {
     res.json(viewFor(store, event, store.roleOf(req.user)));
   });
 
-  router.post("/events/:id/expenses", requireUser, validate(schemas.createExpense), (req, res) => {
-    const { store } = req.app.locals;
-    const event = ownEvent(req);
-    const state = requireBudget(store, event);
-    const role = store.roleOf(req.user);
-    const { description, amount, categoryId, fromBuffer = false } = req.valid.body;
-    if (fromBuffer && !canSeeBudget(role, "total"))
-      throw HttpError(403, "FORBIDDEN", "Only the event manager can use the buffer.");
-    if (!fromBuffer && !categoryId)
-      throw HttpError(400, "BAD_REQUEST", "Please choose a category.");
-    if (categoryId && !state.categories.some(({ id }) => id === categoryId))
-      throw HttpError(400, "BAD_REQUEST", "Unknown category.");
-    if (categoryId && !canSeeBudget(role, { categoryId }))
-      throw HttpError(403, "FORBIDDEN", "That category belongs to someone else.");
-    // This field can only be money, so a plain "500" counts here, unlike in free text.
-    const parsed = parseAmount(/^[\d,.]+$/.test(amount) ? `${state.currency} ${amount}` : amount);
-    if (!parsed || parsed.minor <= 0)
-      throw HttpError(400, "BAD_REQUEST", "I couldn't read that amount.");
-    if (parsed.currency && parsed.currency !== state.currency)
-      throw HttpError(400, "BAD_REQUEST", `Please give the amount in ${state.currency}.`);
-    const { availableMinor } = contingencyOf(state);
-    if (fromBuffer && parsed.minor > availableMinor)
-      throw HttpError(
-        400,
-        "BAD_REQUEST",
-        `The buffer has only ${wholeMoney(availableMinor, state.currency)} left.`,
-      );
-    if (eventExpenses(store, event.id).length >= MAX_EXPENSES_PER_EVENT)
-      throw HttpError(400, "BAD_REQUEST", "That is as many expenses as the demo allows.");
-    const expense = addExpense(
-      store,
-      {
-        eventId: event.id,
-        description,
-        amountMinor: parsed.minor,
-        categoryId: categoryId ?? null,
-        fromBuffer,
-        createdById: req.user.id,
-      },
-      new Date().toISOString(),
-    );
-    store.publish({ type: "budget.updated", eventId: event.id });
-    res.status(201).json({ expense });
-  });
+  // The AI budget too, because an expense can bring in the Budget agent.
+  router.post(
+    "/events/:id/expenses",
+    requireUser,
+    ai,
+    validate(schemas.createExpense),
+    (req, res) => {
+      const { store } = req.app.locals;
+      const event = ownEvent(req);
+      const state = requireBudget(store, event);
+      const role = store.roleOf(req.user);
+      const { description, amount, categoryId, fromBuffer = false } = req.valid.body;
+      if (fromBuffer && !canSeeBudget(role, "total"))
+        throw HttpError(403, "FORBIDDEN", "Only the event manager can use the buffer.");
+      if (!fromBuffer && !categoryId)
+        throw HttpError(400, "BAD_REQUEST", "Please choose a category.");
+      if (categoryId && !state.categories.some(({ id }) => id === categoryId))
+        throw HttpError(400, "BAD_REQUEST", "Unknown category.");
+      if (categoryId && !canSeeBudget(role, { categoryId }))
+        throw HttpError(403, "FORBIDDEN", "That category belongs to someone else.");
+      const parsed = parseMoneyField(amount, state.currency);
+      if (!parsed || parsed.minor <= 0)
+        throw HttpError(400, "BAD_REQUEST", "I couldn't read that amount.");
+      if (parsed.currency && parsed.currency !== state.currency)
+        throw HttpError(400, "BAD_REQUEST", `Please give the amount in ${state.currency}.`);
+      const { availableMinor } = contingencyOf(state);
+      if (fromBuffer && parsed.minor > availableMinor)
+        throw HttpError(
+          400,
+          "BAD_REQUEST",
+          `The buffer has only ${wholeMoney(availableMinor, state.currency)} left.`,
+        );
+      const expense = logExpense({
+        store,
+        event,
+        user: req.user,
+        fields: {
+          description,
+          amountMinor: parsed.minor,
+          categoryId: categoryId ?? null,
+          fromBuffer,
+        },
+      });
+      res.status(201).json({ expense });
+    },
+  );
 
   router.delete("/expenses/:id", requireUser, validate(schemas.expenseParam), (req, res) => {
     const { store } = req.app.locals;
@@ -100,22 +103,22 @@ export function expenseRoutes({ ai }) {
       );
     removeExpense(store, expense);
     store.publish({ type: "budget.updated", eventId: expense.eventId });
+    store.publish({ type: "attention.updated", eventId: expense.eventId });
     res.status(204).end();
   });
 
   router.post(
     "/events/:id/buffer/cover",
     requireUser,
+    ai,
     validate(schemas.coverFromBuffer),
     (req, res) => {
       const { store } = req.app.locals;
       const event = managerOnly(req);
       const state = requireBudget(store, event);
-      const { events, coveredMinor } = coverEvents(
-        state,
-        eventExpenses(store, event.id),
-        req.valid.body.categoryId,
-      );
+      const { categoryId } = req.valid.body;
+      const expenses = eventExpenses(store, event.id);
+      const { events, coveredMinor } = coverEvents(state, expenses, categoryId);
       if (coveredMinor === 0)
         throw HttpError(400, "BAD_REQUEST", "There is nothing the buffer can cover here.");
       const { state: after, rejected } = applyChangeEvents(state, events);
@@ -123,6 +126,16 @@ export function expenseRoutes({ ai }) {
         throw HttpError(400, "BAD_REQUEST", "That can no longer be covered.");
       store.budgets.set(event.id, after);
       store.publish({ type: "budget.updated", eventId: event.id });
+      store.publish({ type: "attention.updated", eventId: event.id });
+      const row = expenseSummary(after, expenses).categories.find(({ id }) => id === categoryId);
+      noticeOfCover({
+        store,
+        event,
+        user: req.user,
+        categoryId,
+        name: row.name,
+        stillOver: row.overMinor > 0,
+      });
       res.json({ coveredMinor });
     },
   );

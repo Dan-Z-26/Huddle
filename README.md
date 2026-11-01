@@ -32,13 +32,23 @@ npm run lint
 
 ## Try the demo (5 minutes)
 
-Open the app and choose a person. Each person sees what their role allows.
+Open the app and sign in as **Asha Menon, Event manager**. The first page is the event brief, today's digest from the AI, and a live feed. The team then starts working on its own for about a minute, using the same code a real user does:
 
-1. **Dev Sharma, PR head:** open PR & media and send `@huddle we need a PR vendor, please draft a brief`. Open Vendors and quotes and send the brief to Core team.
-2. **Asha Menon, Event manager** (Switch person): approve the brief under Vendors and quotes.
-3. **Dev Sharma:** press the three "Use sample" buttons and confirm each reading. Compare the warnings: one is silent on tax, one is over plan and one has a minimum guest count.
-4. **Asha Menon:** accept Northstar Media, read the consequences, choose how to close the gap and apply.
-5. Northstar Media is now in the PR & media group only, the budget and timeline have changed, and the sign-in list includes them. Sign in as them to see how little an outside vendor sees.
+- Meera tells `@huddle` about a payment. The Budget agent records it, sees that AV has gone over plan, and warns the room and Core team. It appears under "Needs my attention".
+- Kabir asks `@huddle` a question and the Planner answers.
+- Dev asks for a vendor brief, then sends it to Asha for approval.
+- The Timeline agent reminds the people who haven't acknowledged a directive, and one of them taps "Got it".
+
+**Teammates' lines are scripted; everything marked AI is real**, as are all the figures. The demo stays interactive: try these while it runs or afterwards.
+
+1. **Budget and expenses:** cover the AV overspend from the buffer. The row shows how much of the plan came from the buffer.
+2. **Tell a room about a payment:** `@huddle we paid ₹40,000 for chairs under decor`. Code reads the amount from your words.
+3. **Pin a message as a directive:** teammates acknowledge it within seconds, leaving one pending. Name someone in a room ("Meera, can you check?") and they answer.
+4. **Vendors and quotes:** approve Dev's PR brief, use the three sample quotes and compare their warnings: one is silent on tax, one is over plan and one has a minimum guest count.
+5. **Accept Northstar Media:** read the consequences, choose how to close the gap and apply. They join the PR & media group only, and the budget and timeline change.
+6. **Switch person** to Northstar Media to see how little an outside vendor sees.
+
+Restart the server to play the demo again.
 
 Also try **Start a new event**: describe it in a sentence, then tap through what's left.
 
@@ -59,7 +69,7 @@ Also try **Start a new event**: describe it in a sentence, then tap through what
 |---|---|---|
 | Planner (`@huddle`) | Reads intent, delegates, advises on next steps | Dispatch, finding what needs attention |
 | Discovery | Reads your description, writes answer buttons for this event | Which fields are missing, parsing dates, money and guests |
-| Budget | Turns language into change events, explains what they mean | All the maths and consequences |
+| Budget | Turns language into change events, explains what they mean, warns the team about overspending | All the maths and consequences, spotting what crossed a line |
 | Vendor | Writes briefs and declines, reads quotes from text, PDF or images | Normalising, scoring, warnings |
 | Timeline | Words tasks, digests and reminders | Dates, risk flags, overdue checks |
 
@@ -69,8 +79,10 @@ These live in `server/agents/` and run inside the app.
 
 - **Setup:** one sentence, then only what's missing. Tapped answers skip the model, so they're instant.
 - **Budget:** each category starts from its usual share for the event type, adjusted by your ranking, after 10% is set aside as a contingency buffer. Any change shows its consequences before anything moves.
-- **Expenses:** log what you actually spend, compare it with the plan, and cover an overspend from the buffer.
+- **Expenses:** log what you actually spend on the Budget page or by telling `@huddle`, compare it with the plan, and cover an overspend from the buffer. Code spots a category crossing 80% or going over plan; the Budget agent explains it to that room and Core team without any figures, and exact amounts stay on the Budget page and in "Needs my attention".
+- **Digest:** the Timeline agent posts each event's digest in Announcements once a day, without being asked.
 - **Timeline:** the whole flow is visible at the top of every page, with no sideways scrolling.
+- **AI members speak for themselves:** when a key is set, what they say is written by the model for this event from facts code supplies, and anything that strays from those facts or holds an amount is thrown away. Questions in setup are written for your event too. Without a key, or if the model fails, plain rules take over so the app still works.
 - **Team workspace:** humans and AI members share groups. Human messages stay in their group, and only `@huddle` brings in the Planner. Pinned directives ask named people to tap "Got it", with reminders.
 - **Vendor hiring:** brief, approval, quotes, comparison, accept. A vendor becomes a user only when accepted, and only in that category's group.
 
@@ -87,11 +99,13 @@ These live in `server/agents/` and run inside the app.
 ## Assumptions
 
 - **Demo sign-in has no passwords.** Anyone can choose any seeded person in the event they're in, or in the demo event. This is what lets judges see the roles quickly, and it means the vendor limits are only real with `DEMO_SIGNIN=off`, which closes it. Invite-link sessions can't use it while they last.
+- **The demo event's teammates are scripted.** Their lines and past chat are written in advance, and it plays once per server start. Set `DEMO_STORY=off` to turn it off. Events you create yourself are left alone.
+- **Amounts in `@huddle` messages are hidden from the room,** so telling Huddle about a payment doesn't show it to people who don't own that budget. Ordinary chat isn't masked for team members; vendors never see amounts in any message.
 - **In-memory storage.** Restarting the server resets everything to the demo event. Uploads go to a gitignored folder.
 - **Usual category shares are estimates.** They are reasoned starting points chosen for this project, not industry research. Real quotes replace them.
 - **Rupees by default.** Other currencies can be typed, but one event uses one currency.
 - **Free-tier AI limits.** On Gemini's free tier a busy moment may fall back to plain rules, and the screen says when it does.
-- **White and pink, light theme only** is a design decision for this version.
+- **White, pink and gold, light theme only** is a design decision for this version.
 - **The hiring checklist's steps are fixed;** the AI writes the brief, the vendor's deliverables and the decline note.
 
 ## Future work

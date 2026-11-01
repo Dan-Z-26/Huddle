@@ -221,3 +221,15 @@ describe("toChangeEvents: moving and scaling money", () => {
     assert.match(questions[0].reason, /how much/);
   });
 });
+
+describe("the event's currency", () => {
+  it("is what amounts must be given in", () => {
+    const state = { currency: "INR", categories: [], guestCount: 100, totalMinor: 1000 };
+    const { events, questions } = toChangeEvents(
+      [{ type: "budget_total", amountText: "$20,000", confidence: 0.9 }],
+      { categoryIds: [], state },
+    );
+    assert.deepEqual(events, []);
+    assert.match(questions[0].reason, /in INR/);
+  });
+});

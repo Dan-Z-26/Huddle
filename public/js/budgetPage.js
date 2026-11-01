@@ -34,11 +34,12 @@ function stat(label, value, note) {
  * expenses. All figures come from a route that filters by role, so a core member's page simply has
  * less to draw.
  * @param {{event: object, me: object, isManager: boolean, budget: () => object,
- *   showProposal: (text: string, data: object) => void, reload: () => Promise<void>}} context The
- *   event, the person, the budget on screen, how to show a proposed change, and how to redraw.
+ *   showProposal: (text: string, data: object) => void, askAbout: (text: string) => void,
+ *   reload: () => Promise<void>}} context The event, the person, the budget on screen, how to show
+ *   a proposed change, how to start a question in Ask Huddle, and how to redraw.
  * @returns {() => Promise<void>} Fetches and draws the page.
  */
-export function setUpBudgetPage({ event, me, isManager, budget, showProposal, reload }) {
+export function setUpBudgetPage({ event, me, isManager, budget, showProposal, askAbout, reload }) {
   const money = (minor) => formatMoney(minor, budget().currency);
   let summary = null;
 
@@ -59,16 +60,21 @@ export function setUpBudgetPage({ event, me, isManager, budget, showProposal, re
     );
   }
 
-  function drawBuffer({ contingency, totalMinor }) {
+  function drawBuffer({ contingency, totalMinor, coveredMinor }) {
     $("buffer-box").hidden = contingency === undefined;
     if (!contingency) return;
     const { reservedMinor, spentMinor, availableMinor } = contingency;
+    // A cover shrinks what is set aside, so the size it started at includes what moved out.
+    const startMinor = reservedMinor + coveredMinor;
+    const parts = [`${money(spentMinor)} paid from it`];
+    if (coveredMinor > 0) parts.push(`${money(coveredMinor)} moved to cover overspending`);
+    parts.push(`${money(availableMinor)} left`);
     $("buffer-status").textContent =
-      `${money(reservedMinor)} set aside, ${percentOf(reservedMinor, totalMinor)}% of your budget. ` +
-      `${money(spentMinor)} used, ${money(availableMinor)} left.`;
+      `${money(startMinor)} set aside, ${percentOf(startMinor, totalMinor)}% of your budget. ` +
+      `${parts.join(", ")}.`;
     const shown = $("buffer-bar");
     clear(shown);
-    shown.append(bar(percentOf(spentMinor, reservedMinor)));
+    shown.append(bar(percentOf(spentMinor + coveredMinor, startMinor)));
     // Drawing on the buffer can leave a size that isn't one of the listed ones.
     const size = $("buffer-percent");
     const percent = String(percentOf(reservedMinor, totalMinor));
@@ -83,6 +89,32 @@ export function setUpBudgetPage({ event, me, isManager, budget, showProposal, re
     if (totalMinor === undefined || !typicalBps) return "";
     const priority = rank ? `Priority ${rank}. ` : "Not ranked. ";
     return `${priority}Usually about ${Math.round(typicalBps / 100)}%, here ${percentOf(committedMinor, totalMinor)}%.`;
+  }
+
+  // When the buffer can't clear it: the lowest priority category with enough left, for the
+  // manager to try in Ask Huddle. Nothing moves until they apply it there.
+  function donorFor(row, categories) {
+    const rankOf = (id) => budget().categories.find((item) => item.id === id)?.rank ?? Infinity;
+    return categories
+      .filter(({ id, leftMinor }) => id !== row.id && leftMinor >= row.overMinor)
+      .toSorted((a, b) => rankOf(b.id) - rankOf(a.id))[0];
+  }
+
+  function moveButton(row, categories, available) {
+    const donor = donorFor(row, categories);
+    const gap = row.overMinor - available;
+    if (!donor)
+      return el("span", {
+        class: "muted",
+        text: "No other category has enough left. Ask Huddle about raising the budget.",
+      });
+    return el("button", {
+      type: "button",
+      class: "button small",
+      text: `Try moving ${money(gap)} from ${donor.name}`,
+      "data-focus-key": `move:${row.id}`,
+      onclick: () => askAbout(`Move ${money(gap)} from ${donor.name} to ${row.name}`),
+    });
   }
 
   function coverButton(row, available) {
@@ -113,7 +145,10 @@ export function setUpBudgetPage({ event, me, isManager, budget, showProposal, re
     for (const row of categories) {
       const over = row.overMinor > 0;
       const status = over
-        ? el("span", { class: "risk", text: `${money(row.overMinor)} over plan` })
+        ? el("span", {
+            class: "risk",
+            text: `${money(row.overMinor)} ${row.coveredMinor ? "still " : ""}over plan`,
+          })
         : el("span", { class: "muted", text: `${money(row.leftMinor)} left` });
       list.append(
         el(
@@ -125,6 +160,12 @@ export function setUpBudgetPage({ event, me, isManager, budget, showProposal, re
             el("strong", { text: row.name }),
             el("span", { text: `${money(row.spentMinor)} of ${money(row.plannedMinor)}` }),
           ),
+          row.coveredMinor
+            ? el("p", {
+                class: "money-covered",
+                text: `${money(row.plannedMinor - row.coveredMinor)} plan + ${money(row.coveredMinor)} from the buffer`,
+              })
+            : null,
           bar(percentOf(row.spentMinor, row.plannedMinor), over ? "is-over" : ""),
           el(
             "div",
@@ -132,6 +173,9 @@ export function setUpBudgetPage({ event, me, isManager, budget, showProposal, re
             status,
             el("span", { class: "muted", text: whyLine(shown.get(row.id) ?? {}, totalMinor) }),
             over && isManager && available > 0 ? coverButton(row, available) : null,
+            over && isManager && row.overMinor > available
+              ? moveButton(row, categories, available)
+              : null,
           ),
         ),
       );
@@ -167,6 +211,7 @@ export function setUpBudgetPage({ event, me, isManager, budget, showProposal, re
                 type: "button",
                 class: "link-button",
                 text: "Remove",
+                "data-focus-key": `remove:${expense.id}`,
                 "aria-label": `Remove ${expense.description}`,
                 onclick: async () => {
                   try {

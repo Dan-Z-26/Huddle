@@ -5,6 +5,9 @@ const LAST_RANK_PCT = 100;
 const UNRANKED_PCT = 50;
 const FALLBACK_TYPICAL_BPS = 1000;
 
+/** The line item that holds what a cover moved from the buffer into a category's plan. */
+export const COVER_LABEL = "Covered from the buffer";
+
 /** The share of a new budget set aside for the unexpected. */
 export const DEFAULT_BUFFER_BPS = 1000;
 
@@ -76,7 +79,7 @@ function pricedCost(driver, guests) {
     case "fixed":
       return driver.unitMinor;
     case "perGuest":
-      return driver.unitMinor * guests;
+      return driver.unitMinor * Math.max(guests, driver.minGuests ?? 0);
     case "perUnit":
       return driver.unitMinor * driver.units;
     case "stepped":

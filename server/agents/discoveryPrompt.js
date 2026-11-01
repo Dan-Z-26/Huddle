@@ -30,6 +30,9 @@ export const SYSTEM = agentPrompt({
       "five short, neutral answer buttons for each of name (possible titles), purpose, " +
       "venueType, attendeeExperience, mustHaves (with categoryId) and constraints, " +
       "written for this particular event. No digits, prices, brands or default luxury.",
+    "Also when the field being answered is opening, fill questions: for each field in the " +
+      "missing list, one short, friendly question about that field only, written for this " +
+      "particular event and referring to what the user told you. No digits.",
   ],
 });
 

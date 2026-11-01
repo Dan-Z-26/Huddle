@@ -1,11 +1,11 @@
 import { createHash } from "node:crypto";
-import { parseAmount } from "../core/amount.js";
+import { parseMoneyField } from "../core/amount.js";
 import { generate as realGenerate, generateOrDemo, wrapUntrusted } from "../llm/index.js";
 import { groundedOr, isGrounded } from "./grounded.js";
-import { quoteExtraction, rfqOutput } from "./schemas.js";
+import { quoteExtraction, rfqOutput, vendorAnswerOutput } from "./schemas.js";
 import { seededReading } from "./sampleQuotes.js";
 import { demoQuoteFromFile, demoQuoteFromText } from "./vendorDemo.js";
-import { QUOTE_SYSTEM, RFQ_SYSTEM } from "./vendorPrompts.js";
+import { ANSWER_SYSTEM, QUOTE_SYSTEM, RFQ_SYSTEM } from "./vendorPrompts.js";
 
 const MAX_CACHE = 100;
 const MAX_QUOTE_TEXT = 8000;
@@ -141,10 +141,15 @@ const clean = (value, max) =>
  */
 export function quoteFromExtracted(extracted, { categoryId, profile, fileId }) {
   const warnings = [];
+  const currency = profile.budget?.currency ?? "INR";
   const price = (text, label) => {
     if (!text) return 0;
-    const amount = parseAmount(text);
+    const amount = parseMoneyField(text, currency);
     if (!amount) warnings.push(`I couldn't read the ${label} price "${text.slice(0, 40)}"`);
+    else if (amount.currency && amount.currency !== currency) {
+      warnings.push(`The ${label} price "${text.slice(0, 40)}" isn't in ${currency}`);
+      return 0;
+    }
     return amount?.minor ?? 0;
   };
   const perGuestMinor = price(extracted.perGuestText, "per-guest");
@@ -248,4 +253,49 @@ export async function extractQuote(
     { extractedQuote: quote, warnings, rationale: groundedOr(data.rationale, ""), offline },
     !fellBack,
   );
+}
+
+/**
+ * Answers what someone actually asked about vendors, using the event and its checklist, rather than
+ * handing everyone the same list.
+ * @param {{text: string, categoryName: string, profile: object, rfq: object, fallback: string}}
+ *   input What was asked, about which category, what is known, and the list to fall back on.
+ * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
+ * @returns {Promise<string>} The reply; anything citing a figure from outside these facts becomes
+ *   the fallback.
+ */
+export async function answerVendorQuestion(
+  { text, categoryName, profile, rfq, fallback },
+  { generate = realGenerate } = {},
+) {
+  const facts = JSON.stringify({
+    event: {
+      name: profile.name,
+      purpose: profile.purpose,
+      city: profile.city,
+      venueType: profile.venueType,
+      guests: profile.guests?.confirmed,
+      mustHaves: profile.mustHaves?.map((item) => item.text),
+      constraints: profile.constraints,
+    },
+    checklist: rfq.checklist,
+    questions: rfq.rfqQuestions,
+  });
+  const { data } = await generateOrDemo(generate, {
+    agent: "vendor",
+    system: ANSWER_SYSTEM,
+    messages: [
+      {
+        role: "user",
+        content: [
+          `Category: ${categoryName}`,
+          wrapUntrusted("what is known", facts),
+          wrapUntrusted("message", text),
+        ].join("\n"),
+      },
+    ],
+    schema: vendorAnswerOutput,
+    demo: async () => ({ reply: fallback.slice(0, 1500), rationale: "" }),
+  });
+  return groundedOr(data.reply, `${facts} ${text}`, fallback);
 }

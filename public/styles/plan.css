@@ -1,7 +1,7 @@
 /* Plan */
 .plan {
   padding: 0.25rem clamp(1rem, 2.5vw, 1.35rem) 1.5rem;
-  background: var(--bg);
+  background: linear-gradient(180deg, #fff, var(--blush));
 }
 .panel {
   padding-block: 1.25rem;
@@ -11,7 +11,7 @@
 }
 .panel-title {
   font-family: var(--display);
-  font-size: 1.15rem;
+  font-size: 1.3rem;
   font-weight: 400;
 }
 summary.panel-title {
@@ -23,6 +23,11 @@ summary.panel-title {
   position: relative;
   width: min(15rem, 100%);
   margin: 1rem auto;
+  padding: 0.35rem;
+  border-radius: 50%;
+  border: 1px solid var(--gold-line);
+  box-shadow: var(--shadow-up);
+  background: #fff;
 }
 .donut {
   display: block;
@@ -62,7 +67,7 @@ summary.panel-title {
 }
 .donut-center {
   position: absolute;
-  inset: 26%;
+  inset: 27%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -71,8 +76,9 @@ summary.panel-title {
   pointer-events: none;
 }
 .donut-center strong {
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-family: var(--display);
+  font-size: 1.3rem;
+  font-weight: 500;
   line-height: 1.2;
 }
 .donut-center span {

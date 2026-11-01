@@ -3,7 +3,8 @@ const AMOUNT =
 const SCALE_WORDS =
   /\b(?:ten|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|lakhs?|crores?|million|billion)\b/gi;
 
-const LINKS_AND_MENTIONS = /(?:https?:\/\/|www\.)\S+|@\w+/gi;
+// @huddle is how people call the Planner, so telling them about it pings nobody.
+const LINKS_AND_MENTIONS = /(?:https?:\/\/|www\.)\S+|@(?!huddle\b)\w+/gi;
 const fold = (text) => String(text ?? "").normalize("NFKC");
 const hasForeignDigits = (text) =>
   [...text.matchAll(/\p{Nd}/gu)].some(([digit]) => !/\d/.test(digit));

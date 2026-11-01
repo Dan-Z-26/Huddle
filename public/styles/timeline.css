@@ -3,7 +3,8 @@
   flex: none;
   container-type: inline-size;
   padding: 0.85rem clamp(1rem, 3vw, 2rem) 0.8rem;
-  border-bottom: 1px solid var(--line);
+  background: #fff;
+  border-bottom: 1px solid var(--gold-line);
 }
 .flow-head {
   display: flex;
@@ -51,7 +52,7 @@
   background: var(--line);
 }
 .flow-step.is-done + .flow-step::before {
-  background: var(--pink);
+  background: var(--satin);
 }
 .flow-bead {
   position: relative;
@@ -100,8 +101,8 @@
   box-shadow: 0 0 0 3px var(--risk-bg);
 }
 .flow-step.is-final .flow-bead {
-  background: var(--pink);
-  border-color: var(--pink);
+  background: var(--satin);
+  border-color: var(--gold);
   transform: rotate(45deg);
   border-radius: 0.2rem;
 }
@@ -148,10 +149,12 @@
 }
 .road-month h3 {
   font-family: var(--display);
-  font-size: 1.05rem;
+  font-size: 1.3rem;
   font-weight: 400;
-  color: var(--muted);
-  margin-bottom: 0.6rem;
+  color: var(--gold-deep);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.3rem;
+  border-bottom: 1px solid var(--gold-line);
 }
 .road-item {
   position: relative;
@@ -171,7 +174,7 @@
   background: var(--line);
 }
 .road-item.is-done::before {
-  background: var(--pink);
+  background: var(--satin);
 }
 .road-month:last-child .road-item:last-child::before {
   display: none;

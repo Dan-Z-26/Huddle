@@ -3,7 +3,13 @@ import { describe, it } from "node:test";
 import { computeBudget, contingencyOf } from "../../server/core/budgetEngine.js";
 import { applyChangeEvents } from "../../server/core/changeEvents.js";
 import { computeConsequences, resolutionEvents } from "../../server/core/consequences.js";
-import { coverEvents, expenseSummary } from "../../server/core/expenses.js";
+import {
+  coverEvents,
+  expenseAlerts,
+  expenseSummary,
+  spendingWatch,
+  uncoverEvents,
+} from "../../server/core/expenses.js";
 import { buildBudgetState, emptyProfile } from "../../server/core/profile.js";
 import { getTemplate } from "../../server/core/templates.js";
 
@@ -158,5 +164,117 @@ describe("coverEvents", () => {
     );
     assert.deepEqual(coverEvents(state, [], "decor"), { events: [], coveredMinor: 0 });
     assert.equal(coverEvents(state, [], "ghost").coveredMinor, 0);
+  });
+});
+
+describe("what a cover shows and undoes", () => {
+  const cover = (from, spent, id) =>
+    applyChangeEvents(from, coverEvents(from, spent, id).events).state;
+  const rowOf = (summary, id) => summary.categories.find((row) => row.id === id);
+
+  it("says how much of a plan came from the buffer, per category and overall", () => {
+    const plan = planOf("decor");
+    const spent = [expense(plan + 5000, "decor")];
+    const summary = expenseSummary(cover(state, spent, "decor"), spent);
+    const decor = rowOf(summary, "decor");
+    assert.equal(decor.plannedMinor, plan + 5000);
+    assert.equal(decor.coveredMinor, 5000);
+    assert.equal(decor.overMinor, 0);
+    assert.equal(summary.coveredMinor, 5000);
+    assert.equal(rowOf(summary, "pr").coveredMinor, 0);
+  });
+
+  it("adds up several covers, and leaves what the buffer couldn't pay as over", () => {
+    const low = { ...state, contingency: { reservedMinor: 3000, spentMinor: 0 } };
+    const spent = [expense(planOf("decor") + 2000, "decor")];
+    const once = cover(low, spent, "decor");
+    const more = [...spent, expense(5000, "decor")];
+    const decor = rowOf(expenseSummary(cover(once, more, "decor"), more), "decor");
+    assert.equal(decor.coveredMinor, 3000);
+    assert.equal(decor.overMinor, 4000);
+  });
+
+  it("gives everything back once the overspend has gone", () => {
+    const spent = [expense(planOf("decor") + 5000, "decor")];
+    const covered = cover(state, spent, "decor");
+    const { events, returnedMinor } = uncoverEvents(covered, [], "decor");
+    assert.equal(returnedMinor, 5000);
+    const { state: after, rejected } = applyChangeEvents(covered, events);
+    assert.deepEqual(rejected, []);
+    assert.equal(planOf("decor", after), planOf("decor"));
+    assert.equal(contingencyOf(after).availableMinor, 10000000);
+  });
+
+  it("gives back only what is no longer needed", () => {
+    const plan = planOf("decor");
+    const spent = [expense(plan, "decor"), expense(5000, "decor")];
+    const covered = cover(state, spent, "decor");
+    const smaller = [expense(plan, "decor"), expense(2000, "decor")];
+    const { events, returnedMinor } = uncoverEvents(covered, smaller, "decor");
+    assert.equal(returnedMinor, 3000);
+    const { state: after } = applyChangeEvents(covered, events);
+    assert.equal(rowOf(expenseSummary(after, smaller), "decor").coveredMinor, 2000);
+    assert.equal(contingencyOf(after).availableMinor, 10000000 - 2000);
+  });
+
+  it("does nothing when nothing was covered, or it is all still needed", () => {
+    assert.deepEqual(uncoverEvents(state, [], "decor"), { events: [], returnedMinor: 0 });
+    assert.equal(uncoverEvents(state, [], "ghost").returnedMinor, 0);
+    const spent = [expense(planOf("decor") + 5000, "decor")];
+    assert.equal(uncoverEvents(cover(state, spent, "decor"), spent, "decor").returnedMinor, 0);
+  });
+});
+
+describe("watching spending", () => {
+  const plan = planOf("decor");
+  const summaryOf = (spent, from = state) => expenseSummary(from, spent);
+  const near = Math.ceil((plan * 80) / 100);
+
+  it("alerts once when a category crosses a line, not on every expense after", () => {
+    const empty = summaryOf([]);
+    const nearly = summaryOf([expense(near, "decor")]);
+    const over = summaryOf([expense(plan + 1, "decor")]);
+    const alert = (status) => [{ categoryId: "decor", name: "Décor", status }];
+    assert.deepEqual(expenseAlerts(empty, summaryOf([expense(near - 1, "decor")])), []);
+    assert.deepEqual(expenseAlerts(empty, nearly), alert("near"));
+    assert.deepEqual(expenseAlerts(nearly, over), alert("over"));
+    assert.deepEqual(expenseAlerts(empty, over), alert("over"));
+    assert.deepEqual(expenseAlerts(over, summaryOf([expense(plan + 9, "decor")])), []);
+    assert.deepEqual(expenseAlerts(over, nearly), []);
+  });
+
+  it("says over, not near, exactly past the plan, and ok when nothing is spent", () => {
+    assert.equal(spendingWatch(summaryOf([expense(plan, "decor")])).categories[0].status, "near");
+    assert.equal(
+      spendingWatch(summaryOf([expense(plan + 1, "decor")])).categories[0].status,
+      "over",
+    );
+    assert.deepEqual(spendingWatch(summaryOf([])).categories, []);
+  });
+
+  it("lists what is over first, with the figures", () => {
+    const { categories } = spendingWatch(
+      summaryOf([expense(near, "decor"), expense(planOf("pr") + 500, "pr")]),
+    );
+    assert.deepEqual(
+      categories.map(({ categoryId, status }) => [categoryId, status]),
+      [
+        ["pr", "over"],
+        ["decor", "near"],
+      ],
+    );
+    assert.equal(categories[0].overMinor, 500);
+    assert.equal(categories[1].leftMinor, plan - near);
+  });
+
+  it("flags a low buffer only when it can be seen, counting what moved out of it", () => {
+    const low = { ...state, contingency: { reservedMinor: 1000, spentMinor: 800 } };
+    assert.equal(spendingWatch(summaryOf([], low)).bufferLeftMinor, 200);
+    assert.equal(spendingWatch(summaryOf([])).bufferLeftMinor, null);
+    assert.equal(spendingWatch({ categories: [] }).bufferLeftMinor, null);
+    const drawn = { ...state, contingency: { reservedMinor: 100, spentMinor: 0 } };
+    const spent = [expense(planOf("decor") + 100, "decor")];
+    const covered = applyChangeEvents(drawn, coverEvents(drawn, spent, "decor").events).state;
+    assert.equal(spendingWatch(summaryOf(spent, covered)).bufferLeftMinor, 0);
   });
 });

@@ -1,18 +1,20 @@
 import { randomUUID } from "node:crypto";
 import multer from "multer";
 import { Router } from "express";
+import { hideAmounts } from "../core/amount.js";
 import { canPost, canView } from "../core/permissions.js";
-import { HttpError, requireUser, validate } from "../http.js";
+import { HttpError, ownEvent, requireUser, validate } from "../http.js";
 import { assertRoom, readUpload, saveUpload } from "../store/files.js";
 import { addMessage } from "../store/workspace.js";
 import { detectFileType, MAX_FILE_BYTES, MAX_FILES } from "../validation/uploads.js";
-import { fileParam, groupMessages, postMessage } from "../validation/schemas.js";
+import { eventParam, fileParam, groupMessages, postMessage } from "../validation/schemas.js";
 import { replyAsPlanner } from "./plannerReply.js";
 import { directiveView, messageView, redactForVendor } from "./views.js";
 
 const HUDDLE = /@huddle\b/i;
 const MAX_VENDOR_MESSAGES = 50;
 const MAX_VENDOR_SCAN = 100;
+const MAX_ACTIVITY = 12;
 const upload = multer({
   storage: multer.memoryStorage(),
   // Browsers send file names as UTF-8; the default would read them as Latin-1.
@@ -114,12 +116,14 @@ export function messageRoutes({ ai, chat }) {
           }),
         );
       }
+      const asksHuddle = HUDDLE.test(text) && req.user.kind !== "vendor";
       const message = addMessage(store, {
         id: `m-${randomUUID().slice(0, 8)}`,
         groupId: group.id,
         authorId: req.user.id,
         authorKind: "human",
-        text,
+        // Telling @huddle about money is routine, and not everyone in a room owns that budget.
+        text: asksHuddle ? hideAmounts(text) : text,
         fileIds: records.map(({ id }) => id),
         createdAt: nowIso,
         rationale: null,
@@ -130,15 +134,23 @@ export function messageRoutes({ ai, chat }) {
             ? redactForVendor(messageView(store, message), req.user.id)
             : messageView(store, message),
       });
+      if (req.user.kind !== "vendor")
+        store.reactInDemo?.("message", {
+          event: store.events.get(group.eventId),
+          group,
+          user: req.user,
+          text,
+        });
       // Human messages go only to the group they were posted in. Only an @huddle mention brings
       // in the Planner, and its reply is posted in the same group.
-      if (HUDDLE.test(text) && req.user.kind !== "vendor") {
+      if (asksHuddle) {
         const work = replyAsPlanner({
           store,
           event: store.events.get(group.eventId),
           group,
           user: req.user,
           message,
+          askedText: text,
           files: files.map(({ buffer, originalname }, i) => ({
             mime: records[i].mime,
             buffer,
@@ -149,6 +161,23 @@ export function messageRoutes({ ai, chat }) {
       }
     },
   );
+
+  // The latest messages across the rooms this person is in, for the first page.
+  router.get("/events/:id/activity", requireUser, validate(eventParam), (req, res) => {
+    const { store } = req.app.locals;
+    const event = ownEvent(req);
+    const role = store.roleOf(req.user);
+    const rooms = new Map(
+      [...store.groups.values()]
+        .filter((group) => group.eventId === event.id && canView(role, { type: "group", group }))
+        .map((group) => [group.id, group]),
+    );
+    const latest = [...store.messages.values()]
+      .filter(({ groupId }) => rooms.has(groupId))
+      .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .slice(-MAX_ACTIVITY);
+    res.json({ messages: latest.map((message) => messageView(store, message)) });
+  });
 
   // A file is visible only to members of the group it was posted in.
   router.get("/files/:id", requireUser, validate(fileParam), async (req, res) => {

@@ -181,3 +181,15 @@ describe("digest", () => {
     assert.ok(messages.some(({ id }) => id === message.id));
   });
 });
+
+describe("risk on the timeline", () => {
+  it("flags a task that has gone past its date since it was stored", async (t) => {
+    const { call, store } = await startDemo(t);
+    const task = store.tasksForEvent("demo").find(({ status }) => status !== "done");
+    store.tasks.set(task.id, { ...task, dueDate: "2020-01-01T00:00:00.000Z", atRisk: false });
+    const { tasks } = await (
+      await call("/events/demo/timeline", { as: "user-manager@demo" })
+    ).json();
+    assert.equal(tasks.find(({ id }) => id === task.id).atRisk, true);
+  });
+});

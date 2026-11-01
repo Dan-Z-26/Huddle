@@ -150,7 +150,8 @@ export function vendorRoutes({ ai }) {
       }
       const quote = read.quote ?? read.extractedQuote;
       // A person typed these themselves, so there is nothing to confirm.
-      if (typed && !file && (quote.perGuestMinor || quote.fixedMinor)) quote.status = "confirmed";
+      // Unless part of it couldn't be read, when they need to see what was understood.
+      if (typed && !file && read.warnings.length === 0) quote.status = "confirmed";
       const saved = { ...quote, id: `q-${randomUUID().slice(0, 8)}`, eventId: event.id };
       store.quotes.set(saved.id, saved);
       const { warnings, rationale, offline } = read;
@@ -168,8 +169,7 @@ export function vendorRoutes({ ai }) {
       profile: event,
       fileId: existing.sourceFileId,
     });
-    if (!quote.perGuestMinor && !quote.fixedMinor)
-      throw HttpError(400, "BAD_REQUEST", warnings.at(-1) ?? "Please enter a price.");
+    if (warnings.length) throw HttpError(400, "BAD_REQUEST", `${warnings[0]}. Please check it.`);
     const saved = {
       ...quote,
       id: existing.id,

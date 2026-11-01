@@ -334,3 +334,6 @@
   font-size: 1rem;
   font-weight: 500;
 }
+.attention-list .link-button {
+  text-decoration: underline;
+}

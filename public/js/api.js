@@ -109,6 +109,7 @@ export const api = {
   patchGroup: (groupId, body) =>
     request(`/groups/${encodeURIComponent(groupId)}`, { method: "PATCH", body }),
   deleteGroup: (groupId) => request(`/groups/${encodeURIComponent(groupId)}`, { method: "DELETE" }),
+  activity: (eventId) => request(`/events/${encodeURIComponent(eventId)}/activity`),
   messages: (groupId) => request(`/groups/${encodeURIComponent(groupId)}/messages`),
 };
 

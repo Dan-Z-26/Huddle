@@ -65,6 +65,8 @@ API tests run in demo mode with provider keys removed from `process.env`, so the
   "categoryIds": [""], "quoteId": "", "joinedAt": "ISO" }
 
 // Expense: money actually spent. A buffer expense draws on the contingency, not a category plan.
+// Crossing 80% of a plan or going over it brings in the Budget agent once (figures never go in rooms).
+// /me's attention also carries spending { currency, categories, bufferLeftMinor } and pending briefs.
 { "id": "", "eventId": "", "description": "", "amountMinor": 0, "categoryId": null,
   "fromBuffer": false, "createdById": "", "createdAt": "ISO" }
 
@@ -380,12 +382,13 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 | timeline | `GET /events/:id/timeline` | | `{ tasks }` by date, each with `ownerGroupName` |
 | timeline | `POST /events/:id/reschedule` | `{ date }` as text (manager) | `{ event: { id, date }, tasks }` |
 | timeline | `PATCH /tasks/:id` | `{ status }` (members of the owner group) | `{ tasks }` |
-| timeline | `POST /events/:id/digest` * | | `{ message }` |
+| timeline | `POST /events/:id/digest` * | | `{ message }`; the server also posts one per event per day by itself |
+| chat | `GET /events/:id/activity` | | `{ messages }`: the latest across the rooms this person is in; not for vendors |
 | groups | `POST /events/:id/groups` | `{ name, memberRoleIds }` (manager) | `{ group }`; a `category` room with no budget category of its own. The manager and AI members are always in |
 | events | `POST /events/:id/advice` * | (manager) | `{ items: [{ signalId, action, title, why }], summary, offline }`; `action` is `ask`, `budget`, `timeline` or `vendors`. Signals come from `core/signals.js`; the model orders and explains them, and the result is cached until the signals change |
 | budget | `GET /events/:id/expenses` | | `{ expenses, summary }`; core members get their own categories only, and no totals, buffer or buffer expenses |
 | budget | `POST /events/:id/expenses` | `{ description, amount, categoryId?, fromBuffer? }` (amount is text, parsed in code; a core member only for a category they own; the buffer is manager-only) | 201 `{ expense }` |
-| budget | `DELETE /expenses/:id` | (manager or whoever added it) | 204; a buffer expense goes back to the buffer |
+| budget | `DELETE /expenses/:id` | (manager or whoever added it) | 204; a buffer expense goes back to the buffer, and so does whatever was covered for this one and is no longer needed |
 | budget | `POST /events/:id/buffer/cover` | `{ categoryId }` (manager) | `{ coveredMinor }`; moves an overspend from the buffer into that category's plan |
 | budget | `POST /events/:id/buffer` * | `{ percent }` 0 to 30 (manager) | a proposal like `POST /events/:id/changes`, applied through accept |
 | groups | `PATCH /groups/:id` | `{ name?, memberRoleIds? }` (manager) | `{ group }`; the id and slug never change. Announcements keeps everyone |

@@ -62,11 +62,14 @@ function chooseQuestion({ working, template, nextField, model, rejected, progres
   const base = questionFor(nextField, working, template);
   if (nextField === "guests") {
     const waiting = working.guests.suggested > 0 && working.guests.confirmed === null;
-    return waiting ? guestConfirmation(working.guests) : base;
+    if (waiting) return guestConfirmation(working.guests);
+    return groundedOr(working.suggestedQuestions?.guests ?? "", "") || base;
   }
   const usable = model?.nextField === nextField;
-  const question = (usable && groundedOr(model.nextQuestion, "")) || base;
-  return rejected.length || !progressed ? base : question;
+  // Written for this event when the user described it, so a tapped answer needs no model call.
+  const written = groundedOr(working.suggestedQuestions?.[nextField] ?? "", "");
+  const question = (usable && groundedOr(model.nextQuestion, "")) || written || base;
+  return rejected.length || !progressed ? written || base : question;
 }
 
 // What to tell the user before repeating a question: why the last answer wasn't used.
@@ -122,6 +125,7 @@ export async function nextStep(
     if (!working.purpose) working.purpose = text.trim().slice(0, MAX_PURPOSE);
     const options = cleanOptions(model.options, template);
     if (Object.keys(options).length) working.suggestedOptions = options;
+    if (model.questions) working.suggestedQuestions = model.questions;
     rationale = groundedOr(model.rationale, "", rationale);
   } else if (typeof answer === "string" && field) {
     const text = answer.slice(0, MAX_ANSWER);

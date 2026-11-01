@@ -41,6 +41,14 @@ const CANDIDATE = new RegExp(
   "gi",
 );
 const FOLLOWED_BY_PEOPLE = /^\s*(?:guests?|people|persons?|pax|attendees)/i;
+const FOLLOWED_BY_CURRENCY = [
+  [/^\s*(?:rupees?|rs\b)/i, "INR"],
+  [/^\s*dollars?\b/i, "USD"],
+  [/^\s*euros?\b/i, "EUR"],
+  [/^\s*pounds?\b/i, "GBP"],
+];
+const LOOKS_LIKE_YEAR = /^(?:19|20)\d\d$/;
+const PLAIN_PRICE = /^[\d,.]+\s*(?:\/|per\b|a\s|$)/i;
 const MIN_PLAIN_AMOUNT = 1000;
 
 function toMinor(digits, unit) {
@@ -62,18 +70,55 @@ export function parseAmount(input) {
   if (typeof input !== "string") return null;
   const text = input.slice(0, MAX_READ);
   const candidates = [...text.matchAll(CANDIDATE)];
-  const marked = candidates.find(([, symbol, , unit]) => symbol || unit);
-  const plain = candidates.find(([match, , digits, ,]) => {
-    const value = Number(digits.replaceAll(",", ""));
-    const after = text.slice(text.indexOf(match) + match.length);
-    return value >= MIN_PLAIN_AMOUNT && !FOLLOWED_BY_PEOPLE.test(after);
+  const after = (match) => text.slice(match.index + match[0].length);
+  const writtenCurrency = (match) =>
+    FOLLOWED_BY_CURRENCY.find(([pattern]) => pattern.test(after(match)))?.[1];
+  const marked = candidates.find((match) => match[1] || match[3] || writtenCurrency(match));
+  const plain = candidates.filter((match) => {
+    const value = Number(match[2].replaceAll(",", ""));
+    return value >= MIN_PLAIN_AMOUNT && !FOLLOWED_BY_PEOPLE.test(after(match));
   });
-  const chosen = marked ?? plain;
+  // "for the 2026 launch we paid 40000": a year is only an amount if nothing else could be.
+  const chosen = marked ?? plain.find(({ 2: digits }) => !LOOKS_LIKE_YEAR.test(digits)) ?? plain[0];
   if (!chosen) return null;
   const [, symbol, digits, unit] = chosen;
   const minor = toMinor(digits, unit);
   if (!Number.isSafeInteger(minor) || minor < 1 || minor > MAX_MINOR) return null;
-  return { minor, currency: CURRENCIES.get(symbol?.toLowerCase()) ?? null };
+  return {
+    minor,
+    currency: CURRENCIES.get(symbol?.toLowerCase()) ?? writtenCurrency(chosen) ?? null,
+  };
+}
+
+/**
+ * Reads a field that can only hold money, so a plain "800" or "800 per plate" counts, unlike in free
+ * text, and in the event's currency. A negative amount isn't one.
+ * @param {string} text The field.
+ * @param {string} currency The event's currency.
+ * @returns {{minor: number, currency: string | null} | null} As for `parseAmount`.
+ */
+export function parseMoneyField(text, currency) {
+  const trimmed = String(text ?? "").trim();
+  if (trimmed.startsWith("-")) return null;
+  return parseAmount(PLAIN_PRICE.test(trimmed) ? `${currency} ${trimmed}` : trimmed);
+}
+
+const AMOUNT_HIDDEN = "[amount]";
+const WHOLE_MESSAGE_HIDDEN = "(this message held an amount, so it is hidden from the room)";
+
+/**
+ * Takes amounts out of text that a whole room will read, leaving the rest of the sentence.
+ * @param {string} text Free text.
+ * @returns {string} The text with amounts replaced; if that isn't enough, a note saying it's hidden.
+ */
+export function hideAmounts(text) {
+  // The pattern can take in the spaces around an amount, and those aren't part of it.
+  const masked = text.replace(CANDIDATE, (match, symbol, digits, unit) =>
+    symbol || unit || Number(digits.replaceAll(",", "")) >= MIN_PLAIN_AMOUNT
+      ? `${match.match(/^\s*/)[0]}${AMOUNT_HIDDEN}${match.match(/\s*$/)[0]}`
+      : match,
+  );
+  return mentionsMoney(masked) ? WHOLE_MESSAGE_HIDDEN : masked;
 }
 
 const MONEY_WORDS =

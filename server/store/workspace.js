@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { mentionsMoney } from "../core/amount.js";
 import { contingencyOf } from "../core/budgetEngine.js";
+import { applyChangeEvents } from "../core/changeEvents.js";
+import { uncoverEvents } from "../core/expenses.js";
 import { buildBudgetState, emptyProfile } from "../core/profile.js";
 import { getTemplate } from "../core/templates.js";
 import { planTimeline } from "../core/timelinePlanner.js";
@@ -27,15 +29,20 @@ export function createEvent(store, { eventType, id = randomUUID().slice(0, 8), p
   return { event, users };
 }
 
+/** The Planner's plain welcome, used when the model hasn't written one. */
+export const welcomeFor = ({ name }) =>
+  `Welcome to ${mentionsMoney(name) ? "your event" : name}. I've set up your groups, budget and timeline. Ask me anything with @huddle.`;
+
 /**
  * Builds the workspace once intake is complete: groups from the template, the budget, the
  * backward-planned timeline, and a welcome post from the Planner in Announcements.
  * @param {object} store The store.
  * @param {object} event A profile with a confirmed guest count and a date.
  * @param {string} nowIso The current time.
+ * @param {{welcome?: string}} [options] What the Planner says first, when the model has written it.
  * @returns {{groups: object[], tasks: object[]}} What was created.
  */
-export function createWorkspace(store, event, nowIso) {
+export function createWorkspace(store, event, nowIso, { welcome } = {}) {
   const template = getTemplate(event.eventType);
   const groups = template.groups.map((group) => ({
     id: `g-${event.id}-${group.slug}`,
@@ -65,7 +72,7 @@ export function createWorkspace(store, event, nowIso) {
   postAgentMessage(store, {
     groupId: announcements.id,
     authorId: `agent-planner@${event.id}`,
-    text: `Welcome to ${mentionsMoney(event.name) ? "your event" : event.name}. I've set up your groups, budget and timeline. Ask me anything with @huddle.`,
+    text: welcome ?? welcomeFor(event),
     rationale: "Created from your answers and the event-type template.",
     nowIso,
   });
@@ -109,12 +116,13 @@ export function addMessage(store, message) {
  * Stores a message from an AI member, or a system notice with `authorKind: "system"`.
  * @param {object} store The store.
  * @param {{groupId: string, authorId: string, authorKind?: string, text: string,
- *   rationale?: string | null, nowIso: string}} message The message.
+ *   rationale?: string | null, digest?: boolean, nowIso: string}} message The message; `digest`
+ *   marks a daily digest, so the first page can tell it from anything else this agent says.
  * @returns {object} The stored message.
  */
 export function postAgentMessage(
   store,
-  { groupId, authorId, authorKind = "agent", text, rationale = null, nowIso },
+  { groupId, authorId, authorKind = "agent", text, rationale = null, digest = false, nowIso },
 ) {
   return addMessage(store, {
     id: `m-${randomUUID().slice(0, 8)}`,
@@ -125,6 +133,7 @@ export function postAgentMessage(
     fileIds: [],
     createdAt: nowIso,
     rationale,
+    ...(digest ? { digest } : {}),
   });
 }
 
@@ -202,10 +211,19 @@ export function addExpense(store, fields, nowIso) {
   return expense;
 }
 
-/** Removes an expense, giving back to the buffer what it had paid. */
+/** Removes an expense, giving back to the buffer what it had paid or what was covered for it. */
 export function removeExpense(store, expense) {
   store.expenses.delete(expense.id);
   if (expense.fromBuffer) adjustBufferSpend(store, expense.eventId, -expense.amountMinor);
+  else if (expense.categoryId) {
+    const state = store.budgets.get(expense.eventId);
+    const { events } = uncoverEvents(
+      state,
+      eventExpenses(store, expense.eventId),
+      expense.categoryId,
+    );
+    if (events.length) store.budgets.set(expense.eventId, applyChangeEvents(state, events).state);
+  }
 }
 
 function adjustBufferSpend(store, eventId, deltaMinor) {

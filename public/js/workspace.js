@@ -1,4 +1,5 @@
-import { clear, el, formatShortDate, keepFocus } from "./dom.js";
+import { clear, el, formatMoney, formatShortDate, keepFocus } from "./dom.js";
+import { roomIcon } from "./icons.js";
 
 /**
  * Renders the group list and calls `onOpen(group)` when one is chosen. A group with messages the
@@ -11,6 +12,10 @@ import { clear, el, formatShortDate, keepFocus } from "./dom.js";
 export function renderGroups(groups, activeId, onOpen, unread = new Map()) {
   keepFocus(() => drawGroups(groups, activeId, onOpen, unread));
 }
+
+// The AI members are in every room, so only the people are counted.
+const peopleIn = ({ memberRoleIds }) =>
+  memberRoleIds.filter((id) => !id.startsWith("agent-")).length;
 
 function drawGroups(groups, activeId, onOpen, unread) {
   const list = document.getElementById("group-list");
@@ -30,7 +35,15 @@ function drawGroups(groups, activeId, onOpen, unread) {
             "data-focus-key": `group:${group.id}`,
             onclick: () => onOpen(group),
           },
-          group.name,
+          el("span", { class: "tile" }, roomIcon(group.name)),
+          el(
+            "span",
+            { class: "group-text" },
+            group.name,
+            el("small", {
+              text: `${peopleIn(group)} ${peopleIn(group) === 1 ? "person" : "people"}`,
+            }),
+          ),
           count ? el("span", { class: "unread", text: `${count} new` }) : null,
         ),
       ),
@@ -41,19 +54,67 @@ function drawGroups(groups, activeId, onOpen, unread) {
 /**
  * Lists what needs the person's attention: directives they haven't acknowledged, and their open
  * tasks. A directive opens its group. An empty list says so plainly.
- * @param {{directives: object[], tasks: object[]}} attention From the server.
+ * Spending near or over its plan comes first and opens the Budget page.
+ * @param {{directives: object[], tasks: object[], spending: object | null, briefs?: object[]}}
+ *   attention From the server.
  * @param {(groupId: string) => void} openGroup Opens a group by id.
+ * @param {() => void} [openBudget] Opens the Budget page.
  */
-export function renderAttention(attention, openGroup) {
-  keepFocus(() => drawAttention(attention, openGroup));
+export function renderAttention(attention, openGroup, openBudget = () => {}) {
+  keepFocus(() => drawAttention(attention, openGroup, openBudget));
 }
 
 const MAX_ATTENTION = 5;
+let lastCount = null;
 
-function drawAttention({ directives, tasks }, openGroup) {
+function spendingItems(spending, openBudget) {
+  if (!spending) return [];
+  const money = (minor) => formatMoney(minor, spending.currency);
+  const button = (key, text) =>
+    el(
+      "li",
+      {},
+      el("button", {
+        type: "button",
+        class: "link-button",
+        "data-focus-key": `attn:${key}`,
+        onclick: openBudget,
+        text,
+      }),
+    );
+  return [
+    ...spending.categories.map(({ categoryId, name, status, overMinor, leftMinor }) =>
+      button(
+        categoryId,
+        status === "over"
+          ? `${name} is ${money(overMinor)} over plan`
+          : `${name} has ${money(leftMinor)} left`,
+      ),
+    ),
+    ...(spending.bufferLeftMinor === null
+      ? []
+      : [button("buffer", `The buffer is low: ${money(spending.bufferLeftMinor)} left`)]),
+  ];
+}
+
+function drawAttention({ directives, tasks, spending, briefs = [] }, openGroup, openBudget) {
   const box = document.getElementById("attention");
   clear(box);
   const items = [
+    ...spendingItems(spending, openBudget),
+    ...briefs.map(({ categoryId, name }) =>
+      el(
+        "li",
+        {},
+        el("button", {
+          type: "button",
+          class: "link-button",
+          "data-focus-key": `attn:brief-${categoryId}`,
+          onclick: () => document.getElementById("vendors-nav").click(),
+          text: `${name} brief is waiting for your approval`,
+        }),
+      ),
+    ),
     ...directives.map(({ id, groupId, groupName, text }) =>
       el(
         "li",
@@ -72,6 +133,12 @@ function drawAttention({ directives, tasks }, openGroup) {
     ),
   ];
   const more = items.length - MAX_ATTENTION;
+  document.getElementById("attention-count").textContent = items.length || "";
+  // Heard when something new arrives, not on every redraw.
+  if (lastCount !== null && items.length > lastCount)
+    document.getElementById("attention-live").textContent =
+      `Needs your attention: ${items.length} ${items.length === 1 ? "item" : "items"}.`;
+  lastCount = items.length;
   box.append(
     items.length
       ? el(

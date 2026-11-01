@@ -43,7 +43,7 @@ describe("@huddle reply paths", () => {
 });
 
 describe("reminders", () => {
-  it("skips a directive whose message is gone, without marking it", async (t) => {
+  it("skips a directive whose message is gone, and marks it so it can't block others", async (t) => {
     const { call, store } = await startDemo(t);
     const res = await post(call, "Send specs by Friday", MANAGER);
     const { message } = await res.json();
@@ -57,6 +57,6 @@ describe("reminders", () => {
     const generate = async () => ({ data: { reminderText: "x", rationale: "y" } });
     const n = await runReminders(store, "2027-01-01T00:00:00.000Z", { generate });
     assert.equal(n, 0);
-    assert.equal(store.directives.get(directive.id).remindedAt ?? null, null);
+    assert.ok(store.directives.get(directive.id).remindedAt);
   });
 });

@@ -1,6 +1,7 @@
 import { api, openStream } from "./api.js";
 import { renderBudget } from "./budgetChart.js";
 import { addLiveMessage, updateLiveDirective, updateLiveMessage } from "./chat.js";
+import { addToOverview } from "./overview.js";
 import { renderAttention } from "./workspace.js";
 import { renderTimeline } from "./timeline.js";
 
@@ -23,7 +24,8 @@ function once(work) {
  * updated in place; budget, timeline and attention changes refetch their own panel, so the figures
  * always come from routes that filter by role.
  * @param {{userId: string, eventId: string, isManager: boolean, activeGroupId: () => string | null,
- *   hasPreview: () => boolean, openGroup: (id: string) => void, onUnread: (groupId: string) => void,
+ *   hasPreview: () => boolean, openGroup: (id: string) => void, openBudget: () => void,
+ *   onUnread: (groupId: string) => void,
  *   onGroupsChanged: () => void, onReconnect: () => void, onBudget: (budget: object) => void}} ctx
  *   The person, what is on screen, and how to react.
  */
@@ -49,11 +51,12 @@ export function startLive(ctx) {
     if (!latest.isVendor) renderTimeline((await api.timeline(latest.eventId)).tasks);
   });
   const refetchAttention = once(async () =>
-    renderAttention((await api.me()).attention, latest.openGroup),
+    renderAttention((await api.me()).attention, latest.openGroup, latest.openBudget),
   );
   const onMessage = ({ message }) => {
-    if (!addLiveMessage(message) && message.groupId !== latest.activeGroupId())
-      latest.onUnread(message.groupId);
+    addToOverview(message);
+    addLiveMessage(message);
+    if (message.groupId !== latest.activeGroupId()) latest.onUnread(message.groupId);
   };
   let opened = false;
   close = openStream(

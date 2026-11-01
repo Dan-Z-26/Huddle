@@ -1,4 +1,4 @@
-import { contingencyOf } from "./budgetEngine.js";
+import { contingencyOf, COVER_LABEL } from "./budgetEngine.js";
 import { MAX_GUESTS, MAX_MINOR } from "./money.js";
 import { quotePricesWithTax } from "./quoteScoring.js";
 
@@ -148,16 +148,32 @@ function applyLineItemSwap(state, event) {
   return applied(replaceDrivers(state, category.id, drivers));
 }
 
+const coveredIn = (category) =>
+  category.drivers
+    .filter(({ label }) => label === COVER_LABEL)
+    .reduce((sum, { unitMinor }) => sum + unitMinor, 0);
+
+// What a cover moved out of the buffer goes back when the plan it was for no longer needs it.
+function returnToBuffer(state, amountMinor) {
+  if (amountMinor === 0) return state;
+  const { reservedMinor, spentMinor } = contingencyOf(state);
+  return { ...state, contingency: { reservedMinor: reservedMinor + amountMinor, spentMinor } };
+}
+
+// The new amount includes what the buffer covered, which stays its own line so it can go back.
 function applyCategoryAmount(state, event) {
   const category = findCategory(state, event.category);
   if (!category) return rejected(`unknown category: ${show(event.category)}`);
   if (!isAmount(event.amountMinor)) return rejected("amountMinor must be a non-negative integer");
-  const driver = makeDriver(`${category.id}-amount`, `${category.name} amount`, {
-    kind: "fixed",
-    unitMinor: event.amountMinor,
-    source: "user",
-  });
-  return applied(replaceDrivers(state, category.id, [driver]));
+  const covered = coveredIn(category);
+  const kept = Math.min(covered, event.amountMinor);
+  const fixed = (id, label, unitMinor) =>
+    makeDriver(id, label, { kind: "fixed", unitMinor, source: "user" });
+  const drivers = [
+    fixed(`${category.id}-amount`, `${category.name} amount`, event.amountMinor - kept),
+    ...(kept > 0 ? [fixed(`${category.id}-covered`, COVER_LABEL, kept)] : []),
+  ];
+  return applied(returnToBuffer(replaceDrivers(state, category.id, drivers), covered - kept));
 }
 
 function quoteDrivers(quote) {
@@ -166,7 +182,14 @@ function quoteDrivers(quote) {
   const pricing = (kind, unitMinor) => ({ kind, unitMinor, source: "quote" });
   const label = `${quote.vendorName} quote`;
   return [
-    makeDriver(`${quote.id}-per-guest`, `${label}, per guest`, pricing("perGuest", perGuestMinor)),
+    {
+      ...makeDriver(
+        `${quote.id}-per-guest`,
+        `${label}, per guest`,
+        pricing("perGuest", perGuestMinor),
+      ),
+      ...(isCount(quote.minGuests) ? { minGuests: quote.minGuests } : {}),
+    },
     makeDriver(`${quote.id}-fixed`, `${label}, fixed`, pricing("fixed", fixedMinor)),
   ];
 }
@@ -191,7 +214,11 @@ function applyQuoteAccepted(state, event) {
   const drivers = quoteDrivers(quote);
   if (!drivers) return rejected("quote prices must be non-negative integers");
   const quotes = state.quotes.map((q) => ({ ...q, status: nextQuoteStatus(q, quote) }));
-  return applied({ ...replaceDrivers(state, quote.categoryId, drivers), quotes });
+  // A real price replaces the plan, so what the buffer covered for the old plan goes back.
+  const covered = coveredIn(findCategory(state, quote.categoryId));
+  return applied(
+    returnToBuffer({ ...replaceDrivers(state, quote.categoryId, drivers), quotes }, covered),
+  );
 }
 
 function applyBudgetTotal(state, event) {

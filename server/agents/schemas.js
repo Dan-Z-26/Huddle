@@ -115,6 +115,7 @@ export const discoveryOutput = z.object({
       constraints: list,
     })
     .optional(),
+  questions: z.record(z.string(), short(200)).optional(),
   rationale: short(300),
 });
 
@@ -176,6 +177,10 @@ export const taskWordsOutput = z.object({
 export const digestOutput = wording("digestText", 400);
 export const reminderOutput = wording("reminderText", 400);
 export const noticeOutput = wording("wording", 400);
+export const expenseAlertOutput = wording("wording", 700);
+export const speechOutput = wording("wording", 500);
+export const vendorAnswerOutput = wording("reply", 1500);
+export const linesOutput = z.object({ lines: z.array(short(300)).max(12) });
 export const directiveTaskOutput = z.object({
   title: short(120),
   ownerGroupSlug: short(60),
@@ -203,6 +208,7 @@ export const INTENTS = [
   "ideas",
   "advice",
   "vendor_brief",
+  "log_expense",
   "question",
 ];
 export const briefOutput = z.object({
@@ -219,6 +225,7 @@ export const adviceOutput = z.object({
 export const plannerOutput = z.object({
   intent: z.enum(INTENTS),
   categoryId: short(60).nullable().optional(),
+  expenseDescription: short(120).nullable().optional(),
   suggestDirective: z.boolean(),
   reply: short(600).optional(),
   rationale: short(300),

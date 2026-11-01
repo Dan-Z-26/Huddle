@@ -11,6 +11,8 @@
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles/base.css" />
+    <link rel="stylesheet" href="/styles/header.css" />
+    <link rel="stylesheet" href="/styles/overview.css" />
     <link rel="stylesheet" href="/styles/pages.css" />
     <link rel="stylesheet" href="/styles/chat.css" />
     <link rel="stylesheet" href="/styles/vendors.css" />
@@ -35,7 +37,8 @@
       <p class="muted">
         This is a demo, so there's no password. Choose a person to see
         <span id="signin-event"></span> as they do. What each person can see is decided on the
-        server. Use a separate browser to be two people at once.
+        server. Use a separate browser to be two people at once. In the demo event the teammates'
+        lines are scripted; messages marked AI are written live.
       </p>
       <ul id="signin-list" class="people"></ul>
       <div class="signin-more">
@@ -47,29 +50,89 @@
     </main>
 
     <div class="app">
-      <aside class="side" aria-label="Workspace">
-        <h1 class="brand">Huddle</h1>
-
-        <div class="side-event">
-          <p id="event-title" class="side-event-name"></p>
-          <p id="event-countdown" class="side-event-meta"></p>
+      <header class="topbar">
+        <div class="brand-row">
+          <svg class="brand-mark" viewBox="0 0 34 42" aria-hidden="true">
+            <defs>
+              <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#8f6a1d" />
+                <stop offset="0.45" stop-color="#ecd28d" />
+                <stop offset="1" stop-color="#a97f28" />
+              </linearGradient>
+            </defs>
+            <path d="M10 22 5 41l7-4 4 5 2-19zM24 22l5 19-7-4-4 5-2-19z" fill="url(#gold)" />
+            <circle cx="17" cy="14" r="13" fill="url(#gold)" />
+            <circle cx="17" cy="14" r="8.500" fill="#fff" />
+            <path
+              d="M17 8.500l1.700 3.800 4 .4-3 2.700.9 4-3.600-2.100-3.600 2.100.9-4-3-2.700 4-.4z"
+              fill="#b5175c"
+            />
+          </svg>
+          <h1 class="brand">Huddle</h1>
         </div>
+        <div class="top-event">
+          <p id="event-title" class="top-event-name"></p>
+          <p class="top-event-meta">
+            <span id="event-countdown" class="top-countdown"></span>
+            <span id="event-meta"></span>
+          </p>
+        </div>
+        <div class="viewer">
+          <span id="viewer-avatar" class="viewer-avatar" aria-hidden="true"></span>
+          <div>
+            <p id="signed-in" class="signed-in"></p>
+            <div class="viewer-actions">
+              <button type="button" id="switch-person" class="link-button">Switch person</button>
+              <button type="button" id="new-event" class="link-button">Start a new event</button>
+            </div>
+          </div>
+        </div>
+      </header>
 
-        <nav aria-labelledby="groups-heading">
+      <aside class="side" aria-label="Workspace">
+        <nav aria-label="Pages and groups">
           <ul class="group-list side-main">
             <li>
-              <button type="button" id="ask-nav" class="ask-nav" hidden>
-                <span class="spark" aria-hidden="true">✦</span>Ask Huddle
+              <button type="button" id="brief-nav" hidden>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h7" />
+                </svg>
+                Event brief
               </button>
             </li>
             <li>
-              <button type="button" id="timeline-nav" hidden>Timeline</button>
+              <button type="button" id="ask-nav" class="ask-nav" hidden>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    d="M12 3l1.900 5.600 5.600 1.900-5.600 1.900L12 18l-1.900-5.600-5.600-1.900 5.600-1.900z"
+                  />
+                </svg>
+                Ask Huddle
+              </button>
             </li>
             <li>
-              <button type="button" id="budget-nav" hidden>Budget and expenses</button>
+              <button type="button" id="timeline-nav" hidden>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 5h14v15H5zM5 10h14M9 3v4M15 3v4" />
+                </svg>
+                Timeline
+              </button>
+            </li>
+            <li>
+              <button type="button" id="budget-nav" hidden>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3a9 9 0 1 0 9 9h-9zM15.500 3.700A9 9 0 0 1 20.300 8.500H15.500z" />
+                </svg>
+                Budget and expenses
+              </button>
             </li>
             <li class="vendors-nav" hidden>
-              <button type="button" id="vendors-nav">Vendors and quotes</button>
+              <button type="button" id="vendors-nav">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 9l2-5h12l2 5M5 9v11h14V9M4 9h16M10 20v-6h4v6" />
+                </svg>
+                Vendors and quotes
+              </button>
             </li>
           </ul>
           <div class="side-head">
@@ -80,17 +143,14 @@
           <p id="groups-empty" class="muted" hidden>Groups appear after setup.</p>
         </nav>
 
-        <section aria-labelledby="attention-heading">
-          <h2 id="attention-heading" class="side-heading">Needs my attention</h2>
+        <section class="attention-card" aria-labelledby="attention-heading">
+          <h2 id="attention-heading" class="side-heading">
+            Needs my attention
+            <span id="attention-count" class="count"></span>
+          </h2>
           <div id="attention" class="muted"></div>
+          <p id="attention-live" class="sr-only" role="status"></p>
         </section>
-
-        <div class="viewer">
-          <p class="muted">Signed in as</p>
-          <p id="signed-in" class="signed-in"></p>
-          <button type="button" id="switch-person" class="link-button">Switch person</button>
-          <button type="button" id="new-event" class="link-button">Start a new event</button>
-        </div>
       </aside>
 
       <main id="main" class="stage" tabindex="-1">
@@ -102,6 +162,34 @@
             <button type="button" id="flow-open" class="link-button">See full timeline</button>
           </div>
           <ol id="flow-steps" class="flow-steps" aria-label="Milestones up to the event"></ol>
+        </section>
+
+        <section id="overview" class="overview" aria-labelledby="overview-title" hidden>
+          <article class="brief-card">
+            <span id="overview-sash" class="sash" aria-hidden="true"></span>
+            <p id="overview-kind" class="brief-kind"></p>
+            <h2 id="overview-title" class="brief-name" tabindex="-1"></h2>
+            <div id="overview-brief"></div>
+          </article>
+          <div class="live-cards">
+            <section id="digest-card" class="live-card" aria-labelledby="digest-title" hidden>
+              <div class="live-head">
+                <h3 id="digest-title" class="live-title">Today's digest</h3>
+                <span class="ai-badge">AI</span>
+                <time id="digest-time"></time>
+              </div>
+              <div id="overview-digest"></div>
+            </section>
+            <section class="live-card" aria-labelledby="feed-title">
+              <div class="live-head">
+                <span class="live-dot" aria-hidden="true"></span>
+                <h3 id="feed-title" class="live-title">Happening now</h3>
+              </div>
+              <p id="feed-empty" class="muted" hidden>Nothing yet. Say hello in a group.</p>
+              <ul id="overview-feed" class="feed" role="list"></ul>
+              <p id="feed-live" class="sr-only" role="status"></p>
+            </section>
+          </div>
         </section>
 
         <div id="ask-view" class="ask-view" hidden>

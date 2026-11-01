@@ -10,16 +10,25 @@ const toEstimate = ({ lowRupees, highRupees }) => ({
   highMinor: highRupees * PAISE_PER_RUPEE,
 });
 
+// An amount in the event's currency; a string says why it can't be used.
+function readAmount(text, state) {
+  const amount = parseAmount(text);
+  if (!amount) return "I couldn't read that amount";
+  if (amount.currency && state?.currency && amount.currency !== state.currency)
+    return `Please give the amount in ${state.currency}`;
+  return amount;
+}
+
 // Returns a core pricing object, null when the proposal names no price, or a string reason.
-function pricingOf(proposal) {
+function pricingOf(proposal, state) {
   const kind = proposal.priceKind ?? "fixed";
   const units = kind === "perUnit" ? { units: proposal.units ?? 1 } : {};
   if (proposal.estimate) {
     return { kind, source: "estimate", estimate: toEstimate(proposal.estimate), ...units };
   }
   if (!proposal.priceText) return null;
-  const amount = parseAmount(proposal.priceText);
-  if (!amount) return "I couldn't read that price";
+  const amount = readAmount(proposal.priceText, state);
+  if (typeof amount === "string") return amount;
   return { kind, source: "user", unitMinor: amount.minor, ...units };
 }
 
@@ -29,13 +38,13 @@ function guestCountEvent({ delta, to, confidence }) {
   return { type: "guest_count", ...(to !== undefined ? { to } : { delta }), confidence };
 }
 
-function amountEvent(proposal, build) {
-  const amount = parseAmount(proposal.amountText);
-  return amount ? build(amount.minor) : "I couldn't read that amount";
+function amountEvent(proposal, state, build) {
+  const amount = readAmount(proposal.amountText, state);
+  return typeof amount === "string" ? amount : build(amount.minor);
 }
 
-function lineItemEvent(proposal) {
-  const pricing = pricingOf(proposal);
+function lineItemEvent(proposal, state) {
+  const pricing = pricingOf(proposal, state);
   if (typeof pricing === "string") return pricing;
   const { type, category, confidence } = proposal;
   if (type === "line_item_swap") {
@@ -53,8 +62,8 @@ const costOf = (state, id) => {
 
 // "Move 1 lakh from décor to food": code reads the amount and works out both new category totals.
 function shiftEvents({ from, to, amountText, confidence }, state) {
-  const amount = parseAmount(amountText);
-  if (!amount) return "I couldn't read that amount";
+  const amount = readAmount(amountText, state);
+  if (typeof amount === "string") return amount;
   const available = costOf(state, from);
   if (amount.minor > available)
     return `That category only has ${wholeMoney(available, state.currency)} to move`;
@@ -72,9 +81,9 @@ function shiftEvents({ from, to, amountText, confidence }, state) {
 // "Reduce gifting by half" or "add 50,000 to décor": the change comes as a percent or an amount.
 function adjustEvent({ category, direction, amountText, percent, confidence }, state) {
   const cost = costOf(state, category);
-  const amount = amountText
-    ? parseAmount(amountText)?.minor
-    : percent && Math.round((cost * percent) / 100);
+  const read = amountText ? readAmount(amountText, state) : null;
+  if (typeof read === "string") return read;
+  const amount = read ? read.minor : percent && Math.round((cost * percent) / 100);
   if (!amount) return "I need to know how much to change it by";
   if (direction === "decrease" && amount > cost)
     return `That category only has ${wholeMoney(cost, state.currency)}`;
@@ -91,13 +100,13 @@ function convert(proposal, state) {
     case "guest_count":
       return guestCountEvent(proposal);
     case "budget_total":
-      return amountEvent(proposal, (toMinor) => ({
+      return amountEvent(proposal, state, (toMinor) => ({
         type: "budget_total",
         toMinor,
         confidence: proposal.confidence,
       }));
     case "category_amount":
-      return amountEvent(proposal, (amountMinor) => ({
+      return amountEvent(proposal, state, (amountMinor) => ({
         type: "category_amount",
         category: proposal.category,
         amountMinor,
@@ -105,7 +114,7 @@ function convert(proposal, state) {
       }));
     case "line_item_add":
     case "line_item_swap":
-      return lineItemEvent(proposal);
+      return lineItemEvent(proposal, state);
     default:
       return { ...proposal };
   }

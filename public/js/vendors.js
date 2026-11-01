@@ -28,8 +28,12 @@ const STATUS = {
  */
 export function setUpVendors({ event, categories, isManager, showProposal }) {
   const select = $("vendor-category");
+  // A live reload lands here too, and mustn't move someone off the category they are working on.
+  const was = select.value;
   clear(select);
   for (const { id, name } of categories) select.append(el("option", { value: id, text: name }));
+  if (categories.some(({ id }) => id === was)) select.value = was;
+  const currency = event.budget?.currency ?? event.currency;
   const category = () => select.value;
   const mustHaves = () => event.mustHaves.filter((item) => item.categoryId === category());
   const gapText = (flag) => {
@@ -168,7 +172,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
             }),
         }),
       );
-    const total = quote.totalMinor ? formatMoney(quote.totalMinor) : "No price yet";
+    const total = quote.totalMinor ? formatMoney(quote.totalMinor, currency) : "No price yet";
     return el(
       "li",
       { class: `quote quote-${quote.status}` },
@@ -219,7 +223,7 @@ export function setUpVendors({ event, categories, isManager, showProposal }) {
           "tr",
           {},
           el("th", { scope: "row", text: row.vendorName }),
-          el("td", { class: "num", text: formatMoney(row.totalMinor) }),
+          el("td", { class: "num", text: formatMoney(row.totalMinor, currency) }),
           el("td", { class: "num", text: `${row.mustHaveFit}%` }),
           el("td", { class: "num" }, el("strong", { text: String(row.score) })),
           el("td", { class: "compare-notes" }, ...gaps.map((text) => el("span", { text }))),

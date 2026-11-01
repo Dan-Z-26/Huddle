@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildRfq, extractQuote } from "../../server/agents/vendor.js";
+import { answerVendorQuestion, buildRfq, extractQuote } from "../../server/agents/vendor.js";
 import { emptyProfile } from "../../server/core/profile.js";
 import { getTemplate } from "../../server/core/templates.js";
 import { generate as realGenerate } from "../../server/llm/index.js";
+import { failingModel, fakeModel } from "./fixtures.js";
 
 const template = getTemplate("corporate_launch");
 const profile = {
@@ -334,5 +335,32 @@ Vegetarian and Jain menus available`;
     );
     const total = normaliseQuote(extractedQuote, 210).totalMinor;
     assert.equal(total, 212400 * 210 + 5900000);
+  });
+});
+
+describe("answerVendorQuestion", () => {
+  const rfq = {
+    checklist: ["Check dietary handling"],
+    rfqQuestions: ["Do you offer vegan menus?"],
+  };
+  const input = {
+    text: "a few partners are vegan, what should I ask?",
+    categoryName: "Food & beverage",
+    profile: { name: "Launch", guests: { confirmed: 200 }, mustHaves: [] },
+    rfq,
+    fallback: "Vendor checklist",
+  };
+
+  it("answers the question it was asked", async () => {
+    const reply = "Ask whether they offer vegan menus, and how they handle dietary needs.";
+    const { generate, calls } = fakeModel({ reply, rationale: "Asked about vegan guests." });
+    assert.equal(await answerVendorQuestion(input, { generate }), reply);
+    assert.match(calls[0].messages[0].content, /a few partners are vegan/);
+  });
+
+  it("falls back to the list if the model cites a figure from nowhere, or is down", async () => {
+    const { generate } = fakeModel({ reply: "Expect to pay 4500 a plate.", rationale: "x" });
+    assert.equal(await answerVendorQuestion(input, { generate }), "Vendor checklist");
+    assert.equal(await answerVendorQuestion(input, { generate: failingModel }), "Vendor checklist");
   });
 });

@@ -81,7 +81,7 @@ describe("the brief", () => {
       ({ groupId, authorId }) =>
         groupId === `g-${ID}-pr-media` && authorId.startsWith("agent-vendor"),
     );
-    assert.match(replies.at(-1).text, /drafted a brief/);
+    assert.match(replies.at(-1).text, /drafted/);
   });
 
   it("refuses someone who doesn't own the category, by @huddle or directly", async (t) => {
@@ -123,7 +123,7 @@ describe("the brief", () => {
     const inCore = [...store.messages.values()].filter(
       ({ groupId }) => groupId === `g-${ID}-core-team`,
     );
-    assert.match(inCore.at(-1).text, /sent this brief for approval/);
+    assert.match(inCore.at(-1).text, /brief for approval/);
     await assertError(
       await post(call, `/briefs/${brief.id}/decision`, PR, { approve: true }),
       403,

@@ -4,6 +4,8 @@ import { canPost } from "../core/permissions.js";
 import { getTemplate, listEventTypes } from "../core/templates.js";
 import { advise } from "../agents/advisor.js";
 import { generateIdeas } from "../agents/ideas.js";
+import { speak } from "../agents/speech.js";
+import { mentionsMoney } from "../core/amount.js";
 import { planningSignals } from "../core/signals.js";
 import { nextStep } from "../agents/discovery.js";
 import {
@@ -17,7 +19,13 @@ import {
   validate,
 } from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
-import { createEvent, createWorkspace, deleteEvent, eventExpenses } from "../store/workspace.js";
+import {
+  createEvent,
+  createWorkspace,
+  deleteEvent,
+  eventExpenses,
+  welcomeFor,
+} from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
 import { eventQuotes } from "./vendorSupport.js";
 import { profileFor, publicUser } from "./views.js";
@@ -123,8 +131,9 @@ export function eventRoutes({ ai }) {
   router.post(
     "/events/:id/intake/confirm",
     requireUser,
+    ai,
     validate(schemas.eventParam),
-    (req, res) => {
+    async (req, res) => {
       const { store } = req.app.locals;
       const event = managerOnly(req);
       if (event.intakeStatus !== "in_progress")
@@ -132,7 +141,18 @@ export function eventRoutes({ ai }) {
       if (missingProfileFields(event).length > 0)
         throw HttpError(400, "BAD_REQUEST", "There are still questions to answer.");
       delete event.suggestedOptions;
-      createWorkspace(store, event, new Date().toISOString());
+      delete event.suggestedQuestions;
+      const plain = welcomeFor(event);
+      const { wording } = await speak({
+        agent: "Planner",
+        situation: `The team's workspace for this ${event.eventType} event has just been created. Greet everyone.`,
+        facts: [plain, `It is about: ${mentionsMoney(event.purpose) ? "" : (event.purpose ?? "")}`],
+        fallback: plain,
+      });
+      // Someone may have finished it while the model was writing.
+      if (event.intakeStatus !== "in_progress")
+        throw HttpError(400, "BAD_REQUEST", "Intake is already finished.");
+      createWorkspace(store, event, new Date().toISOString(), { welcome: wording });
       res.json({
         event: profileFor(event, store.roleOf(req.user)),
         groups: groupsFor(store, req.user),

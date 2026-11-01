@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { announce, clear, el, formatMoney } from "./dom.js";
+import { announce, clear, el } from "./dom.js";
 
 const $ = (id) => document.getElementById(id);
 const ANSWERS = [
@@ -16,7 +16,8 @@ const LABEL = {
   dietary: "dietary handling",
 };
 
-const priceText = (minor) => (minor ? formatMoney(minor) : "");
+// The exact figure: confirming a quote unchanged mustn't round its price.
+const priceText = (minor) => (minor ? String(minor / 100) : "");
 
 /**
  * Opens the "check this quote" dialog, prefilled with what was read. Nothing from a document is
@@ -53,7 +54,8 @@ export function openConfirm(quote, { warnings = [], mustHaves, onConfirmed }) {
   $("confirm-vendor").value = quote.vendorName ?? "";
   $("confirm-per-guest").value = priceText(quote.perGuestMinor);
   $("confirm-fixed").value = priceText(quote.fixedMinor);
-  $("confirm-tax").value = quote.taxBps ? String(quote.taxBps / 100) : "";
+  // A stated 0% stays stated; only silence leaves this empty.
+  $("confirm-tax").value = quote.taxBps || quote.taxStated ? String(quote.taxBps / 100) : "";
   $("confirm-includes").value = (quote.includes ?? []).join(", ");
   for (const [key, id] of ANSWERS) $(id).value = quote.answers?.[key] ?? "";
   $("confirm-exclusions").value = (quote.exclusions ?? []).join(", ");

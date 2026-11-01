@@ -44,7 +44,8 @@ export function groupRoutes() {
       eventId: event.id,
       slug,
       name: req.valid.body.name,
-      kind: "category",
+      // Not tied to a category, so anyone the manager puts in it can post.
+      kind: "custom",
       memberRoleIds: membersFor(getTemplate(event.eventType), req.valid.body.memberRoleIds),
       categoryIds: [],
     };

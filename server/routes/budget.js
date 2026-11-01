@@ -6,12 +6,13 @@ import { computeBudget, tierForCost } from "../core/budgetEngine.js";
 import { computeConsequences, resolutionEvents } from "../core/consequences.js";
 import { canSeeBudget } from "../core/permissions.js";
 import { rankOf } from "../core/priorities.js";
-import { getTemplate, groupsForCategory } from "../core/templates.js";
+import { getTemplate } from "../core/templates.js";
 import { flagAtRisk } from "../core/timelinePlanner.js";
 import { HttpError, managerOnly, ownEvent, requireBudget, requireUser, validate } from "../http.js";
 import { eventExpenses, postAgentMessage } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
 import { bookVendor, vendorsOf } from "./hiringSupport.js";
+import { categoryGroup } from "./vendorSupport.js";
 import { saveTasks, timelineView } from "./timeline.js";
 import { directiveView, groupPeople } from "./views.js";
 
@@ -58,7 +59,7 @@ async function postNotices({ store, event, template, before, after, deltas, nowI
   // A booked vendor hears about a new guest count even if their own price didn't move.
   if (guests.before !== guests.after)
     for (const { categoryIds } of vendorsOf(store, event.id)) {
-      const [slug] = groupsForCategory(template.categoryGroupMap, categoryIds[0]);
+      const { slug } = categoryGroup(store, event, template, categoryIds[0]);
       merged.set(slug, [...new Set([...(merged.get(slug) ?? []), categoryIds[0]])]);
     }
   const targets = [...merged].map(([slug, categoryIds]) => ({ slug, categoryIds }));

@@ -6,7 +6,7 @@
 .room-head {
   flex: none;
   padding: 1.35rem clamp(1rem, 3vw, 2rem) 1rem;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--gold-line);
 }
 .vendors .room-head,
 .timeline .room-head,
@@ -15,7 +15,7 @@
 }
 .room-title {
   font-family: var(--display);
-  font-size: 1.55rem;
+  font-size: 1.85rem;
   font-weight: 400;
   line-height: 1.25;
 }
@@ -84,6 +84,9 @@
   background: var(--ai-bg);
   color: var(--ai);
   font-size: 0.9rem;
+  box-shadow:
+    0 0 0 1px #fff,
+    0 0 0 2px var(--gold);
 }
 .byline {
   display: flex;
@@ -121,6 +124,7 @@
 }
 .message.ai .message-text {
   background: var(--ai-bg);
+  box-shadow: inset 2px 0 0 var(--ai);
 }
 /* Your own messages sit on the right, with no avatar. */
 .message.mine .message-actions {

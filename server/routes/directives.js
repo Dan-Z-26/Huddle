@@ -11,6 +11,28 @@ import { directiveView, groupPeople } from "./views.js";
 
 const GENERIC_TITLE = "Follow up on the manager's directive (details in the group)";
 
+/**
+ * Records that someone has acknowledged a directive, and tells everyone connected.
+ * @param {object} store The store.
+ * @param {object} directive The directive.
+ * @param {string} userId Who acknowledged it; the caller has checked they were addressed.
+ * @returns {object} The directive with its status.
+ */
+export function ackDirective(store, directive, userId) {
+  const group = store.groups.get(directive.groupId);
+  if (!directive.acks.some((ack) => ack.userId === userId))
+    directive.acks.push({ userId, at: new Date().toISOString() });
+  const view = directiveView(store, directive);
+  store.publish({
+    type: "directive.updated",
+    eventId: group.eventId,
+    groupId: group.id,
+    directive: view,
+  });
+  store.publish({ type: "attention.updated", eventId: group.eventId });
+  return view;
+}
+
 /** Directives: the manager pins a message, the people it names tap "Got it". */
 export function directiveRoutes({ ai }) {
   const router = Router();
@@ -83,6 +105,7 @@ export function directiveRoutes({ ai }) {
       });
       store.publish({ type: "timeline.updated", eventId: event.id });
       store.publish({ type: "attention.updated", eventId: event.id });
+      store.reactInDemo?.("directive", { event, directive });
       res.status(201).json({ directive: view, task });
     },
   );
@@ -97,16 +120,7 @@ export function directiveRoutes({ ai }) {
       throw HttpError(403, "FORBIDDEN", "You are not in this group.");
     if (!directive.addressedUserIds.includes(req.user.id))
       throw HttpError(403, "FORBIDDEN", "This directive wasn't addressed to you.");
-    if (!directive.acks.some(({ userId }) => userId === req.user.id))
-      directive.acks.push({ userId: req.user.id, at: new Date().toISOString() });
-    const view = directiveView(store, directive);
-    store.publish({
-      type: "directive.updated",
-      eventId: group.eventId,
-      groupId: group.id,
-      directive: view,
-    });
-    store.publish({ type: "attention.updated", eventId: group.eventId });
+    const view = ackDirective(store, directive, req.user.id);
     res.json({ directive: view, status: view.status });
   });
 

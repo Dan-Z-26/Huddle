@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { mentionsMoney, parseAmount } from "../../server/core/amount.js";
+import {
+  hideAmounts,
+  mentionsMoney,
+  parseAmount,
+  parseMoneyField,
+} from "../../server/core/amount.js";
 
 const minor = (text) => parseAmount(text)?.minor ?? null;
 
@@ -104,5 +109,41 @@ describe("mentionsMoney", () => {
       undefined,
     ])
       assert.equal(mentionsMoney(text), false, String(text));
+  });
+});
+
+describe("reading the right figure", () => {
+  it("prefers an amount over a year, but takes a lone year-like number", () => {
+    assert.equal(minor("for the 2026 launch dinner we paid 40000"), 4000000);
+    assert.equal(minor("we paid 2000 for tea"), 200000);
+  });
+
+  it("understands a currency written after the number", () => {
+    assert.deepEqual(parseAmount("paid 800 rupees for tea"), { minor: 80000, currency: "INR" });
+    assert.deepEqual(parseAmount("paid 800 dollars"), { minor: 80000, currency: "USD" });
+  });
+
+  it("reads a money field in the event's currency, and refuses a negative", () => {
+    assert.deepEqual(parseMoneyField("800", "INR"), { minor: 80000, currency: "INR" });
+    assert.equal(parseMoneyField("800 per plate", "INR").minor, 80000);
+    assert.equal(parseMoneyField("899.50", "INR").minor, 89950);
+    assert.equal(parseMoneyField("₹2 lakh", "USD").currency, "INR");
+    assert.equal(parseMoneyField("-5000", "INR"), null);
+    assert.equal(parseMoneyField("", "INR"), null);
+  });
+});
+
+describe("hideAmounts", () => {
+  it("takes amounts out and leaves the rest of the sentence", () => {
+    assert.equal(
+      hideAmounts("@huddle we paid ₹3 lakh for the wall"),
+      "@huddle we paid [amount] for the wall",
+    );
+    assert.equal(hideAmounts("paid 40000 for 200 chairs"), "paid [amount] for 200 chairs");
+    assert.equal(hideAmounts("what is due for 200 guests?"), "what is due for 200 guests?");
+  });
+
+  it("hides the whole message when an amount would still show", () => {
+    assert.match(hideAmounts("three lakh rupees went out"), /hidden from the room/);
   });
 });

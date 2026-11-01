@@ -3,8 +3,9 @@ import { draftBrief, defaultAnswers } from "../agents/hiring.js";
 import { mentionsMoney } from "../core/amount.js";
 import { bookedTasks, siteVisitTask } from "../core/hiring.js";
 import { HttpError } from "../http.js";
-import { postAgentMessage } from "../store/workspace.js";
-import { categoryGroup } from "./vendorSupport.js";
+import { getTemplate } from "../core/templates.js";
+import { postSpoken } from "./agentPost.js";
+import { categoryGroup, vendorRoomFor } from "./vendorSupport.js";
 
 export const briefId = (eventId, categoryId) => `b-${eventId}-${categoryId}`;
 export const briefOf = (store, eventId, categoryId) =>
@@ -95,16 +96,43 @@ function removeVendor(store, vendor) {
 }
 
 /**
+ * Sends a brief to the manager for approval, and tells Core team.
+ * @param {{store: object, event: object, brief: object, user: object}} input Who sends which brief.
+ */
+export function sendBrief({ store, event, brief, user }) {
+  brief.status = "pending";
+  const core = store.groups.get(`g-${event.id}-core-team`);
+  const name =
+    getTemplate(event.eventType).categories.find(({ id }) => id === brief.categoryId)?.name ??
+    brief.categoryId;
+  const facts = [
+    `${user.name} sent the ${name} brief for approval.`,
+    "The event manager can approve it under Vendors and quotes.",
+  ];
+  if (core)
+    postSpoken(store, {
+      groupId: core.id,
+      eventId: event.id,
+      agent: "vendor",
+      situation: "A lead has sent a vendor brief for approval. It follows your message in full.",
+      facts,
+      fallback: facts.join(" "),
+      suffix: `\n\n${brief.text}`,
+      nowIso: new Date().toISOString(),
+    });
+  store.publish({ type: "attention.updated", eventId: event.id });
+}
+
+/**
  * What accepting a quote starts: the vendor becomes a person in that category's group only, with
  * their deliverables and the team's follow-up tasks. A vendor booked earlier for the category is
  * replaced. Runs only after the budget change has been applied.
  * @param {{store: object, event: object, template: object, quote: object, nowIso: string}} input
  *   The event and the accepted quote.
- * @returns {object | null} The vendor, or null when the category's group has been removed.
+ * @returns {object} The vendor.
  */
 export function bookVendor({ store, event, template, quote, nowIso }) {
-  const group = categoryGroup(store, event, template, quote.categoryId);
-  if (!group) return null;
+  const group = vendorRoomFor(store, event, template, quote.categoryId);
   for (const earlier of vendorsOf(store, event.id, quote.categoryId)) removeVendor(store, earlier);
   const vendor = {
     id: `vendor-${quote.id}@${event.id}`,
@@ -140,12 +168,24 @@ export function bookVendor({ store, event, template, quote, nowIso }) {
     safeName(vendor.name),
   ))
     store.tasks.set(task.id, task);
-  postAgentMessage(store, {
+  const joined = [
+    `${safeName(vendor.name)} is booked and has joined this group.`,
+    "They can see messages from now on, with any amounts hidden.",
+  ];
+  postSpoken(store, {
     groupId: group.id,
-    authorId: `agent-vendor@${event.id}`,
-    text: `${safeName(vendor.name)} is booked and has joined this group. They can see messages from now on, with any amounts hidden.`,
+    eventId: event.id,
+    agent: "vendor",
+    situation: "A vendor has just been booked and joined this room, and can read what you write.",
+    facts: joined,
+    fallback: joined.join(" "),
     nowIso,
   });
   store.publish({ type: "groups.updated", eventId: event.id });
+  store.reactInDemo?.("booked", {
+    event,
+    categoryId: quote.categoryId,
+    vendorName: safeName(vendor.name),
+  });
   return vendor;
 }

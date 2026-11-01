@@ -15,7 +15,7 @@ import { generateIdeas } from "./ideas.js";
 import { demoIntent } from "./plannerDemo.js";
 import { directiveTaskOutput, plannerOutput } from "./schemas.js";
 import { digest } from "./timeline.js";
-import { buildRfq } from "./vendor.js";
+import { answerVendorQuestion, buildRfq } from "./vendor.js";
 
 const MAX_TEXT = 1000;
 const DEFAULT_DUE_DAYS = 2;
@@ -29,6 +29,7 @@ const DELEGATE = {
   ideas: "ideas",
   advice: "planner",
   vendor_brief: "vendor",
+  log_expense: "budget",
   question: null,
 };
 
@@ -42,7 +43,10 @@ const PLANNER_SYSTEM = agentPrompt({
     "Intents: budget_change (guests, budget, costs, swapping items), vendor_help (vendor " +
       "checklist, RFQ questions, quotes), timeline (tasks, deadlines, what is due or at risk), " +
       "ideas (suggestions, themes), advice (what to do next, what needs attention), vendor_brief " +
-      "(hiring a vendor, drafting a brief), question (anything else).",
+      "(hiring a vendor, drafting a brief), log_expense (money that has actually been paid and " +
+      "should be recorded, not a what-if), question (anything else).",
+    "For log_expense set expenseDescription to a few words saying what it paid for, with no " +
+      "amount, and categoryId to one of the listed category ids when it is clear, otherwise null.",
     "For vendor_help and vendor_brief set categoryId to one of the listed category ids when the message names " +
       "one, otherwise null.",
     "Set suggestDirective to true only when the message is an instruction with a deadline that " +
@@ -95,9 +99,10 @@ const bullet = (lines) => lines.map((line) => `- ${line}`).join("\n");
 
 async function vendorReply(input, plan, deps) {
   const { profile, template, text } = input;
+  // What they named, or else the room they asked in, which often says it all.
   const categoryId = template.categories.some(({ id }) => id === plan.categoryId)
     ? plan.categoryId
-    : categoriesMentioned(text, template)[0];
+    : (categoriesMentioned(text, template)[0] ?? input.roomCategoryIds?.[0]);
   if (profile.guests.confirmed === null)
     return {
       reply:
@@ -109,8 +114,9 @@ async function vendorReply(input, plan, deps) {
     };
   const rfq = await buildRfq({ profile, categoryId, template }, deps);
   const name = template.categories.find(({ id }) => id === categoryId).name;
+  const fallback = `Vendor checklist for ${name}:\n${bullet(rfq.checklist)}\nQuestions to ask every vendor:\n${bullet(rfq.rfqQuestions)}`;
   return {
-    reply: `Vendor checklist for ${name}:\n${bullet(rfq.checklist)}\nQuestions to ask every vendor:\n${bullet(rfq.rfqQuestions)}`,
+    reply: await answerVendorQuestion({ text, categoryName: name, profile, rfq, fallback }, deps),
     result: { categoryId, ...rfq },
   };
 }
@@ -161,7 +167,8 @@ async function adviceReply(input, deps) {
  * reply to post in the same group. The caller posts it and stores any budget change the user accepts.
  * @param {{profile: object, state: object, template: object, actor: object, text: string,
  *   files?: object[], tasks?: object[], quotes?: object[], directives?: object[], members?: object[],
- *   nowIso?: string}} input The event, who asks, and what they said.
+ *   roomCategoryIds?: string[], nowIso?: string}} input The event, who asks, what they said, and
+ *   the categories of the room they said it in.
  * @param {{generate?: Function}} [deps] The model call, replaceable in tests.
  * @returns {Promise<{reply: string, intent: string, delegateTo: string | null, suggestDirective: boolean,
  *   rationale: string, result?: object}>} The reply, and the delegate's raw result when there is one.
@@ -197,6 +204,14 @@ export async function handleMention(input, deps = {}) {
     advice: () => adviceReply(call, { generate }),
     // Saving a brief belongs to the route, which knows who is asking and in which group.
     vendor_brief: async () => ({ reply: "", result: { categoryId: plan.categoryId ?? null } }),
+    // So does recording an expense: code reads the amount from the person's own words.
+    log_expense: async () => ({
+      reply: "",
+      result: {
+        categoryId: plan.categoryId ?? null,
+        description: groundedOr(plan.expenseDescription, text) || null,
+      },
+    }),
     question: async () => ({
       reply: groundedOr(plan.reply, `${context} ${text}`, HELP),
     }),

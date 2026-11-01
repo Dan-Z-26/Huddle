@@ -6,9 +6,10 @@ import { managerChecklist, PIPELINE, pipelineStage } from "../core/hiring.js";
 import { getTemplate } from "../core/templates.js";
 import { HttpError, ownEvent, requireUser, requireBudget, validate } from "../http.js";
 import { DEMO_EVENT_ID } from "../store/seed.js";
-import { postAgentMessage } from "../store/workspace.js";
 import * as schemas from "../validation/schemas.js";
+import { postSpoken } from "./agentPost.js";
 import {
+  sendBrief,
   briefOf,
   deliverablesOf,
   saveDraftBrief,
@@ -118,49 +119,53 @@ export function hiringRoutes({ ai }) {
     },
   );
 
-  router.post("/briefs/:id/send", requireUser, validate(schemas.briefParam), (req, res) => {
+  router.post("/briefs/:id/send", requireUser, ai, validate(schemas.briefParam), (req, res) => {
     const { store } = req.app.locals;
     const { brief, event } = findBrief(req);
     if (brief.status === "approved" || brief.status === "pending")
       throw HttpError(400, "BAD_REQUEST", "This brief has already been sent.");
-    brief.status = "pending";
-    const core = store.groups.get(`g-${event.id}-core-team`);
-    if (core)
-      postAgentMessage(store, {
-        groupId: core.id,
-        authorId: `agent-vendor@${event.id}`,
-        text: `${req.user.name} sent this brief for approval. The event manager can approve it under Vendors and quotes.\n\n${brief.text}`,
-        nowIso: new Date().toISOString(),
-      });
+    sendBrief({ store, event, brief, user: req.user });
     res.json({ brief });
   });
 
-  router.post("/briefs/:id/decision", requireUser, validate(schemas.briefDecision), (req, res) => {
-    const { store } = req.app.locals;
-    const { brief, event } = findBrief(req);
-    if (req.user.kind !== "manager")
-      throw HttpError(403, "FORBIDDEN", "Only the event manager can approve a brief.");
-    if (brief.status !== "pending")
-      throw HttpError(400, "BAD_REQUEST", "This brief isn't waiting for approval.");
-    const { approve, note } = req.valid.body;
-    const template = getTemplate(event.eventType);
-    const nowIso = new Date().toISOString();
-    const name = template.categories.find(({ id }) => id === brief.categoryId).name;
-    brief.status = approve ? "approved" : "changes";
-    brief.note = approve ? null : (note ?? null);
-    if (approve) startHiring({ store, event, template, categoryId: brief.categoryId, nowIso });
-    const group = categoryGroup(store, event, template, brief.categoryId);
-    if (group)
-      postAgentMessage(store, {
-        groupId: group.id,
-        authorId: `agent-vendor@${event.id}`,
-        text: approve
-          ? `The ${name} brief is approved. You can send it out and add quotes.`
-          : `The ${name} brief needs changes${note && !mentionsMoney(note) ? `: ${note}` : "."}`,
-        nowIso,
-      });
-    res.json({ brief });
-  });
+  router.post(
+    "/briefs/:id/decision",
+    requireUser,
+    ai,
+    validate(schemas.briefDecision),
+    (req, res) => {
+      const { store } = req.app.locals;
+      const { brief, event } = findBrief(req);
+      if (req.user.kind !== "manager")
+        throw HttpError(403, "FORBIDDEN", "Only the event manager can approve a brief.");
+      if (brief.status !== "pending")
+        throw HttpError(400, "BAD_REQUEST", "This brief isn't waiting for approval.");
+      const { approve, note } = req.valid.body;
+      const template = getTemplate(event.eventType);
+      const nowIso = new Date().toISOString();
+      const name = template.categories.find(({ id }) => id === brief.categoryId).name;
+      brief.status = approve ? "approved" : "changes";
+      brief.note = approve ? null : (note ?? null);
+      if (approve) startHiring({ store, event, template, categoryId: brief.categoryId, nowIso });
+      const group = categoryGroup(store, event, template, brief.categoryId);
+      const outcome = approve
+        ? `The ${name} brief is approved. You can send it out and add quotes.`
+        : `The ${name} brief needs changes${note && !mentionsMoney(note) ? `: ${note}` : "."}`;
+      if (group)
+        postSpoken(store, {
+          groupId: group.id,
+          eventId: event.id,
+          agent: "vendor",
+          situation: `${req.user.name} has just decided on a vendor brief.`,
+          facts: [outcome],
+          fallback: outcome,
+          nowIso,
+        });
+      store.publish({ type: "attention.updated", eventId: event.id });
+      store.reactInDemo?.("brief", { event, categoryId: brief.categoryId, approved: approve });
+      res.json({ brief });
+    },
+  );
 
   router.get("/briefs/:id/export", requireUser, validate(schemas.briefParam), (req, res) => {
     const { brief } = findBrief(req);
@@ -191,8 +196,9 @@ export function hiringRoutes({ ai }) {
   router.post(
     "/quotes/:id/request-revision",
     requireUser,
+    ai,
     validate(schemas.quoteParam),
-    (req, res) => {
+    async (req, res) => {
       const { store } = req.app.locals;
       const { quote, event } = findQuote(req);
       if (quote.status !== "accepted")
@@ -204,10 +210,14 @@ export function hiringRoutes({ ai }) {
       const group = categoryGroup(store, event, getTemplate(event.eventType), quote.categoryId);
       if (!group) throw HttpError(400, "BAD_REQUEST", "This category has no group.");
       const { guestCount } = requireBudget(store, event);
-      const message = postAgentMessage(store, {
+      const ask = `${req.user.name} asks ${quote.vendorName} for a revised quote for ${guestCount} guests, please.`;
+      const message = await postSpoken(store, {
         groupId: group.id,
-        authorId: `agent-vendor@${event.id}`,
-        text: `${req.user.name} asks ${quote.vendorName} for a revised quote for ${guestCount} guests, please.`,
+        eventId: event.id,
+        agent: "vendor",
+        situation: "You are asking the booked vendor in this room for a revised quote.",
+        facts: [ask],
+        fallback: ask,
         nowIso: new Date().toISOString(),
       });
       res.status(201).json({ message });

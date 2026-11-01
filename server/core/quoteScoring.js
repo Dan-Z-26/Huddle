@@ -29,7 +29,9 @@ export function normaliseQuote(quote, guestCount) {
   const missing = ANSWER_KEYS.filter((key) => quote.answers?.[key] == null);
   if (!quote.perGuestMinor && !quote.fixedMinor) missing.push("price");
   if (quote.taxStated === false) missing.push("tax");
-  return { totalMinor: perGuestMinor * guestCount + fixedMinor, missing };
+  // A minimum is what gets billed even if fewer come.
+  const billedGuests = Math.max(guestCount, quote.minGuests ?? 0);
+  return { totalMinor: perGuestMinor * billedGuests + fixedMinor, missing };
 }
 
 function fitWeight(priorities, categoryId) {
