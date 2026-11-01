@@ -1,3 +1,4 @@
+/** The system prompt every agent shares. */
 import { UNTRUSTED_RULE } from "./untrusted.js";
 
 /**

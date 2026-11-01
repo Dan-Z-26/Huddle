@@ -1,6 +1,11 @@
+/**
+ * The one way the app calls a model: routing, tool calls, schema checks, retries and fallbacks. With
+ * no key set, each agent's plain rules answer instead.
+ */
 import { z } from "zod";
 import { resolveAgent } from "./config.js";
 import { runDemo } from "./demo.js";
+import { takeCallSlot } from "./pace.js";
 import { createToolRunner } from "./toolRunner.js";
 
 export { wrapUntrusted, UNTRUSTED_RULE } from "./untrusted.js";
@@ -22,31 +27,6 @@ const LOADERS = {
 // document takes the model longer, so a request with files gets three times as long.
 const DEFAULT_TIMEOUT_MS = 20000;
 const FILE_TIMEOUT_FACTOR = 3;
-// Free-tier keys allow 15 calls a minute per model. Going over fails the call, so a burst waits.
-const DEFAULT_PER_MINUTE = 14;
-const MAX_PACE_WAIT_MS = 45000;
-const MINUTE_MS = 60000;
-const callSlots = new Map();
-
-/**
- * Takes the next free slot for a model, waiting for it if this minute's calls are used up. A wait
- * too long to be worth it fails like any other model call, so the agent's plain rules take over.
- * shortcut: counts this process only, so another server on the same key can still hit the limit.
- * @param {string} model The model.
- * @param {Record<string, string | undefined>} env Environment; LLM_MAX_PER_MINUTE sets the rate.
- * @returns {Promise<void>} Resolves when the call may go.
- */
-async function paceCall(model, env) {
-  const perMinute = Number(env.LLM_MAX_PER_MINUTE) || DEFAULT_PER_MINUTE;
-  const now = Date.now();
-  const slots = (callSlots.get(model) ?? []).filter((at) => at > now - MINUTE_MS);
-  const at = slots.length < perMinute ? now : slots[slots.length - perMinute] + MINUTE_MS;
-  if (at - now > MAX_PACE_WAIT_MS)
-    throw LlmError("too many model calls this minute", { status: 429 });
-  callSlots.set(model, [...slots, at]);
-  if (at > now) await new Promise((done) => setTimeout(done, at - now));
-}
-
 /**
  * Builds the error thrown when a model call fails or keeps returning invalid output.
  * @param {string} message Safe description; never include prompt or response text.
@@ -125,18 +105,24 @@ async function toolStage({ call, history, runner }) {
   }
 }
 
-async function runLive(request, target, providers) {
-  const { system, messages, schema, tools = [], files = [], env = process.env } = request;
-  const provider = providers[target.provider] ?? (await LOADERS[target.provider]());
-  const timeoutMs =
-    (Number(env.LLM_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS) * (files.length ? FILE_TIMEOUT_FACTOR : 1);
-  const declared = tools.map(({ name, description, parameters }) => ({
+const timeoutFor = (env, files) =>
+  (Number(env.LLM_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS) * (files.length ? FILE_TIMEOUT_FACTOR : 1);
+
+const declareTools = (tools) =>
+  tools.map(({ name, description, parameters }) => ({
     name,
     description,
     parameters: toJsonSchema(parameters),
   }));
+
+async function runLive(request, target, providers) {
+  const { system, messages, schema, tools = [], files = [], env = process.env } = request;
+  const provider = providers[target.provider] ?? (await LOADERS[target.provider]());
+  const timeoutMs = timeoutFor(env, files);
+  const declared = declareTools(tools);
   const call = async (extra) => {
-    await paceCall(target.model, env);
+    if (!(await takeCallSlot(target.model, env)))
+      throw LlmError("too many model calls this minute", { status: 429 });
     return provider.step({
       model: target.model,
       apiKey: target.apiKey,

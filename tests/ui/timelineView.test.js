@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { flowOf, groupByMonth } from "../../public/js/timelineView.js";
+import { flowOf, groupByMonth } from "../../public/js/timeline/timelineView.js";
 
 const task = (id, dueDate, extra = {}) => ({
   id,

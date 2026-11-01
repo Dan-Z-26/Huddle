@@ -1,5 +1,6 @@
+/** Reads uploaded files into memory, with limits on how many and how large. */
 import multer from "multer";
-import { HttpError } from "../http.js";
+import { tooMany } from "../http.js";
 import { MAX_FILE_BYTES, MAX_FILES } from "../validation/uploads.js";
 
 // Uploads are held in memory until they end, and a slow one can be made to last for minutes.
@@ -20,7 +21,7 @@ const parser = ({ files, fields }) =>
 const whenMultipart = (parse) => (req, res, next) => {
   if (!req.is("multipart/form-data")) return next();
   if (activeUploads >= MAX_ACTIVE_UPLOADS)
-    return next(HttpError(429, "RATE_LIMITED", "Too many uploads at once. Please try again."));
+    return next(tooMany("Too many uploads at once. Please try again."));
   activeUploads += 1;
   res.once("close", () => {
     activeUploads -= 1;

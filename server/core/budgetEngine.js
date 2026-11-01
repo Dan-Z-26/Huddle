@@ -1,3 +1,4 @@
+/** Works out what a budget costs from its cost drivers. Money is integer minor units throughout. */
 const sumBy = (items, key) => items.reduce((sum, item) => sum + item[key], 0);
 
 const TOP_RANK_PCT = 160;
@@ -7,6 +8,16 @@ const FALLBACK_TYPICAL_BPS = 1000;
 
 /** The line item that holds what a cover moved from the buffer into a category's plan. */
 export const COVER_LABEL = "Covered from the buffer";
+
+/**
+ * What earlier covers added to a category's plan.
+ * @param {{drivers?: Array<{label: string, unitMinor: number}>}} [category] The category.
+ * @returns {number} The amount, in minor units.
+ */
+export const coveredIn = (category) =>
+  (category?.drivers ?? [])
+    .filter(({ label }) => label === COVER_LABEL)
+    .reduce((sum, { unitMinor }) => sum + unitMinor, 0);
 
 /** The share of a new budget set aside for the unexpected. */
 export const DEFAULT_BUFFER_BPS = 1000;

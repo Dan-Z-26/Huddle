@@ -5,8 +5,3 @@ data/uploads/
 .DS_Store
 *.log
 *.fileloc
-
-# Local AI-assistant files, kept out of the repo
-.claude/
-CLAUDE.md
-PromptWars_C5_ClaudeCode_Prompt.md

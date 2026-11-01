@@ -1,3 +1,4 @@
+/** The EventProfile: what setup still has to ask, and the opening budget it leads to. */
 import { allocate, categoryCost, DEFAULT_BUFFER_BPS, stepFor } from "./budgetEngine.js";
 import { divFloor, shareOfBps } from "./money.js";
 import { normalisePriorities } from "./priorities.js";
@@ -7,19 +8,22 @@ const hasItems = (value) => Array.isArray(value) && value.length > 0;
 
 // "None" is a valid answer only for the fields marked skippable.
 const FIELD_CHECKS = [
-  ["name", (p) => hasText(p.name)],
-  ["purpose", (p) => hasText(p.purpose)],
-  ["date", (p) => hasText(p.date)],
-  ["city", (p) => hasText(p.city)],
-  ["venueType", (p) => hasText(p.venueType)],
-  ["guests", (p) => Number.isInteger(p.guests?.confirmed) && p.guests.confirmed >= 1],
-  ["budget", (p) => p.budget?.totalMinor > 0],
-  ["priorities", (p) => hasItems(p.priorities)],
-  ["attendeeExperience", (p) => hasText(p.attendeeExperience)],
-  ["mustHaves", (p) => hasItems(p.mustHaves), true],
-  ["absoluteMustHave", (p) => hasText(p.absoluteMustHaveId), true],
-  ["constraints", (p) => Object.values(p.constraints ?? {}).some(hasItems), true],
-  ["vendorNeeds", (p) => Object.keys(p.vendorNeeds ?? {}).length > 0, true],
+  ["name", (profile) => hasText(profile.name)],
+  ["purpose", (profile) => hasText(profile.purpose)],
+  ["date", (profile) => hasText(profile.date)],
+  ["city", (profile) => hasText(profile.city)],
+  ["venueType", (profile) => hasText(profile.venueType)],
+  [
+    "guests",
+    (profile) => Number.isInteger(profile.guests?.confirmed) && profile.guests.confirmed >= 1,
+  ],
+  ["budget", (profile) => profile.budget?.totalMinor > 0],
+  ["priorities", (profile) => hasItems(profile.priorities)],
+  ["attendeeExperience", (profile) => hasText(profile.attendeeExperience)],
+  ["mustHaves", (profile) => hasItems(profile.mustHaves), true],
+  ["absoluteMustHave", (profile) => hasText(profile.absoluteMustHaveId), true],
+  ["constraints", (profile) => Object.values(profile.constraints ?? {}).some(hasItems), true],
+  ["vendorNeeds", (profile) => Object.keys(profile.vendorNeeds ?? {}).length > 0, true],
 ];
 
 /**

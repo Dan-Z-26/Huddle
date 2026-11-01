@@ -1,4 +1,6 @@
+/** The Vendor agent's checklists and quote questions, and its answers about vendors. */
 import { categoryOf } from "../core/templates.js";
+import { longDate } from "../core/time.js";
 import { generate as realGenerate, generateOrDemo, wrapUntrusted } from "../llm/index.js";
 import { groundedOr, isGrounded } from "./grounded.js";
 import { rfqOutput, vendorAnswerOutput } from "./schemas.js";
@@ -8,18 +10,10 @@ import { ANSWER_SYSTEM, RFQ_SYSTEM } from "./vendorPrompts.js";
 const MAX_ITEMS = 12;
 const rfqCache = new Map();
 
-const dateWords = (iso) =>
-  new Date(iso).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-
 function standardQuestions(profile) {
   const { guests, date, constraints } = profile;
   const questions = [
-    `Please quote for ${guests.confirmed} guests on ${dateWords(date)}, showing the price per guest and any fixed charges separately.`,
+    `Please quote for ${guests.confirmed} guests on ${longDate(date)}, showing the price per guest and any fixed charges separately.`,
     "What exactly is included in the price, and what costs extra?",
     "Are taxes such as GST included? Please show them separately.",
     "How many staff will you provide, and for how many hours?",

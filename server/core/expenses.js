@@ -1,14 +1,17 @@
-import { computeBudget, contingencyOf, COVER_LABEL } from "./budgetEngine.js";
+/** What was spent against the plan, and moving money between a category and the buffer. */
+import { computeBudget, contingencyOf, COVER_LABEL, coveredIn } from "./budgetEngine.js";
 
 const NEAR_PLAN_PCT = 80;
 const LOW_BUFFER_PCT = 25;
 
-// What earlier covers added to a category's plan. They are its own line items, so they survive a
-// guest change and can be given back.
+// Earlier covers are a plan's own line items, so they survive a guest change and can be given back.
 const coverItems = (category) =>
   (category?.drivers ?? []).filter(({ label }) => label === COVER_LABEL);
-const coveredIn = (category) =>
-  coverItems(category).reduce((sum, { unitMinor }) => sum + unitMinor, 0);
+const addCoverItem = (categoryId, unitMinor) => ({
+  type: "line_item_add",
+  category: categoryId,
+  item: { label: COVER_LABEL, kind: "fixed", unitMinor, source: "user" },
+});
 
 const spentOn = (expenses, categoryId) =>
   expenses
@@ -66,16 +69,7 @@ export function coverEvents(state, expenses, categoryId) {
     coveredMinor,
     events: [
       { type: "contingency_draw", amountMinor: coveredMinor },
-      {
-        type: "line_item_add",
-        category: categoryId,
-        item: {
-          label: COVER_LABEL,
-          kind: "fixed",
-          unitMinor: coveredMinor,
-          source: "user",
-        },
-      },
+      addCoverItem(categoryId, coveredMinor),
     ],
   };
 }
@@ -99,27 +93,15 @@ export function uncoverEvents(state, expenses, categoryId) {
   );
   const returnedMinor = coveredMinor - neededMinor;
   if (returnedMinor === 0) return { events: [], returnedMinor };
+  const events = coverItems(category).map(({ id }) => ({
+    type: "line_item_remove",
+    category: categoryId,
+    itemId: id,
+  }));
+  if (neededMinor > 0) events.push(addCoverItem(categoryId, neededMinor));
   const { reservedMinor } = contingencyOf(state);
-  return {
-    returnedMinor,
-    events: [
-      ...coverItems(category).map(({ id }) => ({
-        type: "line_item_remove",
-        category: categoryId,
-        itemId: id,
-      })),
-      ...(neededMinor > 0
-        ? [
-            {
-              type: "line_item_add",
-              category: categoryId,
-              item: { label: COVER_LABEL, kind: "fixed", unitMinor: neededMinor, source: "user" },
-            },
-          ]
-        : []),
-      { type: "contingency_set", toMinor: reservedMinor + returnedMinor },
-    ],
-  };
+  events.push({ type: "contingency_set", toMinor: reservedMinor + returnedMinor });
+  return { returnedMinor, events };
 }
 
 function planStatus({ plannedMinor, spentMinor }) {

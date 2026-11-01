@@ -1,3 +1,4 @@
+/** The Budget agent: reads a request in plain language, and code works out what it would do. */
 import { computeBudget } from "../core/budgetEngine.js";
 import { computeConsequences } from "../core/consequences.js";
 import { canSeeBudget } from "../core/permissions.js";
@@ -7,16 +8,17 @@ import {
   generateOrDemo,
   wrapUntrusted,
 } from "../llm/index.js";
-import { budgetFacts, explainChange } from "./budgetInsight.js";
 import { CLARIFY, demoBudget } from "./budgetDemo.js";
+import { budgetFacts, explainChange } from "./budgetInsight.js";
+import { budgetOutput } from "./budgetSchemas.js";
 import { toChangeEvents } from "./changeProposals.js";
 import { consequenceText } from "./consequenceText.js";
 import { groundedOr } from "./grounded.js";
-import { budgetOutput } from "./schemas.js";
 import { buildTools } from "./tools.js";
 
 const BUDGET_TOOLS = new Set(["compute_consequences", "apply_change_events"]);
 const MAX_TEXT = 1000;
+const MAX_FACTS = 8000;
 
 const SYSTEM = agentPrompt({
   role:
@@ -81,7 +83,7 @@ async function askModel(input, generate, nowIso) {
     wrapUntrusted(
       "budget facts",
       [...facts, `Must-haves: ${profile.mustHaves.map((item) => item.text).join("; ")}`].join("\n"),
-      8000,
+      MAX_FACTS,
     ),
     wrapUntrusted("user request", text),
   ].join("\n");
@@ -116,6 +118,19 @@ const refusal = {
   rationale: "Budget changes are limited to the event manager.",
 };
 
+const NOTHING_TO_APPLY = { consequences: null, consequenceText: "", explanation: "" };
+
+// No change came out of the request, so it was either a plain question or too unclear to act on.
+function answerOrAsk({ profile, state, expenses, text }, data, questions) {
+  const facts = budgetFacts(state, profile, expenses).join(" ");
+  const answer = questions.length === 0 ? groundedOr(data.answer, `${facts} ${text}`) : "";
+  if (answer) return { answer, clarifyingQuestion: null };
+  const asked =
+    groundedOr(data.clarifyingQuestion, `${text} ${CLARIFY}`) ||
+    (questions[0] && `${questions[0].reason}. Could you say it another way?`);
+  return { clarifyingQuestion: asked ?? "What would you like to change?" };
+}
+
 /**
  * Turns a plain-language budget change into validated change events and states what they do. The
  * model reads the request; code parses every amount, applies the events and writes the
@@ -147,29 +162,8 @@ export async function interpretChange(input, { generate = realGenerate } = {}) {
     insight: null,
     answer: "",
   };
-  if (events.length === 0) {
-    const facts = budgetFacts(state, profile, input.expenses).join(" ");
-    const answer = questions.length === 0 ? groundedOr(data.answer, `${facts} ${text}`) : "";
-    if (answer)
-      return {
-        ...result,
-        answer,
-        clarifyingQuestion: null,
-        consequences: null,
-        consequenceText: "",
-        explanation: "",
-      };
-    const asked =
-      groundedOr(data.clarifyingQuestion, `${text} ${CLARIFY}`) ||
-      (questions[0] && `${questions[0].reason}. Could you say it another way?`);
-    return {
-      ...result,
-      clarifyingQuestion: asked ?? "What would you like to change?",
-      consequences: null,
-      consequenceText: "",
-      explanation: "",
-    };
-  }
+  if (events.length === 0)
+    return { ...result, ...answerOrAsk({ ...input, text }, data, questions), ...NOTHING_TO_APPLY };
   const described = await describeChange(
     {
       profile,

@@ -1,9 +1,20 @@
+/** Cost drivers, the line items a category's cost is built from: building and checking them. */
 import { MAX_GUESTS, MAX_MINOR } from "./money.js";
 
 const DRIVER_KINDS = ["perGuest", "fixed", "perUnit", "stepped"];
 const PRICE_SOURCES = ["quote", "user", "estimate"];
 
+/**
+ * Whether a value is a usable amount of money.
+ * @param {*} value The value.
+ * @returns {boolean} True for a non-negative integer within the cap.
+ */
 export const isAmount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= MAX_MINOR;
+/**
+ * Whether a value is a usable count of guests or units.
+ * @param {*} value The value.
+ * @returns {boolean} True for a non-negative integer within the cap.
+ */
 export const isCount = (value) => Number.isSafeInteger(value) && value >= 0 && value <= MAX_GUESTS;
 
 /**
@@ -38,6 +49,9 @@ export function newDriverId(category, label) {
   return `${slug}-${counter}`;
 }
 
+const isEstimateRange = ({ lowMinor, highMinor } = {}) =>
+  isAmount(lowMinor) && isAmount(highMinor) && lowMinor <= highMinor;
+
 function areValidSteps(steps) {
   return (
     Array.isArray(steps) &&
@@ -60,14 +74,12 @@ function areValidSteps(steps) {
 export function pricingProblem(pricing) {
   if (!DRIVER_KINDS.includes(pricing?.kind)) return "unknown driver kind";
   if (!PRICE_SOURCES.includes(pricing.source)) return "unknown price source";
-  if (pricing.kind === "perUnit" && !isCount(pricing.units)) {
+  if (pricing.kind === "perUnit" && !isCount(pricing.units))
     return "units must be a non-negative integer";
-  }
-  if (pricing.source === "estimate") {
-    const { lowMinor, highMinor } = pricing.estimate ?? {};
-    const isRange = isAmount(lowMinor) && isAmount(highMinor) && lowMinor <= highMinor;
-    return isRange ? null : "estimate needs integer lowMinor <= highMinor";
-  }
+  if (pricing.source === "estimate")
+    return isEstimateRange(pricing.estimate)
+      ? null
+      : "estimate needs integer lowMinor <= highMinor";
   if (pricing.kind === "stepped") {
     return areValidSteps(pricing.steps) ? null : "steps must ascend with integer amounts";
   }

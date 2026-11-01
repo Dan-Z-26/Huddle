@@ -1,3 +1,4 @@
+/** The tools an agent's model may call. They are the pure functions in core/, bound to one request. */
 import { z } from "zod";
 import { allocate, computeBudget } from "../core/budgetEngine.js";
 import { applyChangeEvents } from "../core/changeEvents.js";
@@ -9,10 +10,11 @@ import { missingProfileFields } from "../core/profile.js";
 import { normaliseQuote, scoreQuotes } from "../core/quoteScoring.js";
 import { groupsForCategory } from "../core/templates.js";
 import { flagAtRisk, planTimeline } from "../core/timelinePlanner.js";
+import { changeProposal } from "./budgetSchemas.js";
 import { toChangeEvents } from "./changeProposals.js";
-import { changeProposal } from "./schemas.js";
 
-const proposals = z.array(changeProposal).min(1).max(8);
+const MAX_PROPOSALS = 8;
+const proposals = z.array(changeProposal).min(1).max(MAX_PROPOSALS);
 const NONE = z.object({});
 
 function proposalSummary(state, input) {
@@ -94,8 +96,7 @@ function quoteTools({ state, profile, quotes }) {
   ];
 }
 
-function planningTools({ profile, template, nowIso, tasks, directives, members, groupIdBySlug }) {
-  const directiveById = (id) => directives.find((directive) => directive.id === id);
+function intakeTools({ profile }) {
   return [
     {
       name: "parse_guest_count",
@@ -109,6 +110,11 @@ function planningTools({ profile, template, nowIso, tasks, directives, members, 
       parameters: NONE,
       handler: () => ({ missing: missingProfileFields(profile) }),
     },
+  ];
+}
+
+function timelineTools({ template, nowIso, tasks, groupIdBySlug }) {
+  return [
     {
       name: "plan_timeline",
       description: "Plan the milestone tasks backward from an event date.",
@@ -128,6 +134,12 @@ function planningTools({ profile, template, nowIso, tasks, directives, members, 
       parameters: z.object({ categoryId: z.string().max(60) }),
       handler: ({ categoryId }) => groupsForCategory(template.categoryGroupMap, categoryId),
     },
+  ];
+}
+
+function directiveTools({ nowIso, directives, members }) {
+  const directiveById = (id) => directives.find((directive) => directive.id === id);
+  return [
     {
       name: "ack_status",
       description: "Who has acknowledged a directive, such as '3 of 4 acknowledged'.",
@@ -173,7 +185,9 @@ export function buildTools(context) {
     ...context,
   };
   return [
-    ...planningTools(data),
+    ...intakeTools(data),
+    ...timelineTools(data),
+    ...directiveTools(data),
     ...(state && canSeeBudget(actor, "total") ? budgetTools(data) : []),
     ...(canView(actor, { type: "quotes" }) ? quoteTools(data) : []),
   ];

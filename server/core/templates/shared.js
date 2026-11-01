@@ -1,3 +1,4 @@
+/** Builds an event type's template from its data, so groups and maps can't disagree with its roles. */
 const AGENT_NAMES = ["Planner", "Budget", "Vendor", "Timeline"];
 const CITIES = ["Mumbai", "Delhi", "Bengaluru", "Hyderabad", "Chennai", "Pune", "Kolkata"];
 const agentRole = (name) => ({

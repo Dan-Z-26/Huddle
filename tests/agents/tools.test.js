@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { buildTools } from "../../server/agents/tools.js";
-import { createToolRunner } from "../../server/llm/toolRunner.js";
 import { buildBudgetState, emptyProfile } from "../../server/core/profile.js";
 import { getTemplate } from "../../server/core/templates.js";
+import { createToolRunner } from "../../server/llm/toolRunner.js";
 
 const template = getTemplate("corporate_launch");
 const profile = {

@@ -1,3 +1,4 @@
+/** Runs an agent's plain rules in place of a model, so everything works with no key and no network. */
 import { createToolRunner } from "./toolRunner.js";
 
 /**

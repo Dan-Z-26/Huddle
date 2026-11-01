@@ -1,3 +1,4 @@
+/* What every page shares: the colours, resets, page layout and motion. */
 :root {
   color-scheme: light;
   --top: 4.5rem;
@@ -62,7 +63,10 @@ ol {
   outline: 2px solid var(--pink);
   outline-offset: 2px;
 }
-.sr-only {
+.sr-only,
+.composer-status:not(.is-error),
+.message.is-cont .byline,
+.message.mine .byline strong {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -114,7 +118,6 @@ ol {
   .topbar {
     grid-column: 1 / -1;
     height: var(--top);
-    flex-wrap: nowrap;
   }
   .side {
     position: sticky;
@@ -157,267 +160,6 @@ ol {
     border-top: 0;
     border-left: 1px solid var(--line);
   }
-}
-.topbar {
-  grid-column: 1;
-}
-@media (min-width: 52rem) {
-  .topbar {
-    grid-column: 1 / -1;
-  }
-}
-
-/* Side */
-.side {
-  background: linear-gradient(180deg, var(--blush), #fff 70%);
-  padding: 1.1rem 0.85rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-.side.is-setup {
-  display: none;
-}
-/* Setup has no rooms yet, so the conversation takes the rail's space. */
-@media (min-width: 52rem) {
-  .app:has(.side.is-setup) .stage,
-  .app:has(.side.is-setup) .plan {
-    grid-column: 1 / 3;
-  }
-}
-@media (min-width: 76rem) {
-  .app:has(.side.is-setup) .plan {
-    grid-column: 3;
-  }
-}
-.side-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-top: 1.25rem;
-  padding-inline: 0.6rem;
-}
-.side-heading {
-  font-family: var(--display);
-  font-size: 1rem;
-  font-weight: 500;
-  margin-bottom: 0.35rem;
-}
-section > .side-heading {
-  padding-inline: 0.6rem;
-}
-.count {
-  display: inline-grid;
-  place-items: center;
-  min-width: 1.3rem;
-  height: 1.3rem;
-  padding-inline: 0.3rem;
-  margin-left: 0.2rem;
-  font-family: system-ui, sans-serif;
-  font-size: 0.72rem;
-  font-weight: 700;
-  color: var(--on-gold);
-  background: var(--satin);
-  border-radius: 999px;
-}
-.count:empty {
-  display: none;
-}
-#attention,
-.side nav > .muted {
-  padding-inline: 0.6rem;
-  font-size: 0.85rem;
-}
-.attention-card {
-  padding-block: 0.8rem;
-  background: #fff;
-  border: 1px solid var(--gold-line);
-  border-radius: 0.8rem;
-  box-shadow: var(--shadow);
-}
-.attention-list {
-  display: grid;
-  gap: 0.5rem;
-}
-.group-list {
-  display: grid;
-  gap: 2px;
-}
-.group-list li:has(> [hidden]) {
-  display: none;
-}
-.group-list button {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  width: 100%;
-  text-align: left;
-  font: inherit;
-  font-size: 0.925rem;
-  color: var(--text);
-  background: none;
-  border: 0;
-  border-radius: 0.65rem;
-  padding: 0.42rem 0.55rem;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    box-shadow 0.15s ease;
-}
-.group-list button:hover {
-  background: #fff;
-  box-shadow: var(--shadow);
-}
-.group-list button[aria-current="true"] {
-  background: #fff;
-  color: var(--pink-deep);
-  font-weight: 600;
-  box-shadow:
-    inset 3px 0 0 var(--gold),
-    var(--shadow);
-}
-.group-list .icon {
-  color: var(--pink);
-}
-.tile {
-  flex: none;
-  width: 2rem;
-  height: 2rem;
-  display: grid;
-  place-items: center;
-  border-radius: 0.55rem;
-  color: var(--pink-deep);
-  background: var(--pink-soft);
-}
-.tile .icon {
-  width: 1.05rem;
-  height: 1.05rem;
-  color: inherit;
-}
-.group-text {
-  flex: 1;
-  min-width: 0;
-  display: grid;
-  line-height: 1.25;
-}
-.group-text small {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--muted);
-}
-.ask-nav {
-  font-weight: 500;
-}
-.spark {
-  flex: none;
-  color: var(--pink);
-  line-height: 1;
-}
-
-/* On a phone the groups wrap as chips, so the room isn't pushed off the first screen. */
-@media (max-width: 51.99rem) {
-  .side {
-    gap: 1rem;
-    padding: 1rem;
-  }
-  .side-head,
-  section > .side-heading,
-  #attention,
-  .side nav > .muted {
-    padding-inline: 0;
-  }
-  .attention-card {
-    padding: 0.75rem;
-  }
-  .side-head {
-    margin-top: 0.85rem;
-  }
-  .group-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.35rem;
-  }
-  .group-list button {
-    width: auto;
-    padding: 0.3rem 0.7rem;
-    font-size: 0.875rem;
-    background: var(--bg);
-    border: 1px solid var(--line);
-  }
-  .group-text small,
-  .group-list .tile {
-    display: none;
-  }
-  .messages {
-    max-height: 70dvh;
-  }
-}
-
-/* Controls */
-select,
-textarea,
-input[type="date"],
-input[type="text"] {
-  font: inherit;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--control);
-  border-radius: 0.6rem;
-  padding: 0.55rem 0.8rem;
-  width: 100%;
-}
-::placeholder {
-  color: var(--muted);
-  opacity: 1;
-}
-.button {
-  font: inherit;
-  font-weight: 500;
-  color: var(--pink-deep);
-  background: var(--blush);
-  border: 1px solid var(--pink-soft);
-  border-radius: 0.6rem;
-  padding: 0.5rem 1.1rem;
-  cursor: pointer;
-  transition: background-color 0.15s ease;
-}
-.button:hover {
-  background: var(--pink-soft);
-}
-.button.primary {
-  background: var(--pink);
-  border-color: var(--pink);
-  color: #fff;
-}
-.button.primary:hover {
-  background: var(--pink-deep);
-  border-color: var(--pink-deep);
-}
-.button:disabled {
-  opacity: 0.75;
-  cursor: progress;
-}
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-.chip {
-  font: inherit;
-  font-size: 0.875rem;
-  color: var(--text);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 0.35rem 0.9rem;
-  cursor: pointer;
-  transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease;
-}
-.chip:hover {
-  background: var(--blush);
-  border-color: var(--pink-soft);
 }
 
 /* Stage */
@@ -476,50 +218,17 @@ input[type="text"] {
   outline-offset: -2px;
 }
 
-/* Ask */
-.ask-card {
-  margin-block: clamp(0.5rem, 6vh, 3.5rem) 2.25rem;
+/* Motion */
+@keyframes breathe {
+  50% {
+    opacity: 0.3;
+  }
 }
-.ask-title {
-  font-family: var(--display);
-  font-size: clamp(1.7rem, 3.5vw, 2.35rem);
-  font-weight: 400;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-}
-.ask-title:focus {
-  outline: none;
-}
-.ask-sub {
-  margin: 0.6rem 0 1.5rem;
-  color: var(--muted);
-  max-width: 34rem;
-}
-.ask-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.4rem 0.4rem 0.4rem 1rem;
-  border: 1px solid var(--control);
-  border-radius: 0.9rem;
-  background: var(--bg);
-  box-shadow: var(--shadow);
-}
-.ask-bar input {
-  border: 0;
-  padding: 0.5rem 0;
-  font-size: 1.05rem;
-  min-width: 0;
-  flex: 1;
-  background: none;
-}
-.ask-bar input:focus-visible {
-  outline: none;
-}
-.ask-bar:has(input:focus-visible) {
-  outline: 2px solid var(--pink);
-  outline-offset: 1px;
-}
-#ask-suggestions {
-  margin-top: 0.9rem;
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

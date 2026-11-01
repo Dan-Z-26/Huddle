@@ -1,8 +1,10 @@
+/** Checks what the Discovery model read from an answer, and merges the good parts into the profile. */
 import { parseAmount } from "../core/amount.js";
 import { parseEventDate } from "../core/dateText.js";
 import { parseGuestCount } from "../core/guestCount.js";
 import { MAX_GUESTS } from "../core/money.js";
 import { normalisePriorities } from "../core/priorities.js";
+import { dayOf } from "../core/time.js";
 import { isGrounded } from "./grounded.js";
 
 const YES =
@@ -96,7 +98,7 @@ function readDate(change, { date }) {
   if (!date || (change.answering !== "date" && change.next.date)) return;
   const iso = inAnswer(change, date) ? parseEventDate(date) : null;
   if (!iso) refuse(change, "date", "I need the full date, including the year");
-  else if (iso.slice(0, 10) < change.nowIso.slice(0, 10))
+  else if (dayOf(iso) < dayOf(change.nowIso))
     refuse(change, "date", "that date has already passed");
   else take(change, "date", iso);
 }

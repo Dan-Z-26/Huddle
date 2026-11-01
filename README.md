@@ -19,7 +19,7 @@ Built for PromptWars Virtual, Challenge 5.
 
 ## Run it
 
-Node 20.19 or newer.
+Node 22 or newer.
 
 ```bash
 npm install
@@ -136,9 +136,10 @@ A full vendor portal, payments, real authentication and invitations, direct mess
 server/core/       pure logic: budget, consequences, timeline, scoring, hiring, permissions
 server/agents/     runtime AI agents and their offline fallbacks
 server/llm/        provider adapter: Gemini by default, Anthropic optional
-server/routes/     Express routes
+server/routes/     Express routes: short tables of named handlers
+server/workflows/  what routes, timers and the demo share: briefs, booking, notices, the Planner's reply
 server/store/      in-memory store and demo seed
-public/            plain HTML, CSS and ES modules, no framework
+public/js/         plain ES modules by feature, no framework: shell, setup, chat, budget, timeline, vendors
 tests/             node:test suites, offline
 docs/interfaces.md the shared data shapes and API
 ```

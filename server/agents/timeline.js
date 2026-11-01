@@ -1,4 +1,6 @@
+/** The Timeline agent: task wording, the daily digest and reminders. Dates and facts come from code. */
 import { ackStatus } from "../core/directives.js";
+import { DAY_MS } from "../core/time.js";
 import { flagAtRisk } from "../core/timelinePlanner.js";
 import {
   agentPrompt,
@@ -13,8 +15,8 @@ import { digestOutput, reminderOutput, taskWordsOutput } from "./schemas.js";
 const shortDate = (iso) =>
   new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 
-const DAY_MS = 86400000;
 const WEEK_DAYS = 7;
+const QUOTED_CHARS = 200;
 
 const frame = (job, rule) =>
   agentPrompt({
@@ -164,7 +166,7 @@ export async function reminder({ directiveText, pendingNames }, { generate = rea
   const missing = mentions.filter((mention) => !body.includes(mention));
   const text = [...missing, body].join(" ");
   return {
-    reminderText: `${text}\n"${directiveText.slice(0, 200)}"`,
+    reminderText: `${text}\n"${directiveText.slice(0, QUOTED_CHARS)}"`,
     rationale: groundedOr(data.rationale, ""),
   };
 }

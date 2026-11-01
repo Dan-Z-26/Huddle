@@ -1,3 +1,4 @@
+/** Change notices: code picks who hears and which facts they may see, the model only words them. */
 import { wholeMoney } from "../core/money.js";
 import { categoryName, groupsForCategory } from "../core/templates.js";
 import {

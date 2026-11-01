@@ -1,3 +1,4 @@
+/** Reading amounts of money from people's words, and keeping amounts out of shared text. */
 import { MAX_MINOR } from "./money.js";
 
 // Only the start of a reply is read: amounts are short, and the patterns stay fast on huge input.
@@ -58,28 +59,33 @@ function toMinor(digits, unit) {
   return Number(minor);
 }
 
+// A figure marked as money wins. Otherwise a plain number that isn't a head count, and a year is
+// only an amount if nothing else could be: "for the 2026 launch we paid 40000".
+function chooseCandidate(candidates, after, writtenCurrency) {
+  const marked = candidates.find((match) => match[1] || match[3] || writtenCurrency(match));
+  if (marked) return marked;
+  const plain = candidates.filter((match) => {
+    const value = Number(match[2].replaceAll(",", ""));
+    return value >= MIN_PLAIN_AMOUNT && !FOLLOWED_BY_PEOPLE.test(after(match));
+  });
+  return plain.find(({ 2: digits }) => !LOOKS_LIKE_YEAR.test(digits)) ?? plain[0];
+}
+
 /**
  * Reads a money amount out of free text, such as "16 lakh", "₹16,00,000", "1.5 crore" or "$2m".
  * Plain numbers count only from 1,000 up and when they are not a head count, so "200 guests" is
  * never read as a budget.
- * @param {string} text The user's words.
+ * @param {string} input The user's words.
  * @returns {{minor: number, currency: string | null} | null} Integer minor units (paise or cents)
  *   and the currency if the text names one; null when there is no usable amount.
  */
 export function parseAmount(input) {
   if (typeof input !== "string") return null;
   const text = input.slice(0, MAX_READ);
-  const candidates = [...text.matchAll(CANDIDATE)];
   const after = (match) => text.slice(match.index + match[0].length);
   const writtenCurrency = (match) =>
     FOLLOWED_BY_CURRENCY.find(([pattern]) => pattern.test(after(match)))?.[1];
-  const marked = candidates.find((match) => match[1] || match[3] || writtenCurrency(match));
-  const plain = candidates.filter((match) => {
-    const value = Number(match[2].replaceAll(",", ""));
-    return value >= MIN_PLAIN_AMOUNT && !FOLLOWED_BY_PEOPLE.test(after(match));
-  });
-  // "for the 2026 launch we paid 40000": a year is only an amount if nothing else could be.
-  const chosen = marked ?? plain.find(({ 2: digits }) => !LOOKS_LIKE_YEAR.test(digits)) ?? plain[0];
+  const chosen = chooseCandidate([...text.matchAll(CANDIDATE)], after, writtenCurrency);
   if (!chosen) return null;
   const [, symbol, digits, unit] = chosen;
   const minor = toMinor(digits, unit);

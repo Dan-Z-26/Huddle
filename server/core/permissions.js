@@ -1,9 +1,19 @@
-const isManager = (role) => role?.kind === "manager";
+/** Who may see and do what. Anything unrecognised is denied. */
+
+/**
+ * Checks whether a role, or a person, is the event manager.
+ * @param {{kind: string}} role Asker's role.
+ * @returns {boolean} True for the manager only.
+ */
+export const isManager = (role) => role?.kind === "manager";
+
 const hasEntry = (list, value) => Array.isArray(list) && value != null && list.includes(value);
 const isMember = (role, group) => hasEntry(role?.groupIds, group?.id);
 // Roles never reach into another event, not even the manager's.
 const inSameEvent = (role, group) => role?.eventId != null && role.eventId === group?.eventId;
 const handlesCategory = (role, categoryId) => hasEntry(role?.categoryIds, categoryId);
+const ownsRoom = (role, group) =>
+  (group.categoryIds ?? []).some((categoryId) => handlesCategory(role, categoryId));
 
 /**
  * Checks whether a role can view a group, a file, the quotes or the comparison matrix.
@@ -12,12 +22,10 @@ const handlesCategory = (role, categoryId) => hasEntry(role?.categoryIds, catego
  * @returns {boolean} True when allowed; anything unrecognised is denied.
  */
 export function canView(role, resource) {
-  if (resource?.type === "group" || resource?.type === "file") {
+  const type = resource?.type;
+  if (type === "group" || type === "file")
     return inSameEvent(role, resource.group) && (isManager(role) || isMember(role, resource.group));
-  }
-  if (resource?.type === "quotes" || resource?.type === "comparison") {
-    return isManager(role) || role?.kind === "core";
-  }
+  if (type === "quotes" || type === "comparison") return isManager(role) || role?.kind === "core";
   return false;
 }
 
@@ -29,15 +37,11 @@ export function canView(role, resource) {
  */
 export function canPost(role, group) {
   if (!inSameEvent(role, group)) return false;
-  if (isManager(role) || role?.kind === "agent") return true;
-  if (role?.kind === "vendor") return isMember(role, group);
-  if (role?.kind !== "core" || !isMember(role, group) || group.kind === "announcements") {
-    return false;
-  }
-  return (
-    group.kind !== "category" ||
-    (group.categoryIds ?? []).some((categoryId) => handlesCategory(role, categoryId))
-  );
+  const { kind } = role;
+  if (kind === "manager" || kind === "agent") return true;
+  if (kind === "vendor") return isMember(role, group);
+  if (kind !== "core" || !isMember(role, group) || group.kind === "announcements") return false;
+  return group.kind !== "category" || ownsRoom(role, group);
 }
 
 /**
@@ -68,3 +72,12 @@ export function canMarkDirective(role) {
 export function canManageGroups(role) {
   return isManager(role);
 }
+
+/**
+ * Checks whether a role works on a category's vendors: the manager, and core members who own it.
+ * @param {{kind: string, categoryIds?: string[]}} role Asker's role.
+ * @param {string} categoryId The category.
+ * @returns {boolean} True when allowed.
+ */
+export const mayWorkOn = (role, categoryId) =>
+  isManager(role) || (role?.kind === "core" && handlesCategory(role, categoryId));

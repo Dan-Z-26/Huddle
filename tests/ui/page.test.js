@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 
+const scriptsDir = new URL("../../public/js/", import.meta.url);
+const scriptFiles = (await readdir(scriptsDir, { recursive: true })).filter((file) =>
+  file.endsWith(".js"),
+);
 const html = await readFile(new URL("../../public/index.html", import.meta.url), "utf8");
 const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(([, id]) => id);
 
@@ -13,10 +18,9 @@ describe("index.html", () => {
   });
 
   it("has an element for every id the scripts look up", async () => {
-    const dir = new URL("../../public/js/", import.meta.url);
     const missing = new Set();
-    for (const file of await readdir(dir)) {
-      const code = await readFile(new URL(file, dir), "utf8");
+    for (const file of scriptFiles) {
+      const code = await readFile(new URL(file, scriptsDir), "utf8");
       for (const [, id] of code
         .matchAll(/\$\("([a-z0-9-]+)"\)|getElementById\("([a-z0-9-]+)"\)/g)
         .map((m) => [m[0], m[1] ?? m[2]])) {
@@ -40,22 +44,26 @@ describe("index.html", () => {
 
 describe("the scripts", () => {
   it("import only names that exist, which only a browser would otherwise find out", async () => {
-    const dir = new URL("../../public/js/", import.meta.url);
-    const files = await readdir(dir);
     const sources = new Map(
-      await Promise.all(files.map(async (f) => [f, await readFile(new URL(f, dir), "utf8")])),
+      await Promise.all(
+        scriptFiles.map(async (file) => [file, await readFile(new URL(file, scriptsDir), "utf8")]),
+      ),
     );
+    const exportsOf = (code) =>
+      new Set(
+        [...code.matchAll(/export (?:async )?(?:function|const) ([$\w]+)/g)].map((m) => m[1]),
+      );
     const broken = [];
     for (const [file, code] of sources)
-      for (const [, names, target] of code.matchAll(/import \{([^}]*)\} from "\.\/([^"]+)"/g))
+      for (const [, names, target] of code.matchAll(/import \{([^}]*)\} from "(\.[^"]+)"/g)) {
+        const targetFile = join(dirname(file), target);
+        const known = exportsOf(sources.get(targetFile) ?? "");
         for (const name of names
           .split(",")
           .map((part) => part.trim())
-          .filter(Boolean)) {
-          const exported = new RegExp(`export (?:async )?(?:function|const) ${name}\\b`);
-          if (!exported.test(sources.get(target) ?? ""))
-            broken.push(`${file}: ${name} from ${target}`);
-        }
+          .filter(Boolean))
+          if (!known.has(name)) broken.push(`${file}: ${name} from ${targetFile}`);
+      }
     assert.deepEqual(broken, []);
   });
 });

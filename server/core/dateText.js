@@ -1,3 +1,8 @@
+/** Reading dates from people's words. A date without a year is never guessed. */
+import { DAY_MS } from "./time.js";
+
+const MIN_YEAR = 2000;
+const MAX_YEAR = 2100;
 const MONTHS = /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*$/i;
 const MONTH_NAMES = [
   "jan",
@@ -43,7 +48,13 @@ function readParts(text) {
 export function parseEventDate(text) {
   if (typeof text !== "string") return null;
   const parts = readParts(text);
-  if (!parts || parts.month < 1 || parts.month > 12 || parts.year < 2000 || parts.year > 2100) {
+  if (
+    !parts ||
+    parts.month < 1 ||
+    parts.month > 12 ||
+    parts.year < MIN_YEAR ||
+    parts.year > MAX_YEAR
+  ) {
     return null;
   }
   const date = new Date(Date.UTC(parts.year, parts.month - 1, parts.day));
@@ -55,7 +66,6 @@ export function parseEventDate(text) {
 }
 
 const WEEKDAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-const MS_PER_DAY = 86400000;
 const WEEKDAY_PHRASE = new RegExp(String.raw`\b(next\s+)?(${WEEKDAYS.join("|")})\b`);
 const RELATIVE = /\bin\s+(\d{1,3})\s+(day|week)s?\b/;
 
@@ -74,7 +84,7 @@ export function parseDueDate(text, nowIso) {
   const now = new Date(nowIso);
   const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   const lower = text.toLowerCase();
-  const toIso = (days) => new Date(today + days * MS_PER_DAY).toISOString();
+  const toIso = (days) => new Date(today + days * DAY_MS).toISOString();
   if (/\btoday\b/.test(lower)) return toIso(0);
   if (/\btomorrow\b/.test(lower)) return toIso(1);
   const relative = lower.match(RELATIVE);

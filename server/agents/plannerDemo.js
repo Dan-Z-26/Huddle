@@ -1,4 +1,4 @@
-// Offline stand-in for the Planner's intent reading: plain keyword rules, checked in this order.
+/** Offline stand-in for the Planner's intent reading: plain keyword rules, checked in this order. */
 const RULES = [
   ["log_expense", /\b(log|record|paid)\b|\bspent\b.*\d/i],
   ["vendor_brief", /\b(brief|hire|hiring|need an? (?:\w+ )?vendor|find an? (?:\w+ )?vendor)\b/i],

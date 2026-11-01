@@ -1,8 +1,10 @@
+/** States what a change does to the budget, and the options for closing a gap. It never recommends. */
 import { categoryCost, computeBudget, tierForCost } from "./budgetEngine.js";
 import { applyChangeEvents } from "./changeEvents.js";
 import { divFloor } from "./money.js";
 import { normalisePriorities, rankOf } from "./priorities.js";
 
+// The nearest whole percent, in integers so no rounding error can creep in.
 const roundedPct = (part, whole) => divFloor(part * 200 + whole, whole * 2);
 
 function committedDeltas(before, after) {
@@ -106,6 +108,24 @@ function costOfCut(options, categoryId) {
   return chosen ? chosen.newTotalMinor + chosen.cutMinor : null;
 }
 
+// Each chosen category is cut in the order given, only as far as the gap still needs.
+function cutEvents(options, cuts, gapMinor) {
+  const events = [];
+  let remainingMinor = gapMinor;
+  for (const categoryId of new Set(cuts)) {
+    const costMinor = costOfCut(options, categoryId);
+    if (costMinor === null || remainingMinor === 0) continue;
+    const takenMinor = Math.min(remainingMinor, costMinor);
+    events.push({
+      type: "category_amount",
+      category: categoryId,
+      amountMinor: costMinor - takenMinor,
+    });
+    remainingMinor -= takenMinor;
+  }
+  return { events, remainingMinor };
+}
+
 /**
  * Turns the manager's choice into the extra events that close the gap: the buffer goes first if
  * chosen, then the chosen categories are cut in the order given, each only as far as the gap still
@@ -120,24 +140,11 @@ export function resolutionEvents(
   { shortfall, options, after, bufferAvailableMinor = 0 },
   { cuts = [], raise = false, useBuffer = false } = {},
 ) {
-  const events = [];
-  let remainingMinor = shortfall.highMinor;
-  if (useBuffer) {
-    const drawn = Math.min(remainingMinor, bufferAvailableMinor);
-    if (drawn > 0) events.push({ type: "contingency_draw", amountMinor: drawn });
-    remainingMinor -= drawn;
-  }
-  for (const categoryId of new Set(cuts)) {
-    const costMinor = costOfCut(options, categoryId);
-    if (costMinor === null || remainingMinor === 0) continue;
-    const takenMinor = Math.min(remainingMinor, costMinor);
-    events.push({
-      type: "category_amount",
-      category: categoryId,
-      amountMinor: costMinor - takenMinor,
-    });
-    remainingMinor -= takenMinor;
-  }
+  const drawn = useBuffer ? Math.min(shortfall.highMinor, bufferAvailableMinor) : 0;
+  const events = drawn > 0 ? [{ type: "contingency_draw", amountMinor: drawn }] : [];
+  const cut = cutEvents(options, cuts, shortfall.highMinor - drawn);
+  events.push(...cut.events);
+  let { remainingMinor } = cut;
   if (raise && remainingMinor > 0) {
     events.push({ type: "budget_total", toMinor: after.totalMinor + remainingMinor });
     remainingMinor = 0;

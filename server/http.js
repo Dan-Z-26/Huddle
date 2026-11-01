@@ -1,7 +1,9 @@
+/** What every route shares: sessions, permission guards, errors, validation and rate limits. */
 import rateLimit from "express-rate-limit";
+import { DAY_MS } from "./core/time.js";
 
-export const SESSION_COOKIE = "huddle_session";
-const SESSION_MS = 24 * 3_600_000;
+const SESSION_COOKIE = "huddle_session";
+const SESSION_MS = DAY_MS;
 
 /**
  * Signs a person in: a new server-side session, with only its random id in the cookie. Lax, because
@@ -31,6 +33,41 @@ export function startSession(res, store, userId, options) {
 export function HttpError(status, code, message) {
   return Object.assign(new Error(message), { name: "HttpError", status, code });
 }
+
+/**
+ * A request the client can fix.
+ * @param {string} message Safe to show.
+ * @returns {Error} The error.
+ */
+export const badRequest = (message) => HttpError(400, "BAD_REQUEST", message);
+
+/**
+ * A request this person isn't allowed to make.
+ * @param {string} message Safe to show.
+ * @returns {Error} The error.
+ */
+export const forbidden = (message) => HttpError(403, "FORBIDDEN", message);
+
+/**
+ * Something that doesn't exist, or belongs to another event, which looks the same on purpose.
+ * @param {string} message Safe to show.
+ * @returns {Error} The error.
+ */
+export const notFound = (message) => HttpError(404, "NOT_FOUND", message);
+
+/**
+ * Too many requests.
+ * @param {string} message Safe to show.
+ * @returns {Error} The error.
+ */
+export const tooMany = (message) => HttpError(429, "RATE_LIMITED", message);
+
+/**
+ * A file that isn't one of the allowed types.
+ * @returns {Error} The error.
+ */
+export const unsupportedFile = () =>
+  HttpError(400, "UNSUPPORTED_FILE", "Only PDF, PNG, JPG or WEBP files are allowed.");
 
 /**
  * Reads one cookie by name without building an object, so keys like "__proto__" are never assigned.
@@ -105,10 +142,23 @@ export function requireUser(req, _res, next) {
  */
 export function ownEvent(req, { vendorsToo = false } = {}) {
   const event = req.app.locals.store.events.get(req.params.id);
-  if (!event || event.id !== req.user.eventId) throw HttpError(404, "NOT_FOUND", "No such event.");
-  if (req.user.kind === "vendor" && !vendorsToo)
-    throw HttpError(403, "FORBIDDEN", "This is for the event team.");
+  if (!event || event.id !== req.user.eventId) throw notFound("No such event.");
+  if (req.user.kind === "vendor" && !vendorsToo) throw forbidden("This is for the event team.");
   return event;
+}
+
+/**
+ * The record a route's :id names, if it belongs to the person's own event.
+ * @param {import("express").Request} req The request.
+ * @param {Map<string, {eventId: string}>} records Where to look.
+ * @param {string} noun What it is called, for the error.
+ * @returns {object} The record.
+ * @throws {Error} 404 for a missing record or another event's, so the two look the same.
+ */
+export function ownRecord(req, records, noun) {
+  const record = records.get(req.valid.params.id);
+  if (!record || record.eventId !== req.user.eventId) throw notFound(`No such ${noun}.`);
+  return record;
 }
 
 /**
@@ -119,8 +169,7 @@ export function ownEvent(req, { vendorsToo = false } = {}) {
  */
 export function managerOnly(req) {
   const event = ownEvent(req);
-  if (req.user.kind !== "manager")
-    throw HttpError(403, "FORBIDDEN", "Only the event manager can do this.");
+  if (req.user.kind !== "manager") throw forbidden("Only the event manager can do this.");
   return event;
 }
 
@@ -133,7 +182,7 @@ export function managerOnly(req) {
  */
 export function requireBudget(store, event) {
   const state = store.budgets.get(event.id);
-  if (!state) throw HttpError(404, "NOT_FOUND", "This event has no budget yet.");
+  if (!state) throw notFound("This event has no budget yet.");
   return state;
 }
 
@@ -148,7 +197,7 @@ export function validate(schema) {
     const result = schema.safeParse({ body: req.body, params: req.params, query: req.query });
     if (!result.success) {
       const field = result.error.issues[0].path.join(".").slice(0, 100);
-      return next(HttpError(400, "BAD_REQUEST", `Invalid request${field && `: ${field}`}`));
+      return next(badRequest(`Invalid request${field && `: ${field}`}`));
     }
     req.valid = result.data;
     next();
@@ -166,8 +215,7 @@ export function createLimiter({ windowMs, max }) {
     limit: max,
     standardHeaders: "draft-8",
     legacyHeaders: false,
-    handler: (_req, _res, next) =>
-      next(HttpError(429, "RATE_LIMITED", "Too many requests. Please try again shortly.")),
+    handler: (_req, _res, next) => next(tooMany("Too many requests. Please try again shortly.")),
   });
 }
 
@@ -180,7 +228,7 @@ export function refuseCrossSite(req, _res, next) {
   const from = req.get("sec-fetch-site");
   const isWrite = !["GET", "HEAD", "OPTIONS"].includes(req.method);
   if (isWrite && from && from !== "same-origin" && from !== "none")
-    return next(HttpError(403, "FORBIDDEN", "This request came from another site."));
+    return next(forbidden("This request came from another site."));
   return next();
 }
 

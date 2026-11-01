@@ -1,3 +1,4 @@
+/** Reading a fuzzy guest count, and suggesting one number to plan for. */
 import { divFloor } from "./money.js";
 
 // Only the start of a reply is read: counts are short, and the patterns stay fast on huge input.
@@ -20,6 +21,10 @@ const HEDGED = new RegExp(
 // The lookahead skips "2k" and "12th", which are not plain head counts.
 const SINGLE = new RegExp(String.raw`(?<!\w)(-?)(${NUMBER})(?![\d.]*[a-z])`, "i");
 
+// A fuzzy answer gets a suggestion a little above its top end, rounded up to a whole guest.
+const BUFFER_PERCENT = 5;
+const withBuffer = (guests) => divFloor(guests * (100 + BUFFER_PERCENT) + 99, 100);
+
 const toCount = (digits) => Number(digits.replaceAll(",", ""));
 const isValidCount = (count) => Number.isSafeInteger(count) && count >= 1;
 
@@ -35,7 +40,7 @@ function readCounts(text) {
 
 /**
  * Parses a fuzzy guest-count answer into a range plus a suggested planning number.
- * @param {string} text For example "around 200", "200-250", "300 if partners come"
+ * @param {string} input For example "around 200", "200-250", "300 if partners come"
  *   or "around 200, maybe 300".
  * @returns {{min: number, max: number, suggested: number, needsConfirmation: boolean} | null}
  *   Null when the text holds no positive count.
@@ -48,6 +53,6 @@ export function parseGuestCount(input) {
   const min = Math.min(...counts);
   const max = Math.max(...counts);
   const needsConfirmation = !BARE_COUNT.test(text);
-  const suggested = needsConfirmation ? divFloor(max * 105 + 99, 100) : max;
+  const suggested = needsConfirmation ? withBuffer(max) : max;
   return { min, max, suggested, needsConfirmation };
 }

@@ -1,8 +1,9 @@
+/** Turns the Budget model's proposals into change events. All money is parsed here, in code. */
 import { parseAmount } from "../core/amount.js";
 import { categoryCost } from "../core/budgetEngine.js";
 import { wholeMoney } from "../core/money.js";
 
-export const MIN_CONFIDENCE = 0.7;
+const MIN_CONFIDENCE = 0.7;
 // The model may hand back "Décor" for the id "decor", which is still the same category.
 const plainName = (name) => String(name).normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const PAISE_PER_RUPEE = 100;
@@ -122,6 +123,18 @@ function convert(proposal, state) {
   }
 }
 
+// Why a proposal can't be acted on, or null when it can.
+function problemWith(proposal, categoryIds, state) {
+  if (proposal.confidence < MIN_CONFIDENCE) return "I'm not sure I understood this change";
+  const isShift = proposal.type === "category_shift";
+  const named = isShift ? [proposal.from, proposal.to] : [proposal.category];
+  const unknown = named.find((id) => id !== undefined && !categoryIds.includes(id));
+  if (unknown !== undefined) return `I don't know the category "${unknown.slice(0, 40)}"`;
+  if (!state && (isShift || proposal.type === "category_adjust"))
+    return "I need the current budget to work that out";
+  return null;
+}
+
 /**
  * Turns the Budget model's proposals into validated core change events. All money is parsed from
  * text here, in code. Anything unsure, unreadable or about an unknown category becomes a question
@@ -143,25 +156,10 @@ export function toChangeEvents(proposals, { categoryIds, state }) {
     const proposal = { ...given };
     for (const key of ["category", "from", "to"])
       if (key in proposal) proposal[key] = known(proposal[key]);
-    const ask = (reason) => questions.push({ proposal, reason });
-    if (proposal.confidence < MIN_CONFIDENCE) {
-      ask("I'm not sure I understood this change");
-    } else {
-      const shift = proposal.type === "category_shift";
-      const named = shift ? [proposal.from, proposal.to] : [proposal.category];
-      const unknown = named.find((id) => id !== undefined && !categoryIds.includes(id));
-      if (unknown !== undefined) ask(`I don't know the category "${unknown.slice(0, 40)}"`);
-      else if (
-        !state &&
-        (proposal.type === "category_shift" || proposal.type === "category_adjust")
-      )
-        ask("I need the current budget to work that out");
-      else {
-        const converted = convert(proposal, state);
-        if (typeof converted === "string") ask(converted);
-        else events.push(...[converted].flat());
-      }
-    }
+    const reason = problemWith(proposal, categoryIds, state);
+    const converted = reason ?? convert(proposal, state);
+    if (typeof converted === "string") questions.push({ proposal, reason: converted });
+    else events.push(...[converted].flat());
   }
   return { events, questions };
 }

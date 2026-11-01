@@ -1,8 +1,9 @@
+/** The setup questions and answer buttons. */
 import { categoryName } from "../core/templates.js";
 const names = (template, ids) => ids.map((id) => categoryName(template, id));
 
 const QUESTIONS = {
-  name: (_p, t) => `What should we call this ${t.label.toLowerCase()}?`,
+  name: (_profile, template) => `What should we call this ${template.label.toLowerCase()}?`,
   purpose: () => "What is the event about, and what should it achieve?",
   date: () => "When is it?",
   city: () => "Which city is it in?",
@@ -14,16 +15,26 @@ const QUESTIONS = {
   mustHaves: () => "What must be part of this event?",
   absoluteMustHave: () => "If you could keep only one, which would it be?",
   constraints: () => "Is there anything to plan around?",
-  vendorNeeds: (p, t) =>
-    `Anything specific you need from vendors, starting with ${names(t, p.priorities.slice(0, 3)).join(", ")}?`,
+  vendorNeeds: (profile, template) =>
+    `Anything specific you need from vendors, starting with ${names(template, profile.priorities.slice(0, 3)).join(", ")}?`,
 };
 
-/** The fixed question for an intake field; the model may reword it, but this is the fallback. */
+/**
+ * The fixed question for an intake field; the model may reword it, but this is the fallback.
+ * @param {string} field The field being asked.
+ * @param {object} profile EventProfile.
+ * @param {object} template The event template.
+ * @returns {string} The question.
+ */
 export function questionFor(field, profile, template) {
   return QUESTIONS[field](profile, template);
 }
 
-/** The follow-up that turns a fuzzy guest range into one confirmed planning number. */
+/**
+ * The follow-up that turns a fuzzy guest range into one confirmed planning number.
+ * @param {{min: number, max: number, suggested: number}} guests The range and the suggestion.
+ * @returns {string} The question.
+ */
 export function guestConfirmation({ min, max, suggested }) {
   const said = min === max ? `around ${max}` : `${min} to ${max}`;
   return `You mentioned ${said} guests. Shall I plan for ${suggested}, your upper estimate plus a 5% buffer? Or give the number you prefer.`;
@@ -47,7 +58,13 @@ export function optionsFor(field, profile, template) {
   return options.map(textOf);
 }
 
-/** The category of a must-have the user tapped, from the buttons they were offered. */
+/**
+ * The category of a must-have the user tapped, from the buttons they were offered.
+ * @param {string} text The button's words.
+ * @param {object} profile EventProfile.
+ * @param {object} template The event template.
+ * @returns {string | null} The category.
+ */
 export function categoryOfOption(text, profile, template) {
   const options = [
     ...(profile.suggestedOptions?.mustHaves ?? []),

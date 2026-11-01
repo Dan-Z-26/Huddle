@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { countdown } from "../../public/js/brief.js";
-import { amountText, colorOf, slicesOf, summaryText } from "../../public/js/budgetSlices.js";
-import { formatMoney, formatSize, initials } from "../../public/js/dom.js";
+import { amountText, colorOf, slicesOf, summaryText } from "../../public/js/budget/budgetSlices.js";
+import { countdown, formatMoney, formatSize, initials } from "../../public/js/shared/dom.js";
 
 const LAKH = 100_000_00;
 const category = (id, rank, committedMinor) => ({

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { z } from "zod";
 import {
   agentPrompt,
   generateOrDemo,
@@ -7,7 +8,6 @@ import {
   UNTRUSTED_RULE,
   wrapUntrusted,
 } from "../../server/llm/index.js";
-import { z } from "zod";
 
 describe("agentPrompt", () => {
   const prompt = agentPrompt({

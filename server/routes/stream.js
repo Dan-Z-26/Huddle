@@ -1,3 +1,4 @@
+/** The live event stream. */
 import { Router } from "express";
 import { HttpError, requireUser } from "../http.js";
 

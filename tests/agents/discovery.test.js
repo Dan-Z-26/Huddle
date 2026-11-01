@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { nextStep } from "../../server/agents/discovery.js";
-import { generate as realGenerate } from "../../server/llm/index.js";
 import { emptyProfile, missingProfileFields } from "../../server/core/profile.js";
 import { getTemplate } from "../../server/core/templates.js";
+import { generate as realGenerate } from "../../server/llm/index.js";
 
 const NOW = "2026-11-01T00:00:00.000Z";
 const template = getTemplate("corporate_launch");

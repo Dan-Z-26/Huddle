@@ -1,7 +1,9 @@
+/** The complete demo event, so the app is useful the moment it starts. */
+import { DAY_MS, dayOf } from "../core/time.js";
+import { agentIdFor } from "./ids.js";
 import { addExpense, createEvent, createWorkspace, postAgentMessage } from "./workspace.js";
 
 export const DEMO_EVENT_ID = "demo";
-const DAY_MS = 86400000;
 const DEMO_LEAD_DAYS = 75;
 const DEMO_EXPENSES = [
   ["Caterer advance", 5000000, "food-beverage", false],
@@ -11,7 +13,7 @@ const DEMO_EXPENSES = [
 ];
 
 function demoProfile(nowIso) {
-  const date = new Date(Date.parse(nowIso.slice(0, 10)) + DEMO_LEAD_DAYS * DAY_MS).toISOString();
+  const date = new Date(Date.parse(dayOf(nowIso)) + DEMO_LEAD_DAYS * DAY_MS).toISOString();
   return {
     id: DEMO_EVENT_ID,
     eventType: "corporate_launch",
@@ -77,7 +79,7 @@ export function seedDemo(store, nowIso = new Date().toISOString()) {
   const say = (slug, text) =>
     postAgentMessage(store, {
       groupId: bySlug[slug].id,
-      authorId: `agent-planner@${DEMO_EVENT_ID}`,
+      authorId: agentIdFor("planner", DEMO_EVENT_ID),
       text,
       nowIso,
     });

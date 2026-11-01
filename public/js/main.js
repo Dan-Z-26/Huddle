@@ -1,20 +1,21 @@
-import { api } from "./api.js";
-import { countdown, renderBrief } from "./brief.js";
-import { renderBudget } from "./budgetChart.js";
-import { hideConsequences, setUpWhatIf } from "./consequences.js";
-import { announce, announceError, formatDate } from "./dom.js";
-import { setUpGroupsAdmin } from "./groupsAdmin.js";
-import { hideIdeas, setUpIdeas } from "./ideas.js";
-import { startIntake } from "./intake.js";
-import { drawHeader, setLayout, show } from "./layout.js";
-import { startLive } from "./live.js";
-import { setUpNewEvent } from "./newEvent.js";
-import { createPages, resetView } from "./pages.js";
-import { bump } from "./session.js";
-import { showSignIn } from "./signin.js";
-import { renderTimeline, setTimelineGroups, setUpTimelineTools } from "./timeline.js";
-import { renderVendorHome } from "./vendorHome.js";
-import { renderAttention, renderGroups } from "./workspace.js";
+/** The app's entry point: finds out who is signed in, then draws setup or the workspace. */
+import { renderBudget } from "./budget/budgetChart.js";
+import { hideConsequences, setUpWhatIf } from "./budget/consequences.js";
+import { hideIdeas, setUpIdeas } from "./budget/ideas.js";
+import { setUpGroupsAdmin } from "./chat/groupsAdmin.js";
+import { renderBrief } from "./setup/brief.js";
+import { startIntake } from "./setup/intake.js";
+import { api } from "./shared/api.js";
+import { $, announce, announceError, countdown, formatDate } from "./shared/dom.js";
+import { bump } from "./shared/session.js";
+import { drawHeader, setLayout, show } from "./shell/layout.js";
+import { startLive } from "./shell/live.js";
+import { setUpNewEvent } from "./shell/newEvent.js";
+import { createPages, resetView } from "./shell/pages.js";
+import { showSignIn } from "./shell/signin.js";
+import { renderAttention, renderGroups } from "./shell/workspace.js";
+import { renderTimeline, setTimelineGroups, setUpTimelineTools } from "./timeline/timeline.js";
+import { renderVendorHome } from "./vendors/vendorHome.js";
 
 const INVITE_NOTES = {
   invalid: "That invite link has expired or been replaced. Please ask for a new one.",
@@ -22,7 +23,7 @@ const INVITE_NOTES = {
     "You're already signed in here, so that invite wasn't used. To use it, open it in a private window.",
 };
 let shownBudget = null;
-const previewOpen = () => !document.getElementById("consequences").hidden;
+const previewOpen = () => !$("consequences").hidden;
 
 async function signedIn() {
   try {
@@ -41,12 +42,12 @@ function setUpPlanTools(event) {
     currentBudget: () => shownBudget,
     onApplied: async (notices) => {
       await load();
-      const summary = document.getElementById("budget-summary").textContent;
+      const summary = $("budget-summary").textContent;
       const told = notices
         ? ` ${notices} ${notices === 1 ? "group was" : "groups were"} notified.`
         : "";
       announce(`Change applied. ${summary}${told}`);
-      document.getElementById("what-if-text").focus();
+      $("what-if-text").focus();
     },
   });
   setUpTimelineTools(event, load);
@@ -76,7 +77,7 @@ async function loadSetup({ me, event, template, isManager, focusIntake }) {
     onProfile: (profile) => renderBrief(profile, template, me.permissions.seeTotalBudget),
     onConfirmed: async () => {
       await load();
-      document.getElementById("overview-title").focus();
+      $("overview-title").focus();
       announce("Workspace created.");
     },
   });
@@ -85,7 +86,7 @@ async function loadSetup({ me, event, template, isManager, focusIntake }) {
 async function loadWorkspace({ me, event, template, groups, members, isManager, isVendor }) {
   const showProposal = isVendor ? () => {} : await loadPlan(event, isManager, groups);
   if (isVendor) await renderVendorHome();
-  document.getElementById("timeline-about").textContent = event.date
+  $("timeline-about").textContent = event.date
     ? `Every step up to ${formatDate(event.date)}. ${countdown(event.date)}.`
     : "";
   const pages = createPages({
@@ -101,7 +102,7 @@ async function loadWorkspace({ me, event, template, groups, members, isManager, 
     reload: load,
   });
   renderAttention(me.attention, pages.openGroup, pages.openBudget, pages.openVendorsOn);
-  document.getElementById("manage-groups").hidden = !isManager;
+  $("manage-groups").hidden = !isManager;
   if (isManager) setUpGroupsAdmin({ event, groups, roles: template.roles, onChanged: load });
   startLive({
     isVendor,
@@ -149,14 +150,14 @@ async function load({ focusIntake = false } = {}) {
 for (const list of document.querySelectorAll("ul, ol")) list.setAttribute("role", "list");
 setUpNewEvent((options) => {
   resetView();
-  document.getElementById("signin").hidden = true;
+  $("signin").hidden = true;
   document.querySelector(".app").hidden = false;
   return load(options);
 });
 const inviteNote = INVITE_NOTES[new URLSearchParams(location.search).get("invite")];
 if (inviteNote) announce(inviteNote, { keep: true });
-document.getElementById("notice-close").onclick = () => {
+$("notice-close").onclick = () => {
   announce("");
-  document.getElementById("main").focus();
+  $("main").focus();
 };
 load().catch((err) => announceError(err.message));

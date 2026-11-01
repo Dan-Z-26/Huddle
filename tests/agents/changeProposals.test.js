@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { changeProposal } from "../../server/agents/budgetSchemas.js";
 import { toChangeEvents } from "../../server/agents/changeProposals.js";
-import { changeProposal } from "../../server/agents/schemas.js";
 
 const categoryIds = ["decor", "music"];
 const convert = (proposal) => toChangeEvents([{ confidence: 0.9, ...proposal }], { categoryIds });

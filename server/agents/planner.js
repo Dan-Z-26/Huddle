@@ -1,4 +1,6 @@
+/** The Planner behind @huddle: reads what a message asks for and hands it to the right agent. */
 import { canMarkDirective, canSeeBudget } from "../core/permissions.js";
+import { categoryName } from "../core/templates.js";
 import {
   agentPrompt,
   generate as realGenerate,
@@ -14,7 +16,6 @@ import { demoIntent } from "./plannerDemo.js";
 import { plannerOutput } from "./schemas.js";
 import { digest } from "./timeline.js";
 import { answerVendorQuestion, buildRfq } from "./vendor.js";
-import { categoryName } from "../core/templates.js";
 
 const MAX_TEXT = 1000;
 const HELP =
@@ -190,7 +191,7 @@ export async function handleMention(input, deps = {}) {
     timeline: async () => ({ reply: (await digest(call, { generate })).digestText }),
     ideas: () => ideasReply(call, { generate }),
     advice: () => adviceReply(call, { generate }),
-    // Saving a brief belongs to the route, which knows who is asking and in which group.
+    // Saving a brief belongs to the workflow, which knows who is asking and in which group.
     vendor_brief: () => ({ reply: "", result: { categoryId: plan.categoryId ?? null } }),
     // So does recording an expense: code reads the amount from the person's own words.
     log_expense: () => ({

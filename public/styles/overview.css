@@ -271,17 +271,6 @@
     background: var(--gold-soft);
   }
 }
-@keyframes breathe {
-  50% {
-    opacity: 0.35;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .feed-item.is-new,
-  .live-dot {
-    animation: none;
-  }
-}
 /* Answers are stored as typed, often in lower case. */
 .brief-fact dd::first-letter,
 .brief-must li::first-letter,

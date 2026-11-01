@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { computeBudget } from "../../server/core/budgetEngine.js";
-import { planningSignals } from "../../server/core/signals.js";
 import { buildBudgetState, emptyProfile } from "../../server/core/profile.js";
+import { planningSignals } from "../../server/core/signals.js";
 import { getTemplate } from "../../server/core/templates.js";
 
 const template = getTemplate("corporate_launch");

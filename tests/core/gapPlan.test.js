@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { optionCost, planOf, previewOf } from "../../public/js/budget/gapPlan.js";
 import { resolutionEvents } from "../../server/core/consequences.js";
-import { optionCost, planOf, previewOf } from "../../public/js/gapPlan.js";
 
 // The browser previews the chosen cuts and the server applies them. Both must agree to the paisa,
 // or the chart would show one figure and applying would give another.

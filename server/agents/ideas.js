@@ -1,6 +1,8 @@
+/** Personalised ideas from the event's own profile, each saying why it fits. */
 import { computeBudget } from "../core/budgetEngine.js";
 import { wholeMoney } from "../core/money.js";
 import { rankOf } from "../core/priorities.js";
+import { categoryName } from "../core/templates.js";
 import {
   agentPrompt,
   generate as realGenerate,
@@ -9,7 +11,6 @@ import {
 } from "../llm/index.js";
 import { groundedOr, isGrounded } from "./grounded.js";
 import { ideasOutput } from "./schemas.js";
-import { categoryName } from "../core/templates.js";
 
 const MAX_IDEAS = 5;
 const SYSTEM = agentPrompt({

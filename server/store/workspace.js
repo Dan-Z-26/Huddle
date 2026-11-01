@@ -1,13 +1,11 @@
-import { randomUUID } from "node:crypto";
+/** Creating and removing what belongs to an event: its people, groups, messages and expenses. */
 import { mentionsMoney } from "../core/amount.js";
 import { contingencyOf } from "../core/budgetEngine.js";
-import { applyChangeEvents } from "../core/changeEvents.js";
-import { uncoverEvents } from "../core/expenses.js";
 import { buildBudgetState, emptyProfile } from "../core/profile.js";
 import { getTemplate } from "../core/templates.js";
 import { planTimeline } from "../core/timelinePlanner.js";
 import { messageView } from "../views.js";
-import { newId } from "./ids.js";
+import { agentIdFor, CORE_TEAM, groupIdFor, newId, shortId } from "./ids.js";
 
 /**
  * Creates an event and its seeded people (the manager, the core roles and the four AI members).
@@ -17,7 +15,7 @@ import { newId } from "./ids.js";
  *   fixed id and a ready profile (used by the demo seed).
  * @returns {{event: object, users: object[]}} The new EventProfile and its users.
  */
-export function createEvent(store, { eventType, id = randomUUID().slice(0, 8), profile }) {
+export function createEvent(store, { eventType, id = shortId(), profile }) {
   const template = getTemplate(eventType);
   const event = profile ?? emptyProfile(eventType, id);
   store.events.set(event.id, event);
@@ -30,7 +28,11 @@ export function createEvent(store, { eventType, id = randomUUID().slice(0, 8), p
   return { event, users };
 }
 
-/** The Planner's plain welcome, used when the model hasn't written one. */
+/**
+ * The Planner's plain welcome, used when the model hasn't written one.
+ * @param {{name: string}} event The event.
+ * @returns {string} The welcome.
+ */
 export const welcomeFor = ({ name }) =>
   `Welcome to ${mentionsMoney(name) ? "your event" : name}. I've set up your groups, budget and timeline. Ask me anything with @huddle.`;
 
@@ -46,7 +48,7 @@ export const welcomeFor = ({ name }) =>
 export function createWorkspace(store, event, nowIso, { welcome } = {}) {
   const template = getTemplate(event.eventType);
   const groups = template.groups.map((group) => ({
-    id: `g-${event.id}-${group.slug}`,
+    id: groupIdFor(event.id, group.slug),
     eventId: event.id,
     slug: group.slug,
     name: group.name,
@@ -72,7 +74,7 @@ export function createWorkspace(store, event, nowIso, { welcome } = {}) {
   const announcements = groups.find(({ kind }) => kind === "announcements");
   postAgentMessage(store, {
     groupId: announcements.id,
-    authorId: `agent-planner@${event.id}`,
+    authorId: agentIdFor("planner", event.id),
     text: welcome ?? welcomeFor(event),
     rationale: "Created from your answers and the event-type template.",
     nowIso,
@@ -114,6 +116,26 @@ export function addMessage(store, message) {
 }
 
 /**
+ * Stores a message a person wrote.
+ * @param {object} store The store.
+ * @param {{groupId: string, authorId: string, text: string, fileIds?: string[], nowIso: string}}
+ *   message The message.
+ * @returns {object} The stored message.
+ */
+export function postHumanMessage(store, { groupId, authorId, text, fileIds = [], nowIso }) {
+  return addMessage(store, {
+    id: newId("m"),
+    groupId,
+    authorId,
+    authorKind: "human",
+    text,
+    fileIds,
+    createdAt: nowIso,
+    rationale: null,
+  });
+}
+
+/**
  * Stores a message from an AI member, or a system notice with `authorKind: "system"`.
  * @param {object} store The store.
  * @param {{groupId: string, authorId: string, authorKind?: string, text: string,
@@ -137,6 +159,23 @@ export function postAgentMessage(
     ...(digest ? { digest } : {}),
   });
 }
+
+/**
+ * A new directive on a message, not stored yet.
+ * @param {{message: {id: string, groupId: string}, addressedUserIds: string[], acks?: object[],
+ *   createdAt: string}} input The message, who must confirm it, anyone who already has, and when.
+ * @returns {object} The directive.
+ */
+export const newDirective = ({ message, addressedUserIds, acks = [], createdAt }) => ({
+  id: newId("d"),
+  messageId: message.id,
+  groupId: message.groupId,
+  addressedUserIds,
+  acks,
+  createdAt,
+  remindedAt: null,
+  taskId: null,
+});
 
 /**
  * Removes an event and everything that belongs to it.
@@ -183,29 +222,28 @@ export function deleteEvent(store, eventId) {
  * @returns {object[]} The removed file records, so the caller can delete them from disk.
  */
 export function deleteGroup(store, group) {
-  const home = store.groups.get(`g-${group.eventId}-core-team`);
+  const home = store.groups.get(groupIdFor(group.eventId, CORE_TEAM));
   for (const task of store.tasks.values()) {
     if (task.ownerGroupId === group.id) task.ownerGroupId = home?.id ?? null;
   }
   const files = [...store.files.values()].filter(({ groupId }) => groupId === group.id);
-  for (const [map, key, item] of [
-    ...[...store.messages].map(([k, v]) => [store.messages, k, v]),
-    ...[...store.directives].map(([k, v]) => [store.directives, k, v]),
-    ...[...store.files].map(([k, v]) => [store.files, k, v]),
-  ]) {
-    if (item.groupId === group.id) map.delete(key);
-  }
+  for (const records of [store.messages, store.directives, store.files])
+    for (const [id, record] of records) if (record.groupId === group.id) records.delete(id);
   store.groups.delete(group.id);
   return files;
 }
 
-/** An event's expenses, oldest first. */
+/**
+ * An event's expenses, oldest first.
+ * @param {object} store The store.
+ * @param {string} eventId The event.
+ * @returns {object[]} The expenses.
+ */
 export const eventExpenses = (store, eventId) =>
   [...store.expenses.values()].filter((expense) => expense.eventId === eventId);
 
 /**
- * Records money actually spent. An expense paid from the buffer also uses up the buffer, which
- * replaces the budget object, so any change still being previewed has to be asked again.
+ * Records money actually spent. An expense paid from the buffer also uses up the buffer.
  * @param {object} store The store.
  * @param {{eventId: string, description: string, amountMinor: number, categoryId: string | null,
  *   fromBuffer: boolean, createdById: string}} fields The expense; the caller has validated it.
@@ -219,22 +257,14 @@ export function addExpense(store, fields, nowIso) {
   return expense;
 }
 
-/** Removes an expense, giving back to the buffer what it had paid or what was covered for it. */
-export function removeExpense(store, expense) {
-  store.expenses.delete(expense.id);
-  if (expense.fromBuffer) adjustBufferSpend(store, expense.eventId, -expense.amountMinor);
-  else if (expense.categoryId) {
-    const state = store.budgets.get(expense.eventId);
-    const { events } = uncoverEvents(
-      state,
-      eventExpenses(store, expense.eventId),
-      expense.categoryId,
-    );
-    if (events.length) store.budgets.set(expense.eventId, applyChangeEvents(state, events).state);
-  }
-}
-
-function adjustBufferSpend(store, eventId, deltaMinor) {
+/**
+ * Changes how much of the buffer has been spent. It replaces the budget object, so any change still
+ * being previewed has to be asked again.
+ * @param {object} store The store.
+ * @param {string} eventId The event.
+ * @param {number} deltaMinor What to add; negative gives money back.
+ */
+export function adjustBufferSpend(store, eventId, deltaMinor) {
   const state = store.budgets.get(eventId);
   const { reservedMinor, spentMinor } = contingencyOf(state);
   store.budgets.set(eventId, {

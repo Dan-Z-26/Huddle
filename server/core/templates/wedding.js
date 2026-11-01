@@ -1,3 +1,4 @@
+/** The wedding event type: its categories, roles, groups and answer buttons. */
 import { capacityDriver, category, defineTemplate, driver, scaledMilestones } from "./shared.js";
 
 const categories = [

@@ -1,3 +1,4 @@
+/** Wraps user and document text so a prompt treats it as data, not instructions. */
 const MAX_CHARS = 4000;
 
 /** Goes in every system prompt that receives wrapped text. */

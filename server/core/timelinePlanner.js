@@ -1,12 +1,13 @@
-const MS_PER_DAY = 86400000;
+/** Plans tasks backward from the event date, and flags what is at risk. */
+import { DAY_MS } from "./time.js";
 
 function utcDay(iso) {
   const ms = Date.parse(iso);
   if (Number.isNaN(ms)) throw new RangeError(`invalid date: ${iso}`);
-  return Math.floor(ms / MS_PER_DAY);
+  return Math.floor(ms / DAY_MS);
 }
 
-const isoFromDay = (day) => new Date(day * MS_PER_DAY).toISOString();
+const isoFromDay = (day) => new Date(day * DAY_MS).toISOString();
 
 function schedule(eventDay, daysBefore, today, isDone) {
   const dueDay = eventDay - daysBefore;

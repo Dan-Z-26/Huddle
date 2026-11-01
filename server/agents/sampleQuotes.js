@@ -1,3 +1,4 @@
+/** The demo's sample vendor quotes, and their stored readings for when no model is available. */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 

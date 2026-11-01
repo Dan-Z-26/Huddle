@@ -1,3 +1,4 @@
+/** Checks that anything a model wrote uses only figures code or the user supplied. */
 const AMOUNT =
   /(\d[\d,]*(?:\.\d+)?)\s*(lakhs?|crores?|thousand|million|billion|percent|%|k\b|m\b)?/gi;
 const SCALE_WORDS =

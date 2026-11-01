@@ -1,71 +1,6 @@
+/** The shape of every model's answer. A reply that doesn't match is retried, then falls back. */
 import { z } from "zod";
-
-const short = (max) => z.string().max(max);
-const confidence = z.number().min(0).max(1);
-
-// A price as the user said it. Money stays text so code parses it; a model never converts units.
-const priceFields = {
-  priceKind: z.enum(["perGuest", "fixed", "perUnit"]).optional(),
-  priceText: short(80).optional(),
-  units: z.int().min(0).max(100000).optional(),
-  estimate: z
-    .object({ lowRupees: z.int().min(0).max(1e9), highRupees: z.int().min(0).max(1e9) })
-    .optional(),
-};
-
-/** What the Budget model proposes. Plain union (anyOf), which every provider's JSON Schema accepts. */
-export const changeProposal = z.union([
-  z.object({
-    type: z.literal("guest_count"),
-    delta: z.int().optional(),
-    to: z.int().optional(),
-    confidence,
-  }),
-  z.object({ type: z.literal("budget_total"), amountText: short(80), confidence }),
-  z.object({
-    type: z.literal("category_amount"),
-    category: short(60),
-    amountText: short(80),
-    confidence,
-  }),
-  z.object({
-    type: z.literal("category_shift"),
-    from: short(60),
-    to: short(60),
-    amountText: short(80),
-    confidence,
-  }),
-  z.object({
-    type: z.literal("category_adjust"),
-    category: short(60),
-    direction: z.enum(["increase", "decrease"]),
-    amountText: short(80).optional(),
-    percent: z.int().min(1).max(100).optional(),
-    confidence,
-  }),
-  z.object({
-    type: z.literal("line_item_add"),
-    category: short(60),
-    label: short(80),
-    ...priceFields,
-    confidence,
-  }),
-  z.object({
-    type: z.literal("line_item_remove"),
-    category: short(60),
-    itemId: short(80),
-    confidence,
-  }),
-  z.object({
-    type: z.literal("line_item_swap"),
-    category: short(60),
-    remove: short(80),
-    add: short(80),
-    ...priceFields,
-    confidence,
-  }),
-  z.object({ type: z.literal("quote_accepted"), quoteId: short(80), confidence }),
-]);
+import { categoryRef, rationale, short } from "./schemaParts.js";
 
 const list = z.array(short(120)).max(10).optional();
 
@@ -78,14 +13,14 @@ export const extraction = z.object({
   venueType: short(80).optional(),
   guestText: short(200).optional(),
   budgetText: short(200).optional(),
-  priorities: z.array(short(60)).max(20).optional(),
+  priorities: z.array(categoryRef).max(20).optional(),
   attendeeExperience: short(500).optional(),
   mustHaves: z
     .array(
       z.object({
         text: short(120),
-        categoryId: short(60).nullable().optional(),
-        minTierId: short(60).nullable().optional(),
+        categoryId: categoryRef.nullable().optional(),
+        minTierId: categoryRef.nullable().optional(),
       }),
     )
     .max(10)
@@ -94,7 +29,7 @@ export const extraction = z.object({
   constraints: z
     .object({ deadlines: list, dietary: list, accessibility: list, brand: list, venue: list })
     .optional(),
-  vendorNeeds: z.record(short(60), short(300)).optional(),
+  vendorNeeds: z.record(categoryRef, short(300)).optional(),
   skipped: z.boolean().optional(),
 });
 
@@ -109,36 +44,20 @@ export const discoveryOutput = z.object({
       venueType: list,
       attendeeExperience: list,
       mustHaves: z
-        .array(z.object({ text: short(120), categoryId: short(60).nullable().optional() }))
+        .array(z.object({ text: short(120), categoryId: categoryRef.nullable().optional() }))
         .max(10)
         .optional(),
       constraints: list,
     })
     .optional(),
   questions: z.record(z.string(), short(200)).optional(),
-  rationale: short(300),
-});
-
-export const budgetOutput = z.object({
-  proposals: z.array(changeProposal).max(8),
-  explanation: short(600),
-  answer: short(800).optional(),
-  clarifyingQuestion: short(300).optional(),
-  rationale: short(300),
-});
-
-/** The Budget model's reading of figures that code has already worked out. */
-export const insightOutput = z.object({
-  headline: short(200),
-  insight: short(700),
-  optionNotes: z.array(z.object({ categoryId: short(60), note: short(300) })).max(12),
-  rationale: short(300),
+  rationale,
 });
 
 export const rfqOutput = z.object({
   checklist: z.array(short(160)).max(12),
   rfqQuestions: z.array(short(200)).max(10),
-  rationale: short(300),
+  rationale,
 });
 
 const answerText = short(200).nullable().optional();
@@ -155,7 +74,7 @@ export const quoteExtraction = z.object({
     minGuests: z.int().min(1).max(100000).optional(),
     validUntil: short(80).optional(),
     sources: z.record(short(40), short(160)).optional(),
-    mustHaveIdsMet: z.array(short(60)).max(10).optional(),
+    mustHaveIdsMet: z.array(categoryRef).max(10).optional(),
     answers: z
       .object({
         staffing: answerText,
@@ -165,14 +84,14 @@ export const quoteExtraction = z.object({
       })
       .optional(),
   }),
-  rationale: short(300),
+  rationale,
 });
 
-const wording = (field, max) => z.object({ [field]: short(max), rationale: short(300) });
+const wording = (field, max) => z.object({ [field]: short(max), rationale });
 
 export const taskWordsOutput = z.object({
   tasks: z.array(z.object({ id: short(80), title: short(120) })).max(30),
-  rationale: short(300),
+  rationale,
 });
 export const digestOutput = wording("digestText", 400);
 export const reminderOutput = wording("reminderText", 400);
@@ -183,8 +102,8 @@ export const vendorAnswerOutput = wording("reply", 1500);
 export const linesOutput = z.object({ lines: z.array(short(300)).max(12) });
 export const directiveTaskOutput = z.object({
   title: short(120),
-  ownerGroupSlug: short(60),
-  rationale: short(300),
+  ownerGroupSlug: categoryRef,
+  rationale,
 });
 
 export const ideasOutput = z.object({
@@ -193,15 +112,15 @@ export const ideasOutput = z.object({
       z.object({
         title: short(100),
         whyItFits: short(300),
-        categoryId: short(60),
+        categoryId: categoryRef,
         level: z.enum(["light", "moderate", "stretch"]),
       }),
     )
     .max(6),
-  rationale: short(300),
+  rationale,
 });
 
-export const INTENTS = [
+const INTENTS = [
   "budget_change",
   "vendor_help",
   "timeline",
@@ -223,14 +142,14 @@ export const declineOutput = z.object({ text: short(600) });
 
 export const adviceOutput = z.object({
   items: z.array(z.object({ signalId: short(80), title: short(80), why: short(300) })).max(6),
-  rationale: short(300).optional(),
+  rationale: rationale.optional(),
 });
 
 export const plannerOutput = z.object({
   intent: z.enum(INTENTS),
-  categoryId: short(60).nullable().optional(),
+  categoryId: categoryRef.nullable().optional(),
   expenseDescription: short(120).nullable().optional(),
   suggestDirective: z.boolean(),
   reply: short(600).optional(),
-  rationale: short(300),
+  rationale,
 });

@@ -1,3 +1,4 @@
+/** The Planner's "what to do next": code finds what needs attention, the model orders and explains. */
 import { planningSignals } from "../core/signals.js";
 import {
   agentPrompt,
@@ -52,6 +53,24 @@ const plainItems = (signals) =>
     why: fact,
   }));
 
+// Each step must point at a real signal, once, and say nothing the facts don't.
+function groundedItems(items = [], signals, allowed) {
+  const seen = new Set();
+  return items.flatMap(({ signalId, title, why }) => {
+    const signal = signals.find(({ id }) => id === signalId);
+    if (!signal || seen.has(signalId)) return [];
+    seen.add(signalId);
+    return [
+      {
+        signalId,
+        action: signal.action,
+        title: groundedOr(title, allowed, stepFor(signalId)),
+        why: groundedOr(why, allowed, signal.fact),
+      },
+    ];
+  });
+}
+
 /**
  * Advises the manager on what to do next. Code finds what needs attention and every figure; the
  * model only chooses the order and says why each step matters to this event. A step can't be
@@ -82,7 +101,7 @@ export async function advise(input, { generate = realGenerate } = {}) {
         constraints: profile.constraints,
       }),
     ),
-    wrapUntrusted("signals", facts, 4000),
+    wrapUntrusted("signals", facts),
   ].join("\n");
   const { data, offline } = await generateOrDemo(generate, {
     agent: "budget",
@@ -92,20 +111,7 @@ export async function advise(input, { generate = realGenerate } = {}) {
     demo: () => ({ items: [], summary: "", rationale: "" }),
   });
   const allowed = `${facts} ${JSON.stringify(profile.mustHaves)} ${profile.purpose} ${profile.attendeeExperience}`;
-  const seen = new Set();
-  const items = (data.items ?? []).flatMap(({ signalId, title, why }) => {
-    const signal = signals.find(({ id }) => id === signalId);
-    if (!signal || seen.has(signalId)) return [];
-    seen.add(signalId);
-    return [
-      {
-        signalId,
-        action: signal.action,
-        title: groundedOr(title, allowed, stepFor(signalId)),
-        why: groundedOr(why, allowed, signal.fact),
-      },
-    ];
-  });
+  const items = groundedItems(data.items, signals, allowed);
   return {
     items: items.length ? items.slice(0, MAX_ITEMS) : plainItems(signals),
     summary: "",

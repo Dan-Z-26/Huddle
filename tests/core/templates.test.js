@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { parseAmount } from "../../server/core/amount.js";
-import { parseGuestCount } from "../../server/core/guestCount.js";
 import { allocate, computeBudget, DEFAULT_BUFFER_BPS } from "../../server/core/budgetEngine.js";
+import { parseGuestCount } from "../../server/core/guestCount.js";
 import { shareOfBps } from "../../server/core/money.js";
 import { buildBudgetState } from "../../server/core/profile.js";
-import { planTimeline } from "../../server/core/timelinePlanner.js";
 import { getTemplate, groupsForCategory, listEventTypes } from "../../server/core/templates.js";
+import { planTimeline } from "../../server/core/timelinePlanner.js";
 import { minorValues } from "./fixtures.js";
 
 const EVENT_TYPES = ["corporate_launch", "wedding", "birthday", "community"];

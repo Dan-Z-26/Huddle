@@ -1,4 +1,5 @@
-import { contingencyOf, COVER_LABEL } from "./budgetEngine.js";
+/** Applies change events to a budget. Pure: the budget it is given is never changed. */
+import { contingencyOf, COVER_LABEL, coveredIn } from "./budgetEngine.js";
 import {
   findDriver,
   isAmount,
@@ -84,10 +85,6 @@ function applyLineItemSwap(state, event) {
   return applied(replaceDrivers(state, category.id, drivers));
 }
 
-const coveredIn = (category) =>
-  category.drivers
-    .filter(({ label }) => label === COVER_LABEL)
-    .reduce((sum, { unitMinor }) => sum + unitMinor, 0);
 
 // What a cover moved out of the buffer goes back when the plan it was for no longer needs it.
 function returnToBuffer(state, amountMinor) {
@@ -149,7 +146,7 @@ function applyQuoteAccepted(state, event) {
   }
   const drivers = quoteDrivers(quote);
   if (!drivers) return rejected("quote prices must be non-negative integers");
-  const quotes = state.quotes.map((q) => ({ ...q, status: nextQuoteStatus(q, quote) }));
+  const quotes = state.quotes.map((item) => ({ ...item, status: nextQuoteStatus(item, quote) }));
   // A real price replaces the plan, so what the buffer covered for the old plan goes back.
   const covered = coveredIn(findCategory(state, quote.categoryId));
   return applied(

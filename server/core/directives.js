@@ -1,3 +1,6 @@
+/** Directives in code: who has acknowledged, what is overdue, and what needs a person's attention. */
+import { MINUTE_MS } from "./time.js";
+
 const ackedIds = (directive) => new Set((directive.acks ?? []).map((ack) => ack.userId));
 const addressedIds = (directive) => [...new Set(directive.addressedUserIds ?? [])];
 
@@ -28,7 +31,7 @@ export function overdue(directive, nowIso, slaMinutes) {
   const acks = ackedIds(directive);
   const pendingUserIds = addressedIds(directive).filter((id) => !acks.has(id));
   const waitedMs = Date.parse(nowIso) - Date.parse(directive.createdAt);
-  const isOverdue = pendingUserIds.length > 0 && waitedMs >= slaMinutes * 60000;
+  const isOverdue = pendingUserIds.length > 0 && waitedMs >= slaMinutes * MINUTE_MS;
   return { isOverdue, pendingUserIds, shouldRemind: isOverdue && directive.remindedAt == null };
 }
 

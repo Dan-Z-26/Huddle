@@ -1,3 +1,4 @@
+/** Words what an AI member says in a room, from facts code supplies. */
 import { mentionsMoney } from "../core/amount.js";
 import {
   agentPrompt,

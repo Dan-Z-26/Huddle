@@ -1,5 +1,7 @@
-const DAY_MS = 86400000;
+/** Hiring a vendor: the stages, the tasks that follow a booking, and what to watch in a quote. */
+import { DAY_MS, dayOf } from "./time.js";
 
+/** Each stage of hiring for a category, in order: its id and its label. */
 export const PIPELINE = [
   ["needed", "Needed"],
   ["brief-approved", "Brief approved"],
@@ -11,6 +13,7 @@ export const PIPELINE = [
 ];
 
 // After booking, these are timeline tasks: one place to tick them, and overdue ones get reminders.
+// Each step: its key, its checklist label, its task title and how many days before the event it's due.
 const BOOKED_STEPS = [
   ["contract", "Sign the contract", (name) => `Sign the contract with ${name}`, 30],
   ["deposit", "Pay the deposit", (name) => `Pay the deposit to ${name}`, 21],
@@ -19,20 +22,31 @@ const BOOKED_STEPS = [
   ["arrival", "Arrival time", (name) => `Confirm ${name}'s arrival time`, 2],
 ];
 const CHECKLIST_BOOKED = BOOKED_STEPS.filter(([key]) => key !== "deliverables");
+const SITE_VISIT_DAYS_BEFORE = 45;
 
 const usable = ({ status }) => status === "confirmed" || status === "accepted";
-const taskId = (eventId, categoryId, key) => `${eventId}-task-hire-${categoryId}-${key}`;
+
+/**
+ * The id of a hiring task.
+ * @param {string} eventId The event.
+ * @param {string} categoryId The category.
+ * @param {string} step Which step, such as "deliverables".
+ * @returns {string} The id.
+ */
+export const hireTaskId = (eventId, categoryId, step) => `${eventId}-task-hire-${categoryId}-${step}`;
 
 function dueBefore(eventDateIso, daysBefore, nowIso) {
   const due = Date.parse(eventDateIso) - daysBefore * DAY_MS;
-  const today = Date.parse(nowIso.slice(0, 10));
+  const today = Date.parse(dayOf(nowIso));
   return new Date(Math.max(due, today)).toISOString();
 }
 
-function hireTask({ eventId, categoryId, groupId, eventDateIso, nowIso }, key, title, daysBefore) {
+function hireTask({ eventId, categoryId, groupId, eventDateIso, nowIso }, step, title, daysBefore) {
   return {
-    id: taskId(eventId, categoryId, key),
+    id: hireTaskId(eventId, categoryId, step),
     eventId,
+    categoryId,
+    step,
     title,
     ownerGroupId: groupId,
     ownerUserId: null,
@@ -52,7 +66,12 @@ function hireTask({ eventId, categoryId, groupId, eventDateIso, nowIso }, key, t
  * @returns {object} The task.
  */
 export const siteVisitTask = (context, categoryName) =>
-  hireTask(context, "visit", `Visit the shortlisted ${categoryName} vendors`, 45);
+  hireTask(
+    context,
+    "visit",
+    `Visit the shortlisted ${categoryName} vendors`,
+    SITE_VISIT_DAYS_BEFORE,
+  );
 
 /**
  * The timeline tasks that start when a vendor is booked.
@@ -81,6 +100,12 @@ export function quotesToReview(quotes) {
   return [...counts].map(([categoryId, count]) => ({ categoryId, count }));
 }
 
+function bookedStage(tasks, deliverables) {
+  if (deliverables.length && deliverables.every(({ done }) => done)) return "delivered";
+  const contract = tasks.find(({ step }) => step === "contract");
+  return contract?.status === "done" ? "confirmed" : "booked";
+}
+
 /**
  * Where a category's hiring stands, worked out from what has actually happened.
  * @param {{brief?: object, quotes?: object[], tasks?: object[], deliverables?: object[]}} state The
@@ -88,11 +113,7 @@ export function quotesToReview(quotes) {
  * @returns {string} A stage id from PIPELINE.
  */
 export function pipelineStage({ brief, quotes = [], tasks = [], deliverables = [] }) {
-  if (quotes.some(({ status }) => status === "accepted")) {
-    if (deliverables.length && deliverables.every(({ done }) => done)) return "delivered";
-    const contract = tasks.find(({ id }) => id.endsWith("-contract"));
-    return contract?.status === "done" ? "confirmed" : "booked";
-  }
+  if (quotes.some(({ status }) => status === "accepted")) return bookedStage(tasks, deliverables);
   const count = quotes.filter(usable).length;
   if (count >= 2) return "shortlisted";
   if (count === 1) return "quotes-received";
@@ -107,7 +128,7 @@ export function pipelineStage({ brief, quotes = [], tasks = [], deliverables = [
  */
 export function managerChecklist({ brief, quotes = [], tasks = [] }) {
   const taskStep = (key, label) => {
-    const task = tasks.find(({ id }) => id.endsWith(`-${key}`));
+    const task = tasks.find(({ step }) => step === key);
     return { key, label, done: task?.status === "done", taskId: task?.id ?? null };
   };
   const auto = (key, label, done) => ({ key, label, done, taskId: null });

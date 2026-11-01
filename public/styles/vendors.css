@@ -1,4 +1,30 @@
-/* Vendors */
+/* Vendors and quotes: the steps, quotes, comparison, hiring board and the brief. */
+/* A hiring brief, drawn with headings and lists. */
+.brief-doc {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1.25rem 1.4rem;
+  background: #fff;
+  border: 1px solid var(--gold-line);
+  border-radius: 0.7rem;
+}
+.brief-doc-title {
+  font-family: var(--display);
+  font-size: 1.3rem;
+  margin-bottom: 0.3rem;
+}
+.brief-doc h4 {
+  margin: 0.7rem 0 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gold-deep);
+}
+.brief-doc ul {
+  padding-left: 1.1rem;
+  list-style: disc;
+}
+
+/* The steps */
 .vendor-step {
   margin-top: 1.75rem;
   padding-top: 1.25rem;
@@ -17,43 +43,8 @@
 .vendor-step > .button {
   margin-top: 0.6rem;
 }
-.field {
-  display: grid;
-  gap: 0.3rem;
-  margin-top: 0.75rem;
-}
-.field label,
-.field-row label {
-  font-size: 0.9rem;
-  font-weight: 500;
-}
-.field-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
-  gap: 0 0.75rem;
-}
-.field-row.two {
-  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
-}
 .quote-form .button {
   margin-top: 1rem;
-}
-.typed {
-  margin-top: 0.75rem;
-}
-.typed summary {
-  cursor: pointer;
-  padding-block: 0.3rem;
-  color: var(--pink-deep);
-  font-weight: 500;
-}
-.field-error {
-  color: var(--risk);
-  font-size: 0.9rem;
-  margin-top: 0.5rem;
-}
-.field-error:empty {
-  margin: 0;
 }
 .rfq {
   margin-top: 0.9rem;
@@ -63,15 +54,6 @@
 }
 .rfq:focus {
   outline: none;
-}
-.plain-list {
-  display: grid;
-  gap: 0.35rem;
-  list-style: disc;
-  padding-left: 1.25rem;
-}
-.plain-list li {
-  display: list-item;
 }
 .quote-list {
   display: grid;
@@ -146,61 +128,84 @@
   text-align: right;
   white-space: nowrap;
 }
-.confirm-form {
+
+/* Hiring */
+.board {
   display: grid;
-  gap: 0.25rem;
+  gap: 0.35rem;
+  margin-top: 0.6rem;
 }
-.warnings {
-  color: var(--risk);
-  font-size: 0.9rem;
-  list-style: disc;
-  padding-left: 1.25rem;
-}
-.warnings:empty {
-  display: none;
-}
-.musts {
-  margin: 0.9rem 0 0;
-  border: 1px solid var(--control);
-  border-radius: 0.75rem;
-  padding: 0.6rem 0.9rem 0.8rem;
-}
-.musts legend {
-  font-size: 0.9rem;
-  font-weight: 500;
-  padding: 0 0.4rem;
-}
-.check {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-  padding: 0.25rem 0;
-}
-.check small {
-  font-size: 0.8rem;
-}
-.check input {
-  accent-color: var(--pink);
-}
-input[type="file"] {
+.board-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 1rem;
+  width: 100%;
   font: inherit;
-  font-size: 0.9rem;
-  color: var(--muted);
-  max-width: 100%;
-}
-input[type="file"]::file-selector-button {
-  font: inherit;
-  font-weight: 500;
-  color: var(--pink-deep);
-  background: var(--blush);
-  border: 1px solid var(--pink-soft);
+  text-align: left;
+  color: var(--text);
+  background: none;
+  border: 1px solid var(--line);
   border-radius: 0.6rem;
-  padding: 0.35rem 0.9rem;
-  margin-right: 0.75rem;
+  padding: 0.55rem 0.8rem;
   cursor: pointer;
 }
-dialog:has(.confirm-form) {
-  width: min(42rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
+.board-row:hover {
+  background: var(--blush);
+}
+.board-row[aria-current="true"] {
+  background: var(--blush);
+  border-color: var(--pink);
+}
+.board-row strong {
+  font-weight: 500;
+}
+.board-stage {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.board-steps {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  margin-top: 0.3rem;
+}
+.board-steps span {
+  height: 0.3rem;
+  border-radius: 999px;
+  background: var(--line);
+}
+.board-steps .is-on {
+  background: var(--pink);
+}
+.step-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.25rem 1rem;
+}
+.brief-form .button {
+  margin-top: 0.85rem;
+}
+.brief-text {
+  white-space: pre-wrap;
+  font-size: 0.925rem;
+}
+#brief-result .quote-actions,
+.decide {
+  margin-top: 0.85rem;
+}
+.hire-checklist {
+  display: grid;
+  gap: 0.1rem;
+  margin-top: 0.4rem;
+}
+#invite-link-box {
+  margin-top: 0.6rem;
+}
+#invite-link {
+  flex: 1 1 14rem;
+  width: auto;
+  font-size: 0.85rem;
 }

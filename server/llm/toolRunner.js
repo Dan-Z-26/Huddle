@@ -1,4 +1,5 @@
-export const MAX_TOOL_CALLS = 4;
+/** Runs the tools a model asks for, with a hard cap per turn. */
+const MAX_TOOL_CALLS = 4;
 
 const shortMessage = (err) => String(err?.message ?? "tool failed").slice(0, 200);
 

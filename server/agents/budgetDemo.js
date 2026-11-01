@@ -1,8 +1,10 @@
+/** Offline stand-in for the Budget model: recognises a few plain-English changes with patterns. */
 import { categoriesMentioned } from "./discoveryDemo.js";
 
 export const CLARIFY =
   "I couldn't tell what to change. Try something like 'add 50 guests', 'raise the budget to 18 lakh' or 'swap the DJ for a live band in music'.";
 const HIGH_CONFIDENCE = 0.9;
+const FACTS_SHOWN = 7;
 
 function guestProposal(text) {
   const add = text.match(
@@ -86,7 +88,7 @@ export function demoBudget({ text: asked, template, facts = [] }) {
     return {
       proposals: [],
       explanation: "",
-      answer: `Here is where the budget stands.\n${facts.slice(0, 7).join("\n")}`,
+      answer: `Here is where the budget stands.\n${facts.slice(0, FACTS_SHOWN).join("\n")}`,
       rationale: "I can only show the figures right now.",
     };
   if (!found)

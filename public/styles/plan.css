@@ -1,4 +1,4 @@
-/* Plan */
+/* The plan beside the room: the budget chart, its table and the event brief. */
 .plan {
   padding: 0.25rem clamp(1rem, 2.5vw, 1.35rem) 1.5rem;
   background: linear-gradient(180deg, #fff, var(--blush));
@@ -145,4 +145,25 @@ summary.panel-title {
   grid-column: 2;
   color: var(--muted);
   font-size: 0.78rem;
+}
+.vendor-brief-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+  margin: 1.25rem 0 0.35rem;
+}
+
+/* Event brief */
+.brief-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.brief-item dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.brief-item dd {
+  margin-top: 0.1rem;
+  line-height: 1.4;
+  font-size: 0.925rem;
 }

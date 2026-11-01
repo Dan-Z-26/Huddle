@@ -1,7 +1,8 @@
-import { generate as realGenerate, generateOrDemo } from "../llm/index.js";
+/** The Discovery agent: one setup question at a time, and every answer into the EventProfile. */
 import { missingProfileFields } from "../core/profile.js";
-import { buildMessage, SYSTEM } from "./discoveryPrompt.js";
+import { generate as realGenerate, generateOrDemo } from "../llm/index.js";
 import { demoExtract, directExtract } from "./discoveryDemo.js";
+import { buildMessage, SYSTEM } from "./discoveryPrompt.js";
 import { groundedOr } from "./grounded.js";
 import { applyExtracted, resolveGuests } from "./profileMerge.js";
 import { cleanOptions, guestConfirmation, optionsFor, questionFor } from "./questions.js";
@@ -16,6 +17,8 @@ const MAX_ANSWER = 2000;
 const MAX_PURPOSE = 500;
 const INTAKE_TOOLS = new Set(["parse_guest_count", "missing_profile_fields"]);
 const FIRST_RATIONALE = "Let's start with the basics.";
+const ALL_ANSWERED =
+  "That's everything I need. Check the summary and confirm to create your workspace.";
 
 async function extractWithModel(input, generate, nowIso, { useTools = true } = {}) {
   const { profile, template } = input;
@@ -62,16 +65,16 @@ function settle(profile) {
 }
 
 function chooseQuestion({ working, template, nextField, model, rejected, progressed }) {
-  const base = questionFor(nextField, working, template);
   // Written for this event when the user described it, so a tapped answer needs no model call.
   const written = groundedOr(working.suggestedQuestions?.[nextField] ?? "", "");
+  const planned = written || questionFor(nextField, working, template);
   if (nextField === "guests") {
     const waiting = working.guests.suggested > 0 && working.guests.confirmed === null;
-    return waiting ? guestConfirmation(working.guests) : written || base;
+    return waiting ? guestConfirmation(working.guests) : planned;
   }
-  if (rejected.length || !progressed) return written || base;
+  if (rejected.length || !progressed) return planned;
   const usable = model?.nextField === nextField && groundedOr(model.nextQuestion, "");
-  return usable || written || base;
+  return usable || planned;
 }
 
 // What to tell the user before repeating a question: why the last answer wasn't used.
@@ -150,10 +153,12 @@ async function readFieldAnswer({ working, template, field, answer, mode, nowIso 
   return { working: profile, accepted, rejected, rationale, model };
 }
 
+const isOpening = (mode, answer) => mode === "opening" && typeof answer === "string";
+
 function readGiven({ working, template, field, answer, mode, nowIso }, generate) {
   const nothing = { working, accepted: [], rejected: [], rationale: FIRST_RATIONALE, model: null };
   if (typeof answer !== "string") return nothing;
-  if (mode === "opening") return readOpening({ working, template, answer, nowIso }, generate);
+  if (isOpening(mode, answer)) return readOpening({ working, template, answer, nowIso }, generate);
   return field
     ? readFieldAnswer({ working, template, field, answer, mode, nowIso }, generate)
     : nothing;
@@ -177,7 +182,7 @@ export async function nextStep(
   { generate = realGenerate } = {},
 ) {
   const field = missingProfileFields(profile)[0] ?? null;
-  const opening = mode === "opening" && typeof answer === "string";
+  const opening = isOpening(mode, answer);
   const read = await readGiven(
     { working: structuredClone(profile), template, field, answer, mode, nowIso },
     generate,
@@ -189,26 +194,16 @@ export async function nextStep(
   const nextField = missing[0] ?? null;
   const complete = nextField === null;
   const progressed = accepted.length > 0 || answer === undefined || opening;
-  const nextQuestion = complete
-    ? "That's everything I need. Check the summary and confirm to create your workspace."
-    : chooseQuestion({
-        working,
-        template,
-        nextField,
-        model,
-        rejected,
-        progressed,
-      });
-  const extracted = Object.fromEntries(accepted.map((key) => [key, valueOf(working, key)]));
-  const feedback = complete ? "" : feedbackFor({ rejected, progressed });
   return {
-    nextQuestion,
-    feedback,
+    nextQuestion: complete
+      ? ALL_ANSWERED
+      : chooseQuestion({ working, template, nextField, model, rejected, progressed }),
+    feedback: complete ? "" : feedbackFor({ rejected, progressed }),
     field: nextField,
     options: complete ? [] : optionsFor(nextField, working, template),
     remaining: missing.length,
     heard: opening ? accepted : [],
-    extracted,
+    extracted: Object.fromEntries(accepted.map((key) => [key, valueOf(working, key)])),
     rejected,
     complete,
     rationale,

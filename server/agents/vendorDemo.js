@@ -1,4 +1,4 @@
-// Offline stand-ins for the Vendor model. A file gets a fixed sample; pasted text is read with patterns.
+/** Offline stand-ins for the Vendor model: a file gets a fixed sample, pasted text is read with patterns. */
 
 // Quotes are read from their first 8000 characters, as in the vendor agent.
 const MAX_READ = 8000;
@@ -29,7 +29,7 @@ const lineWith = (text, pattern) => text.match(pattern)?.[0].trim().slice(0, 200
 
 /**
  * Reads a pasted quote with simple patterns.
- * @param {string} text The quote text.
+ * @param {string} input The quote text.
  * @returns {object} An object shaped like the quote extraction schema's `extracted`.
  */
 export function demoQuoteFromText(input) {
@@ -54,5 +54,8 @@ export function demoQuoteFromText(input) {
   };
 }
 
-/** The fixed result for an uploaded file in demo mode, since reading files needs a real model. */
+/**
+ * The fixed result for an uploaded file in demo mode, since reading files needs a real model.
+ * @returns {object} An object shaped like the quote extraction schema's `extracted`.
+ */
 export const demoQuoteFromFile = () => structuredClone(SAMPLE);

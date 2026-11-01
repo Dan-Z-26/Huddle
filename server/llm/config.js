@@ -1,3 +1,4 @@
+/** Which provider and model each agent uses, from environment variables only. */
 const KEY_VARS = { gemini: "GEMINI_API_KEY", anthropic: "ANTHROPIC_API_KEY" };
 // Small fast models for intent and wording; stronger ones for budget and vendor reasoning.
 const FAST_AGENTS = new Set(["PLANNER", "DISCOVERY", "TIMELINE", "NOTICES"]);
@@ -29,11 +30,11 @@ export function resolveAgent(agent, env = process.env) {
   // With no second provider, the provider's other model tier: one model can be overloaded while
   // the other is fine, and a busy model should not push the app onto its offline rules.
   const otherTier = env[`${provider.toUpperCase()}_${tier === "FAST" ? "SMART" : "FAST"}_MODEL`];
-  const sameProvider = () =>
-    primary && otherTier && otherTier !== primary.model ? target(provider, otherTier, env) : null;
-  const fallback = fallbackProvider
-    ? target(fallbackProvider, env.FALLBACK_MODEL || tierModel(fallbackProvider), env)
-    : sameProvider();
+  const hasOtherTier = primary && otherTier && otherTier !== primary.model;
+  const secondProvider = () =>
+    target(fallbackProvider, env.FALLBACK_MODEL || tierModel(fallbackProvider), env);
+  const otherTierTarget = () => (hasOtherTier ? target(provider, otherTier, env) : null);
+  const fallback = fallbackProvider ? secondProvider() : otherTierTarget();
 
   return primary ? { live: true, ...primary, fallback } : { live: false, fallback: null };
 }

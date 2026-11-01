@@ -1,3 +1,4 @@
+/** The Vendor agent's instructions. */
 import { agentPrompt } from "../llm/index.js";
 
 export const RFQ_SYSTEM = agentPrompt({

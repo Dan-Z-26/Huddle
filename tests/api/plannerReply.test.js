@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
 import { runReminders } from "../../server/reminders.js";
+import { DEMO_EVENT_ID as ID } from "../../server/store/seed.js";
 import { settle, startDemo } from "./helpers.js";
 
 const MANAGER = `user-manager@${ID}`;

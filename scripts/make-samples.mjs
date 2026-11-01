@@ -29,19 +29,19 @@ function pdfOf(lines) {
   return `${body}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
 }
 
-for (const { file, extracted: q } of SAMPLE_QUOTES) {
+for (const { file, extracted: quote } of SAMPLE_QUOTES) {
   const lines = [
-    `Quotation from ${q.vendorName}`,
+    `Quotation from ${quote.vendorName}`,
     "",
-    q.sources.price,
-    q.sources.tax ?? "",
-    `Includes: ${q.includes.join(", ")}`,
-    q.exclusions ? `Not included: ${q.exclusions.join(", ")}` : "",
-    q.minGuests ? `Minimum ${q.minGuests} guests` : "",
-    `Staffing: ${q.answers.staffing}`,
-    `Setup time: ${q.answers.setupHours}`,
-    `Cancellation: ${q.answers.cancellationTerms}`,
-    `Valid until ${q.validUntil}`,
+    quote.sources.price,
+    quote.sources.tax ?? "",
+    `Includes: ${quote.includes.join(", ")}`,
+    quote.exclusions ? `Not included: ${quote.exclusions.join(", ")}` : "",
+    quote.minGuests ? `Minimum ${quote.minGuests} guests` : "",
+    `Staffing: ${quote.answers.staffing}`,
+    `Setup time: ${quote.answers.setupHours}`,
+    `Cancellation: ${quote.answers.cancellationTerms}`,
+    `Valid until ${quote.validUntil}`,
   ].filter((text, index) => text || index === 1);
   writeFileSync(new URL(`../public/samples/${file}`, import.meta.url), pdfOf(lines));
 }

@@ -1,3 +1,4 @@
+/** The event types, and looking things up in their templates. */
 import { birthday } from "./templates/birthday.js";
 import { community } from "./templates/community.js";
 import { corporateLaunch } from "./templates/corporateLaunch.js";

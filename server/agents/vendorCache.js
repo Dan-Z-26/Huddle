@@ -1,3 +1,4 @@
+/** Keeps what the Vendor agent has already worked out, so it isn't asked twice. */
 const MAX_CACHE = 100;
 
 /**

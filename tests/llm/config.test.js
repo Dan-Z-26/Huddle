@@ -36,13 +36,13 @@ describe("resolveAgent", () => {
     const env = {
       ...KEYS,
       ANTHROPIC_API_KEY: "a-key",
-      ANTHROPIC_SMART_MODEL: "claude-model",
+      ANTHROPIC_SMART_MODEL: "anthropic-model",
       VENDOR_PROVIDER: "anthropic",
     };
     const route = resolveAgent("vendor", env);
     assert.deepEqual(
       [route.live, route.provider, route.model, route.apiKey],
-      [true, "anthropic", "claude-model", "a-key"],
+      [true, "anthropic", "anthropic-model", "a-key"],
     );
     assert.equal(resolveAgent("budget", env).provider, "gemini");
   });

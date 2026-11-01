@@ -1,5 +1,7 @@
+/** Turns a manager's directive into a timeline task: code reads the date, the model words the title. */
 import { parseDueDate } from "../core/dateText.js";
 import { groupsForCategory } from "../core/templates.js";
+import { DAY_MS, dayOf } from "../core/time.js";
 import {
   agentPrompt,
   generate as realGenerate,
@@ -12,7 +14,6 @@ import { directiveTaskOutput } from "./schemas.js";
 
 const MAX_TEXT = 1000;
 const DEFAULT_DUE_DAYS = 2;
-const DAY_MS = 86400000;
 
 const TASK_SYSTEM = agentPrompt({
   role: "You are Planner. You turn a manager's directive into one timeline task title, and pick which group owns it.",
@@ -59,12 +60,12 @@ export async function taskFromDirective(
   });
   const title =
     isGrounded(data.title, text) && data.title.trim() ? data.title.trim() : demo().title;
-  const today = new Date(nowIso).toISOString().slice(0, 10);
+  const today = dayOf(nowIso);
   const parsed = parseDueDate(text, nowIso);
   const dueDate =
-    parsed && parsed.slice(0, 10) >= today
+    parsed && dayOf(parsed) >= today
       ? parsed
-      : new Date(Date.parse(`${today}T00:00:00.000Z`) + DEFAULT_DUE_DAYS * DAY_MS).toISOString();
+      : new Date(Date.parse(today) + DEFAULT_DUE_DAYS * DAY_MS).toISOString();
   return {
     title,
     ownerGroupSlug: slugs.includes(data.ownerGroupSlug) ? data.ownerGroupSlug : fallbackOwner,

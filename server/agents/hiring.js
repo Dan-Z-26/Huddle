@@ -1,4 +1,6 @@
+/** The Vendor agent's hiring brief and decline note. The brief's layout is code, so it reads the same however it was written. */
 import { mentionsMoney } from "../core/amount.js";
+import { longDate } from "../core/time.js";
 import {
   agentPrompt,
   generate as realGenerate,
@@ -51,9 +53,6 @@ const DECLINE_SYSTEM = agentPrompt({
   ],
 });
 
-const dateWords = (iso) =>
-  new Date(iso).toLocaleDateString("en-GB", { dateStyle: "long", timeZone: "UTC" });
-
 /**
  * Answers for a new brief, filled in from what the event already knows, so the lead only corrects
  * them. Never holds money: budget figures aren't read.
@@ -67,7 +66,7 @@ export function defaultAnswers(profile, category) {
   return {
     scope: `${category.name} for ${profile.name}, for ${profile.guests.confirmed} guests.`,
     deliverables: "",
-    dates: `${dateWords(profile.date)} in ${profile.city}.`,
+    dates: `${longDate(profile.date)} in ${profile.city}.`,
     mustHaves: own.map(({ text }) => text).join(", "),
     judging: "Fit with our must-haves, clear all-in pricing and reliability.",
   };

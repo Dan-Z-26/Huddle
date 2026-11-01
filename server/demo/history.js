@@ -1,10 +1,11 @@
+/** Gives the demo event a past: chat, finished tasks, and a part-acknowledged directive. */
 import { rewordLines } from "../agents/speech.js";
+import { HOUR_MS } from "../core/time.js";
 import { taskFromDirective } from "../core/timelinePlanner.js";
+import { agentIdFor, CORE_TEAM, groupIdFor, newId } from "../store/ids.js";
 import { DEMO_EVENT_ID as ID } from "../store/seed.js";
 import { addMessage } from "../store/workspace.js";
-import { newId } from "../store/ids.js";
 
-const HOUR_MS = 3600000;
 const MANAGER = `user-manager@${ID}`;
 const DESIGNER = `user-creative-director@${ID}`;
 const PRODUCTION = `user-production-lead@${ID}`;
@@ -41,7 +42,7 @@ export function seedHistory(store, nowIso) {
   const say = (hours, slug, authorId, text) =>
     addMessage(store, {
       id: newId("m"),
-      groupId: `g-${ID}-${slug}`,
+      groupId: groupIdFor(ID, slug),
       authorId,
       authorKind: "human",
       text,
@@ -68,7 +69,7 @@ export function seedHistory(store, nowIso) {
   const task = {
     ...taskFromDirective(directive, {
       title: "Confirm the vendor shortlist",
-      ownerGroupId: `g-${ID}-core-team`,
+      ownerGroupId: groupIdFor(ID, CORE_TEAM),
       dueDate: new Date(now + 3 * 24 * HOUR_MS).toISOString(),
     }),
     eventId: ID,
@@ -92,7 +93,7 @@ export function seedHistory(store, nowIso) {
 export async function freshenOpeningLines(store, deps) {
   const event = store.events.get(ID);
   const fromPlanner = [...store.messages.values()].filter(
-    ({ authorKind, authorId }) => authorKind === "agent" && authorId === `agent-planner@${ID}`,
+    ({ authorKind, authorId }) => authorKind === "agent" && authorId === agentIdFor("planner", ID),
   );
   // The seed posts them all at one moment. Anything later is a real reply, which stays as written.
   const opening = fromPlanner.filter(({ createdAt }) => createdAt === fromPlanner[0]?.createdAt);

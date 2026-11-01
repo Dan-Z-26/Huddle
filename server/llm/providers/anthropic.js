@@ -1,3 +1,4 @@
+/** The Anthropic adapter: translates one model turn, and nothing else. */
 const MAX_TOKENS = 4096;
 const clients = new Map();
 

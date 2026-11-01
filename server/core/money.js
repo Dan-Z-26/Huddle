@@ -1,3 +1,4 @@
+/** Money arithmetic and formatting. Amounts are integer minor units, so no float errors. */
 const BPS_DENOMINATOR = 10000;
 
 // Caps keep perGuest price x guests (and sums of a few drivers) inside Number.MAX_SAFE_INTEGER.

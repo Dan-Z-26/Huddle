@@ -1,3 +1,4 @@
+/** Checks what a file really is from its first bytes. Names and claimed types are never trusted. */
 export const MAX_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_FILES = 3;
 

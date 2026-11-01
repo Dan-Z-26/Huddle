@@ -11,9 +11,10 @@
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/styles/base.css" />
-    <link rel="stylesheet" href="/styles/header.css" />
+    <link rel="stylesheet" href="/styles/controls.css" />
+    <link rel="stylesheet" href="/styles/shell.css" />
     <link rel="stylesheet" href="/styles/overview.css" />
-    <link rel="stylesheet" href="/styles/pages.css" />
+    <link rel="stylesheet" href="/styles/ask.css" />
     <link rel="stylesheet" href="/styles/chat.css" />
     <link rel="stylesheet" href="/styles/vendors.css" />
     <link rel="stylesheet" href="/styles/setup.css" />
@@ -62,9 +63,9 @@
             </defs>
             <path d="M10 22 5 41l7-4 4 5 2-19zM24 22l5 19-7-4-4 5-2-19z" fill="url(#gold)" />
             <circle cx="17" cy="14" r="13" fill="url(#gold)" />
-            <circle cx="17" cy="14" r="8.500" fill="#fff" />
+            <circle cx="17" cy="14" r="8.5" fill="#fff" />
             <path
-              d="M17 8.500l1.700 3.800 4 .4-3 2.700.9 4-3.600-2.100-3.600 2.100.9-4-3-2.700 4-.4z"
+              d="M17 8.5l1.7 3.8 4 .4-3 2.7.9 4-3.6-2.1-3.6 2.1.9-4-3-2.7 4-.4z"
               fill="#b5175c"
             />
           </svg>
@@ -103,9 +104,7 @@
             <li>
               <button type="button" id="ask-nav" class="ask-nav" hidden>
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path
-                    d="M12 3l1.900 5.600 5.600 1.900-5.600 1.900L12 18l-1.900-5.600-5.600-1.900 5.600-1.900z"
-                  />
+                  <path d="M12 3l1.9 5.6 5.6 1.9-5.6 1.9L12 18l-1.9-5.6-5.6-1.9 5.6-1.9z" />
                 </svg>
                 Ask Huddle
               </button>
@@ -121,7 +120,7 @@
             <li>
               <button type="button" id="budget-nav" hidden>
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3a9 9 0 1 0 9 9h-9zM15.500 3.700A9 9 0 0 1 20.300 8.500H15.500z" />
+                  <path d="M12 3a9 9 0 1 0 9 9h-9zM15.5 3.7A9 9 0 0 1 20.3 8.5H15.5z" />
                 </svg>
                 Budget and expenses
               </button>
@@ -136,7 +135,7 @@
             </li>
           </ul>
           <div class="side-head">
-            <h2 id="groups-heading" class="side-heading">Groups</h2>
+            <h2 class="side-heading">Groups</h2>
             <button type="button" id="manage-groups" class="link-button" hidden>Manage</button>
           </div>
           <ul id="group-list" class="group-list"></ul>

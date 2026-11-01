@@ -1,11 +1,15 @@
+/** The timers' work: daily digests, and reminders for what has waited too long. */
 import { reminder } from "./agents/timeline.js";
 import { overdue } from "./core/directives.js";
-import { postSpoken } from "./routes/agentPost.js";
-import { postDigest } from "./routes/timeline.js";
-import { groupPeople } from "./views.js";
+import { dayOf } from "./core/time.js";
+import { agentIdFor, ANNOUNCEMENTS, groupIdFor } from "./store/ids.js";
 import { postAgentMessage } from "./store/workspace.js";
+import { groupPeople } from "./views.js";
+import { postSpoken } from "./workflows/agentPost.js";
+import { postDigest } from "./workflows/timeline.js";
 
 const MAX_PER_RUN = 5;
+const DEFAULT_SLA_MINUTES = 120;
 
 /**
  * Posts today's digest for every event that has a workspace and hasn't had one today.
@@ -14,17 +18,78 @@ const MAX_PER_RUN = 5;
  * @returns {Promise<number>} How many were posted.
  */
 export async function runDailyDigests(store, nowIso) {
-  const today = nowIso.slice(0, 10);
+  const today = dayOf(nowIso);
   const due = [...store.events.values()]
     .filter(
       ({ id }) =>
         store.budgets.has(id) &&
-        store.groups.has(`g-${id}-announcements`) &&
+        store.groups.has(groupIdFor(id, ANNOUNCEMENTS)) &&
         !store.digests.has(`${id}:${today}`),
     )
     .slice(0, MAX_PER_RUN);
   await Promise.all(due.map((event) => postDigest(store, event, nowIso)));
   return due.length;
+}
+
+// Only people still in the group are reminded; someone removed can no longer see it.
+function pendingNames(store, group, pendingUserIds) {
+  const inGroup = new Set(groupPeople(store, group).map(({ id }) => id));
+  return pendingUserIds
+    .filter((id) => inGroup.has(id))
+    .map((id) => store.users.get(id)?.name)
+    .filter(Boolean);
+}
+
+// Marked first, so a slow model call can't lead to the same reminder twice, and whatever happens,
+// so nobody to remind can't hold up the ones that can be. Says whether a reminder was posted.
+async function remindAbout(store, directive, { nowIso, slaMinutes, generate }) {
+  const group = store.groups.get(directive.groupId);
+  const message = store.messages.get(directive.messageId);
+  const { pendingUserIds } = overdue(directive, nowIso, slaMinutes);
+  directive.remindedAt = nowIso;
+  if (!group || !message) return false;
+  const names = pendingNames(store, group, pendingUserIds);
+  if (names.length === 0) return false;
+  try {
+    const { reminderText } = await reminder(
+      { directiveText: message.text, pendingNames: names },
+      generate ? { generate } : undefined,
+    );
+    postAgentMessage(store, {
+      groupId: group.id,
+      authorId: agentIdFor("timeline", group.eventId),
+      text: reminderText,
+      nowIso,
+    });
+    return true;
+  } catch (err) {
+    console.error(`Reminder failed with ${err.name}`);
+    return false;
+  }
+}
+
+// Anything overdue on a booking is reminded once, in the group that owns it. No model needed.
+function remindAboutVendorTasks(store, nowIso) {
+  const today = dayOf(nowIso);
+  const overdueTasks = [...store.tasks.values()]
+    .filter(
+      ({ source, status, dueDate, remindedAt }) =>
+        source === "vendor" && status !== "done" && !remindedAt && dayOf(dueDate) < today,
+    )
+    .slice(0, MAX_PER_RUN);
+  for (const task of overdueTasks) {
+    task.remindedAt = nowIso;
+    if (store.groups.has(task.ownerGroupId))
+      postSpoken(store, {
+        groupId: task.ownerGroupId,
+        eventId: task.eventId,
+        agent: "timeline",
+        situation: "A step this room owns has gone past its date. Nudge kindly.",
+        facts: [`Reminder: "${task.title}" is overdue.`],
+        nowIso,
+      });
+  }
+  return overdueTasks.length;
 }
 
 /**
@@ -37,71 +102,17 @@ export async function runDailyDigests(store, nowIso) {
  *   reminder, the model call, replaceable in tests, and one event to limit it to.
  * @returns {Promise<number>} How many reminders were posted.
  */
-export async function runReminders(store, nowIso, { slaMinutes = 120, generate, eventId } = {}) {
+export async function runReminders(
+  store,
+  nowIso,
+  { slaMinutes = DEFAULT_SLA_MINUTES, generate, eventId } = {},
+) {
   const due = [...store.directives.values()]
     .filter((directive) => !eventId || store.groups.get(directive.groupId)?.eventId === eventId)
     .filter((directive) => overdue(directive, nowIso, slaMinutes).shouldRemind)
     .slice(0, MAX_PER_RUN);
   let posted = 0;
-  for (const directive of due) {
-    const group = store.groups.get(directive.groupId);
-    const message = store.messages.get(directive.messageId);
-    // Marked either way: nobody to remind must not hold up the ones that can be.
-    if (!group || !message) {
-      directive.remindedAt = nowIso;
-      continue;
-    }
-    // Only people still in the group are reminded; someone removed can no longer see it.
-    const inGroup = new Set(groupPeople(store, group).map(({ id }) => id));
-    const pending = overdue(directive, nowIso, slaMinutes).pendingUserIds.filter((id) =>
-      inGroup.has(id),
-    );
-    const names = pending.map((id) => store.users.get(id)?.name).filter(Boolean);
-    // Marked first, so a slow model call can't lead to the same reminder twice.
-    directive.remindedAt = nowIso;
-    if (names.length === 0) continue;
-    try {
-      const { reminderText } = await reminder(
-        { directiveText: message.text, pendingNames: names },
-        generate ? { generate } : undefined,
-      );
-      postAgentMessage(store, {
-        groupId: group.id,
-        authorId: `agent-timeline@${group.eventId}`,
-        text: reminderText,
-        nowIso,
-      });
-      posted += 1;
-    } catch (err) {
-      console.error(`Reminder failed with ${err.name}`);
-    }
-  }
+  for (const directive of due)
+    if (await remindAbout(store, directive, { nowIso, slaMinutes, generate })) posted += 1;
   return posted + remindAboutVendorTasks(store, nowIso);
-}
-
-// Anything overdue on a booking is reminded once, in the group that owns it. No model needed.
-function remindAboutVendorTasks(store, nowIso) {
-  const today = nowIso.slice(0, 10);
-  const overdueTasks = [...store.tasks.values()]
-    .filter(
-      ({ source, status, dueDate, remindedAt }) =>
-        source === "vendor" && status !== "done" && !remindedAt && dueDate.slice(0, 10) < today,
-    )
-    .slice(0, MAX_PER_RUN);
-  for (const task of overdueTasks) {
-    task.remindedAt = nowIso;
-    if (store.groups.has(task.ownerGroupId)) {
-      const late = `Reminder: "${task.title}" is overdue.`;
-      postSpoken(store, {
-        groupId: task.ownerGroupId,
-        eventId: task.eventId,
-        agent: "timeline",
-        situation: "A step this room owns has gone past its date. Nudge kindly.",
-        facts: [late],
-        fallback: late,
-        nowIso,
-      });
-    }
-  }
-  return overdueTasks.length;
 }

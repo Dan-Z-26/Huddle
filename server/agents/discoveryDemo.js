@@ -1,8 +1,10 @@
+/** Offline stand-ins for the Discovery model: read an answer with plain patterns. */
 import { parseEventDate } from "../core/dateText.js";
 import { categoryOfOption } from "./questions.js";
 
 // Long enough for any profile field, short enough to keep the patterns fast.
 const MAX_ANSWER = 500;
+const MAX_MUST_HAVES = 10;
 
 const plain = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 const CONSTRAINT_HINTS = [
@@ -12,13 +14,18 @@ const CONSTRAINT_HINTS = [
   ["venue", /venue|capacity|noise|curfew|power|parking|permit/],
 ];
 
-/** Category ids in the order the answer first mentions them (by id or name words). */
+/**
+ * Category ids in the order the answer first mentions them (by id or name words).
+ * @param {string} answer The words.
+ * @param {{categories: object[]}} template The event template.
+ * @returns {string[]} The ids.
+ */
 export function categoriesMentioned(answer, template) {
   const text = plain(answer);
   return template.categories
     .map(({ id, name }) => {
       const words = [...id.split("-"), ...plain(name).split(/[^a-z0-9]+/)].filter(
-        (w) => w.length > 1,
+        (word) => word.length > 1,
       );
       const hits = words
         .map((word) => text.search(new RegExp(`\\b${word}s?\\b`)))
@@ -35,7 +42,7 @@ function mustHavesFrom(answer, template) {
     .split(/[,;\n]|\band\b/i)
     .map((item) => item.trim())
     .filter((item) => item.length >= 3)
-    .slice(0, 10)
+    .slice(0, MAX_MUST_HAVES)
     .map((text) => ({ text, categoryId: categoriesMentioned(text, template)[0] ?? null }));
 }
 
@@ -50,7 +57,7 @@ function constraintsFrom(answer) {
   const lists = { deadlines: [], dietary: [], accessibility: [], brand: [], venue: [] };
   for (const part of answer
     .split(/[,;\n]/)
-    .map((p) => p.trim())
+    .map((item) => item.trim())
     .filter(Boolean)) {
     const [key] = CONSTRAINT_HINTS.find(([, hint]) => hint.test(part.toLowerCase())) ?? [
       "deadlines",

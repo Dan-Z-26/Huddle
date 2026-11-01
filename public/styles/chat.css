@@ -1,44 +1,4 @@
-/* Team workspace */
-.link-button {
-  font: inherit;
-  font-size: 0.85rem;
-  color: var(--pink-deep);
-  background: none;
-  border: 0;
-  padding: 0.15rem 0;
-  text-align: left;
-  cursor: pointer;
-}
-.link-button:hover {
-  text-decoration: underline;
-}
-.attention-list {
-  display: grid;
-  gap: 0.5rem;
-  color: var(--text);
-}
-.attention-list .link-button {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-  line-height: 1.4;
-}
-.unread {
-  margin-left: auto;
-  flex: none;
-  padding: 0 0.45rem;
-  border-radius: 999px;
-  background: var(--pink);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 600;
-}
-.button.small {
-  padding: 0.25rem 0.8rem;
-  font-size: 0.85rem;
-}
-
+/* Writing in a room: the message box, attachments and directives. */
 /* Composer */
 .composer {
   flex: none;
@@ -76,14 +36,6 @@
 }
 .composer-row {
   justify-content: space-between;
-}
-.composer-status:not(.is-error) {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }
 .composer-status.is-error {
   color: var(--risk);
@@ -300,40 +252,4 @@
 .directive-text {
   flex: 1 1 14rem;
   font-weight: 500;
-}
-.pin-quote {
-  padding: 0.6rem 0.85rem;
-  border-radius: 0.7rem;
-  background: var(--blush);
-  white-space: pre-wrap;
-}
-.admin-list {
-  display: grid;
-  gap: 1rem;
-  margin: 1rem 0;
-}
-.admin-row,
-.admin-new {
-  padding: 0.9rem 1rem;
-  border: 1px solid var(--line);
-  border-radius: 0.8rem;
-}
-.admin-name {
-  display: grid;
-  gap: 0.25rem;
-  font-weight: 500;
-  font-size: 0.9rem;
-}
-.admin-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.75rem;
-}
-.admin-new h3 {
-  font-size: 1rem;
-  font-weight: 500;
-}
-.attention-list .link-button {
-  text-decoration: underline;
 }

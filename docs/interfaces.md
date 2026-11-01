@@ -1,16 +1,15 @@
 # Huddle shared interfaces
 
-The contract between builders. If this file disagrees with a subagent brief, this file wins. Change it before changing a shape another folder depends on.
+The data shapes and function signatures shared between folders. Change this file before changing a shape another folder depends on.
 
 All code is ES modules. All money is integer paise (`*Minor`). All dates are ISO 8601 strings in UTC.
 
-## Decisions that override the briefs
+## Key decisions
 
 - **Sign-in uses a server-side session.** `POST /api/session` starts one, and the `huddle_session` cookie (HttpOnly, SameSite=Lax) holds only its random id. The server derives the user and role from it on every route. The demo sign-in is closed to sessions started by a vendor invite link, and by `DEMO_SIGNIN=off`.
 - **Vendors are not users until accepted.** On acceptance a vendor becomes a user of kind `vendor`, in that category's first group only. `ownEvent` refuses them unless a route passes `vendorsToo`, and everything sent to them passes `redactForVendor`: messages from `joinedAt` on, with amounts hidden. The manager and category leads collect quotes and enter or upload them. (Decision of 2026-11-01, replacing 2026-10-31.)
 - **Agents act with the asker's permissions.** A core member's `@huddle` must not reach the total budget or another area's budget: tools are filtered by `canSeeBudget`/`canView`.
 - **Two-stage model calls.** Tool turns without a schema (max 4 tool calls), then one final turn with the schema and no tools.
-- **Nobody commits.** The developer runs all git commits and pushes.
 
 ## Backend shape (keep it simple)
 
@@ -26,7 +25,8 @@ server/
   views.js        what each person may see of messages, directives and profiles
   sse.js          Set of clients, broadcast(event), heartbeat
   reminders.js    runReminders(store, nowIso), called by the timer and tests
-  routes/         session, events, budget, budgetNotices, expenses, timeline, groups, messages, files, multipart, vendors, hiring, vendorAccess, stream
+  routes/         session, events, intake, budget, expenses, timeline, groups, messages, files, multipart, vendors, hiring, vendorAccess, stream
+  workflows/      agentPost, attention, booking, briefs, budgetChange, budgetNotices, directives, expenseWatch, plannerReply, quotes, timeline, vendors
   store/          index.js (createStore), ids.js, seed.js
   validation/     schemas.js (requests), uploads.js (signature check)
 ```
@@ -285,7 +285,7 @@ A driver with source `estimate` adds 0 to `committedMinor`, and its range adds t
 
 **Allocation.** `allocate(totalMinor, categories, priorities)` splits by `typicalBps` (the event type's usual share, a rough guide) times a rank multiplier: 160% at rank 1 falling to 100% at the last ranked, 50% if unranked. It sums exactly. `buildBudgetState` first sets aside `DEFAULT_BUFFER_BPS` (10%). `computeBudget` returns `contingency: { reservedMinor, spentMinor, availableMinor }` and `remainingMinor = total - reserved - committed`; shortfall and surplus are measured against `total - reserved`. Accept takes `useBuffer`, which draws first, then `cuts`, then `raise`.
 
-**Templates.** A role is `{ id, name, kind, categoryIds }`. A group is `{ slug, name, kind, memberRoleIds, categoryIds }`. `seedUsers` includes the four AI members (Planner, Budget, Vendor, Timeline) with kind `agent`. `intakeOptions` holds the event type's answer buttons (`purpose`, `city`, `venueType`, `guests`, `budget`, `attendeeExperience`, `constraints` as strings; `mustHaves` as `{ text, categoryId }`). The category list and order come from the plan's template table and are for display only: the user does the ranking.
+**Templates.** A role is `{ id, name, kind, categoryIds }`. A group is `{ slug, name, kind, memberRoleIds, categoryIds }`. `seedUsers` includes the four AI members (Planner, Budget, Vendor, Timeline) with kind `agent`. `intakeOptions` holds the event type's answer buttons (`purpose`, `city`, `venueType`, `guests`, `budget`, `attendeeExperience`, `constraints` as strings; `mustHaves` as `{ text, categoryId }`). The category list and order come from the template and are for display only: the user does the ranking.
 
 ## `server/llm/`
 
@@ -409,7 +409,7 @@ All are under `/api`. Errors are `{ error: { code, message } }`, with codes `BAD
 
 `*` means rate limited, because the route can call a model. `POST /groups/:id/messages` calls a model only when the text mentions `@huddle`.
 
-Message attachments arrive with the message (Phase 6). A quote file arrives with the quote and is stored against the category's group. Uploads: PDF, PNG, JPEG or WEBP only, judged by the file's first bytes; at most 5 MB; stored under a random name outside `public/`.
+Message attachments arrive with the message. A quote file arrives with the quote and is stored against the category's group. Uploads: PDF, PNG, JPEG or WEBP only, judged by the file's first bytes; at most 5 MB; stored under a random name outside `public/`.
 
 Ids: the demo event is `demo`; users are `<seedId>@<eventId>` (for example `user-manager@demo`) and groups are `g-<eventId>-<slug>`. `POST /events` creates the event with its people and sets the cookie to its manager; groups, budget and timeline are created by `intake/confirm`. At most 50 events are kept in memory: the oldest non-demo event is replaced at the cap, and each client can create 20 an hour.
 
@@ -445,6 +445,6 @@ store.tasksForEvent(eventId), store.directivesForEvent(eventId)
 
 ## Frontend rules that depend on the API
 
-- `public/js/api.js` is the only module that calls `fetch` or opens `EventSource`.
+- `public/js/shared/api.js` is the only module that calls `fetch` or opens `EventSource`.
 - Download links and image previews use `/api/files/:id` directly, since the cookie is sent automatically.
 - Set colours through CSS classes or the CSSOM, and use SVG `fill` attributes for the pie. The CSP blocks inline `style` attributes.

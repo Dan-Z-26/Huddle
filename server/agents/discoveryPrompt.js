@@ -1,3 +1,4 @@
+/** The Discovery agent's instructions, and how each request to it is written. */
 import { agentPrompt, wrapUntrusted } from "../llm/index.js";
 
 /** The Discovery agent's instructions. */

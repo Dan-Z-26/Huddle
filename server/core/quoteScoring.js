@@ -1,3 +1,4 @@
+/** Compares vendor quotes on must-have fit and cost, weighted by the user's own ranking. */
 import { withTax } from "./money.js";
 import { rankOf } from "./priorities.js";
 
@@ -64,7 +65,9 @@ export function scoreQuotes(
   quotes,
   { guestCount, priorities, mustHaves, categoryId, absoluteMustHaveId = null },
 ) {
-  const scorable = quotes.filter((q) => q.categoryId === categoryId && q.status !== "extracted");
+  const scorable = quotes.filter(
+    (quote) => quote.categoryId === categoryId && quote.status !== "extracted",
+  );
   const categoryMustHaves = mustHaves.filter((mustHave) => mustHave.categoryId === categoryId);
   const fitPct = fitWeight(priorities, categoryId);
   const normalised = scorable.map((quote) => normaliseQuote(quote, guestCount));

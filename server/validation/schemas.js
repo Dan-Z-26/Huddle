@@ -1,14 +1,19 @@
+/** The shape of every request. Anything else is refused before a route runs. */
 import { z } from "zod";
 import { listEventTypes } from "../core/templates.js";
 
 const id = z.string().min(1).max(80);
 const eventTypes = listEventTypes().map(({ eventType }) => eventType);
 
+const params = z.object({ id });
+
+/** A request whose only input is the :id in its path. */
+export const idParam = z.object({ params });
+
 export const signIn = z.object({ body: z.object({ userId: id }) });
 export const createEvent = z.object({ body: z.object({ eventType: z.enum(eventTypes) }) });
-export const eventParam = z.object({ params: z.object({ id }) });
 export const intake = z.object({
-  params: z.object({ id }),
+  params,
   body: z
     .object({
       answer: z.string().max(2000).optional(),
@@ -17,7 +22,7 @@ export const intake = z.object({
     .default({}),
 });
 export const patchProfile = z.object({
-  params: z.object({ id }),
+  params,
   body: z
     .object({
       name: z.string().trim().min(1).max(120),
@@ -30,19 +35,19 @@ export const patchProfile = z.object({
     .strict(),
 });
 export const groupMessages = z.object({
-  params: z.object({ id }),
+  params,
   query: z.object({
     before: id.optional(),
     limit: z.coerce.number().int().min(1).max(100).optional(),
   }),
 });
 export const proposeChange = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ text: z.string().trim().min(1).max(1000) }),
 });
 const briefAnswer = z.string().trim().max(500).optional();
 export const createBrief = z.object({
-  params: z.object({ id }),
+  params,
   body: z
     .object({
       categoryId: id,
@@ -59,18 +64,16 @@ export const createBrief = z.object({
     })
     .strict(),
 });
-export const briefParam = z.object({ params: z.object({ id }) });
 export const briefDecision = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ approve: z.boolean(), note: z.string().trim().max(300).optional() }).strict(),
 });
-export const vendorParam = z.object({ params: z.object({ id }) });
 export const patchDeliverable = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ done: z.boolean() }).strict(),
 });
 export const createExpense = z.object({
-  params: z.object({ id }),
+  params,
   body: z
     .object({
       description: z.string().trim().min(1).max(200),
@@ -80,13 +83,12 @@ export const createExpense = z.object({
     })
     .strict(),
 });
-export const expenseParam = z.object({ params: z.object({ id }) });
 export const coverFromBuffer = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ categoryId: id }).strict(),
 });
 export const setBuffer = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ percent: z.int().min(0).max(30) }).strict(),
 });
 export const acceptChange = z.object({
@@ -101,24 +103,24 @@ export const acceptChange = z.object({
     .default({}),
 });
 export const reschedule = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ date: z.string().trim().min(1).max(200) }),
 });
 export const taskStatus = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ status: z.enum(["todo", "done"]) }),
 });
 
 const amountText = z.string().trim().max(80);
 const answerText = z.string().trim().max(200).nullable().optional();
-export const rfq = z.object({ params: z.object({ id }), body: z.object({ categoryId: id }) });
+export const rfq = z.object({ params, body: z.object({ categoryId: id }) });
 export const quoteList = z.object({
-  params: z.object({ id }),
+  params,
   query: z.object({ categoryId: id }),
 });
 // Typed fields, or pasted text. A file arrives as multipart and is handled before this runs.
 export const createQuote = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({
     categoryId: id,
     text: z.string().max(8000).optional(),
@@ -130,7 +132,7 @@ export const createQuote = z.object({
   }),
 });
 export const confirmQuote = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({
     vendorName: z.string().trim().min(1).max(120),
     perGuestText: amountText.optional(),
@@ -151,14 +153,12 @@ export const confirmQuote = z.object({
       .optional(),
   }),
 });
-export const quoteParam = z.object({ params: z.object({ id }) });
-export const fileParam = z.object({ params: z.object({ id }) });
 export const postMessage = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ text: z.string().max(4000).optional() }).default({}),
 });
 export const pinDirective = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ addressedUserIds: z.array(id).max(30).optional() }).default({}),
 });
 const roleIds = z.array(id).max(20);
@@ -170,10 +170,10 @@ const groupName = z
   .max(30)
   .regex(/^[\p{L}\p{N}][\p{L}\p{N} &'’/-]*$/u, "Please use letters, numbers, spaces, & or -.");
 export const createGroup = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ name: groupName, memberRoleIds: roleIds }),
 });
 export const patchGroup = z.object({
-  params: z.object({ id }),
+  params,
   body: z.object({ name: groupName, memberRoleIds: roleIds }).partial().strict(),
 });

@@ -1,3 +1,4 @@
+/** Words the Budget agent's warning when spending crosses a line in the plan. */
 import { mentionsMoney } from "../core/amount.js";
 import {
   agentPrompt,

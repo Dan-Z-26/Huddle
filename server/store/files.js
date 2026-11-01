@@ -1,7 +1,7 @@
+/** Storing uploads on disk under random names, outside public/. */
 import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { HttpError } from "../http.js";
 import { detectFileType, safeFileName } from "../validation/uploads.js";
 import { newId } from "./ids.js";
 
@@ -38,7 +38,7 @@ export async function saveUpload(
     uploadedBy: userId,
     createdAt: nowIso,
   };
-  // Counted before the first wait, so uploads running side by side can't all pass assertRoom.
+  // Counted before the first wait, so uploads running side by side can't all pass hasRoom.
   store.files.set(record.id, record);
   try {
     await mkdir(uploadsDir, { recursive: true });
@@ -59,13 +59,13 @@ export async function saveUpload(
 export const readUpload = (uploadsDir, record) => readFile(join(uploadsDir, record.storedName));
 
 /**
- * Refuses an upload that would take an event past its share of disk, so uploads can't fill it.
+ * Whether an event has room for these files, so uploads can't fill the disk.
  * @param {object} store The store.
  * @param {string} eventId The event.
  * @param {number[]} sizes Byte sizes of the files about to be saved.
- * @throws {Error} 413 when the event has used up its allowance.
+ * @returns {boolean} False when they would take the event past its share.
  */
-export function assertRoom(store, eventId, sizes) {
+export function hasRoom(store, eventId, sizes) {
   let bytes = sizes.reduce((sum, size) => sum + size, 0);
   let count = sizes.length;
   for (const { groupId, size } of store.files.values()) {
@@ -73,12 +73,7 @@ export function assertRoom(store, eventId, sizes) {
     bytes += size;
     count += 1;
   }
-  if (bytes > MAX_EVENT_BYTES || count > MAX_EVENT_FILES)
-    throw HttpError(
-      413,
-      "PAYLOAD_TOO_LARGE",
-      "This event has used all the file space the demo allows.",
-    );
+  return bytes <= MAX_EVENT_BYTES && count <= MAX_EVENT_FILES;
 }
 
 /**
@@ -88,7 +83,7 @@ export function assertRoom(store, eventId, sizes) {
  * @returns {Promise<void>} Resolves when done.
  */
 export async function removeUploads(uploadsDir, records) {
-  await Promise.all(
+  await Promise.allSettled(
     records.map(({ storedName }) => rm(join(uploadsDir, storedName), { force: true })),
   );
 }

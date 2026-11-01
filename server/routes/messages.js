@@ -1,26 +1,63 @@
+/** Group chat: history, posting with attachments, `@huddle`, and the recent activity feed. */
 import { Router } from "express";
 import { hideAmounts } from "../core/amount.js";
 import { canPost, canView } from "../core/permissions.js";
-import { HttpError, ownEvent, requireUser, validate } from "../http.js";
+import {
+  badRequest,
+  forbidden,
+  ownEvent,
+  ownRecord,
+  requireUser,
+  tooMany,
+  unsupportedFile,
+  validate,
+} from "../http.js";
 import { assertRoom, saveUpload } from "../store/files.js";
-import { addMessage } from "../store/workspace.js";
-import { detectFileType } from "../validation/uploads.js";
-import { eventParam, groupMessages, postMessage } from "../validation/schemas.js";
-import { maybeFiles } from "./multipart.js";
-import { replyAsPlanner } from "./plannerReply.js";
-import { directiveView, messageView, redactForVendor } from "../views.js";
 import { newId } from "../store/ids.js";
+import { addMessage } from "../store/workspace.js";
+import { idParam, groupMessages, postMessage } from "../validation/schemas.js";
+import { detectFileType } from "../validation/uploads.js";
+import { directiveView, messageView, redactForVendor } from "../views.js";
+import { replyAsPlanner } from "../workflows/plannerReply.js";
+import { maybeFiles } from "./multipart.js";
 
 const HUDDLE = /@huddle\b/i;
 const MAX_VENDOR_MESSAGES = 50;
 const MAX_VENDOR_SCAN = 100;
 const MAX_ACTIVITY = 12;
-// Other events' groups look the same as missing ones.
-function groupOf(req, id) {
-  const group = req.app.locals.store.groups.get(id);
-  if (!group || group.eventId !== req.user.eventId)
-    throw HttpError(404, "NOT_FOUND", "No such group.");
-  return group;
+
+// A vendor joins at acceptance: what the team said before that stays with the team.
+function vendorLens(store, user) {
+  const isVendor = user.kind === "vendor";
+  return {
+    isVisible: ({ createdAt }) => !isVendor || createdAt >= user.joinedAt,
+    show: (message) =>
+      isVendor
+        ? redactForVendor(messageView(store, message), user.id)
+        : messageView(store, message),
+  };
+}
+
+function listMessages(req, res) {
+  const { store } = req.app.locals;
+  const group = ownRecord(req, store.groups, "group");
+  if (!canView(store.roleOf(req.user), { type: "group", group }))
+    throw forbidden("You are not in this group.");
+  const { before, limit } = req.valid.query;
+  const page = store.messagesForGroup(group.id, { before, limit });
+  const { isVisible, show } = vendorLens(store, req.user);
+  const pinned = [...store.directives.values()]
+    .filter(({ groupId }) => groupId === group.id)
+    .filter((directive) => isVisible(store.messages.get(directive.messageId) ?? {}))
+    .map((directive) => ({
+      ...directiveView(store, directive),
+      text: show(store.messages.get(directive.messageId) ?? { text: "" }).text ?? "",
+    }));
+  res.json({
+    messages: page.messages.filter(isVisible).map(show),
+    nextBefore: req.user.kind === "vendor" ? null : page.nextBefore,
+    pinned,
+  });
 }
 
 // Old messages make way for new ones, so one vendor can't push out the team's history.
@@ -28,15 +65,14 @@ function refuseVendorFlood(store, group, user) {
   if (user.kind !== "vendor") return;
   const recent = store.messagesForGroup(group.id, { limit: MAX_VENDOR_SCAN }).messages;
   if (recent.filter(({ authorId }) => authorId === user.id).length >= MAX_VENDOR_MESSAGES)
-    throw HttpError(429, "RATE_LIMITED", "That's a lot of messages. Please ask the team to reply.");
+    throw tooMany("That's a lot of messages. Please ask the team to reply.");
 }
 
 // Every file is judged first, so one bad file means nothing is saved.
 function saveAttachments(req, group, nowIso) {
   const { store, uploadsDir } = req.app.locals;
   const files = req.files ?? [];
-  if (files.some(({ buffer }) => !detectFileType(buffer)))
-    throw HttpError(400, "UNSUPPORTED_FILE", "Only PDF, PNG, JPG or WEBP files are allowed.");
+  if (files.some(({ buffer }) => !detectFileType(buffer))) throw unsupportedFile();
   assertRoom(
     store,
     group.eventId,
@@ -65,8 +101,8 @@ function askPlannerInBackground({ req, store, group, message, text, records }) {
     user: req.user,
     message,
     askedText: text,
-    files: (req.files ?? []).map(({ buffer, originalname }, i) => ({
-      mime: records[i].mime,
+    files: (req.files ?? []).map(({ buffer, originalname }, index) => ({
+      mime: records[index].mime,
       buffer,
       name: originalname,
     })),
@@ -74,41 +110,64 @@ function askPlannerInBackground({ req, store, group, message, text, records }) {
   store.background.add(work);
 }
 
-/** Group history, posting with attachments, `@huddle`, and the recent activity feed. */
+async function postToGroup(req, res) {
+  const { store } = req.app.locals;
+  const group = ownRecord(req, store.groups, "group");
+  if (!canPost(store.roleOf(req.user), group)) throw forbidden("You can't post in this group.");
+  refuseVendorFlood(store, group, req.user);
+  const text = (req.valid.body.text ?? "").trim();
+  if (!text && !req.files?.length) throw badRequest("Write a message or attach a file.");
+  const nowIso = new Date().toISOString();
+  const records = await saveAttachments(req, group, nowIso);
+  const isVendor = req.user.kind === "vendor";
+  const asksHuddle = HUDDLE.test(text) && !isVendor;
+  const message = addMessage(store, {
+    id: newId("m"),
+    groupId: group.id,
+    authorId: req.user.id,
+    authorKind: "human",
+    // Telling @huddle about money is routine, and not everyone in a room owns that budget.
+    text: asksHuddle ? hideAmounts(text) : text,
+    fileIds: records.map(({ id }) => id),
+    createdAt: nowIso,
+    rationale: null,
+  });
+  res.status(201).json({ message: vendorLens(store, req.user).show(message) });
+  if (!isVendor) {
+    const event = store.events.get(group.eventId);
+    store.reactInDemo?.("message", { event, group, user: req.user, text });
+  }
+  if (asksHuddle) askPlannerInBackground({ req, store, group, message, text, records });
+}
+
+// The latest messages across the rooms this person is in, for the first page.
+function listActivity(req, res) {
+  const { store } = req.app.locals;
+  const event = ownEvent(req);
+  const role = store.roleOf(req.user);
+  const rooms = new Set(
+    [...store.groups.values()]
+      .filter((group) => group.eventId === event.id && canView(role, { type: "group", group }))
+      .map(({ id }) => id),
+  );
+  const latest = [...store.messages.values()]
+    .filter(({ groupId }) => rooms.has(groupId))
+    .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .slice(-MAX_ACTIVITY);
+  res.json({ messages: latest.map((message) => messageView(store, message)) });
+}
+
+/**
+ * Message routes.
+ * @param {{ai: import("express").RequestHandler, chat: import("express").RequestHandler}} limits
+ *   The AI and chat rate limits. Only a message that calls the Planner uses the AI budget.
+ * @returns {import("express").Router} The routes.
+ */
 export function messageRoutes({ ai, chat }) {
   const router = Router();
-  // Only a message that calls the Planner uses the AI budget.
   const aiIfMentioned = (req, res, next) =>
     HUDDLE.test(req.body?.text ?? "") && req.user.kind !== "vendor" ? ai(req, res, next) : next();
-
-  router.get("/groups/:id/messages", requireUser, validate(groupMessages), (req, res) => {
-    const { store } = req.app.locals;
-    const group = groupOf(req, req.valid.params.id);
-    if (!canView(store.roleOf(req.user), { type: "group", group }))
-      throw HttpError(403, "FORBIDDEN", "You are not in this group.");
-    const { before, limit } = req.valid.query;
-    const page = store.messagesForGroup(group.id, { before, limit });
-    // A vendor joins at acceptance: what the team said before that stays with the team.
-    const isVendor = req.user.kind === "vendor";
-    const visible = ({ createdAt }) => !isVendor || createdAt >= req.user.joinedAt;
-    const shown = (message) =>
-      isVendor
-        ? redactForVendor(messageView(store, message), req.user.id)
-        : messageView(store, message);
-    const pinned = [...store.directives.values()]
-      .filter(({ groupId }) => groupId === group.id)
-      .filter((directive) => visible(store.messages.get(directive.messageId) ?? {}))
-      .map((directive) => ({
-        ...directiveView(store, directive),
-        text: shown(store.messages.get(directive.messageId) ?? { text: "" }).text ?? "",
-      }));
-    res.json({
-      messages: page.messages.filter(visible).map(shown),
-      nextBefore: isVendor ? null : page.nextBefore,
-      pinned,
-    });
-  });
-
+  router.get("/groups/:id/messages", requireUser, validate(groupMessages), listMessages);
   router.post(
     "/groups/:id/messages",
     requireUser,
@@ -116,62 +175,8 @@ export function messageRoutes({ ai, chat }) {
     maybeFiles,
     aiIfMentioned,
     validate(postMessage),
-    async (req, res) => {
-      const { store } = req.app.locals;
-      const group = groupOf(req, req.valid.params.id);
-      if (!canPost(store.roleOf(req.user), group))
-        throw HttpError(403, "FORBIDDEN", "You can't post in this group.");
-      refuseVendorFlood(store, group, req.user);
-      const text = (req.valid.body.text ?? "").trim();
-      if (!text && !req.files?.length)
-        throw HttpError(400, "BAD_REQUEST", "Write a message or attach a file.");
-      const nowIso = new Date().toISOString();
-      const records = await saveAttachments(req, group, nowIso);
-      const isVendor = req.user.kind === "vendor";
-      const asksHuddle = HUDDLE.test(text) && !isVendor;
-      const message = addMessage(store, {
-        id: newId("m"),
-        groupId: group.id,
-        authorId: req.user.id,
-        authorKind: "human",
-        // Telling @huddle about money is routine, and not everyone in a room owns that budget.
-        text: asksHuddle ? hideAmounts(text) : text,
-        fileIds: records.map(({ id }) => id),
-        createdAt: nowIso,
-        rationale: null,
-      });
-      res.status(201).json({
-        message: isVendor
-          ? redactForVendor(messageView(store, message), req.user.id)
-          : messageView(store, message),
-      });
-      if (!isVendor)
-        store.reactInDemo?.("message", {
-          event: store.events.get(group.eventId),
-          group,
-          user: req.user,
-          text,
-        });
-      if (asksHuddle) askPlannerInBackground({ req, store, group, message, text, records });
-    },
+    postToGroup,
   );
-
-  // The latest messages across the rooms this person is in, for the first page.
-  router.get("/events/:id/activity", requireUser, validate(eventParam), (req, res) => {
-    const { store } = req.app.locals;
-    const event = ownEvent(req);
-    const role = store.roleOf(req.user);
-    const rooms = new Map(
-      [...store.groups.values()]
-        .filter((group) => group.eventId === event.id && canView(role, { type: "group", group }))
-        .map((group) => [group.id, group]),
-    );
-    const latest = [...store.messages.values()]
-      .filter(({ groupId }) => rooms.has(groupId))
-      .toSorted((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .slice(-MAX_ACTIVITY);
-    res.json({ messages: latest.map((message) => messageView(store, message)) });
-  });
-
+  router.get("/events/:id/activity", requireUser, validate(idParam), listActivity);
   return router;
 }

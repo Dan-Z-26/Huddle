@@ -1,10 +1,17 @@
+/** What each person may see of messages, profiles, groups and directives. */
 import { mentionsMoney } from "./core/amount.js";
 import { ackStatus } from "./core/directives.js";
-import { canSeeBudget } from "./core/permissions.js";
+import { canPost, canSeeBudget } from "./core/permissions.js";
 
 const HIDDEN = "(contains an amount; visible to the event manager)";
 const noMoney = (text) => (mentionsMoney(text) ? HIDDEN : text);
 const VENDOR_HIDDEN = "(contains an amount; not shared outside the team)";
+
+/**
+ * Text as a vendor may read it.
+ * @param {string} [text] Free text.
+ * @returns {string | undefined} The text, or a note in its place if it holds an amount.
+ */
 export const noMoneyForVendor = (text) => (mentionsMoney(text ?? "") ? VENDOR_HIDDEN : text);
 
 /**
@@ -24,7 +31,12 @@ export function redactForVendor(message, vendorId) {
   };
 }
 
-/** Redacts the payload of a live event on its way to a vendor. */
+/**
+ * Redacts the payload of a live event on its way to a vendor.
+ * @param {object} event The event.
+ * @param {string} vendorId The vendor it is going to.
+ * @returns {object} The redacted copy.
+ */
 export function redactEventForVendor(event, vendorId) {
   return {
     ...event,
@@ -53,7 +65,11 @@ function vendorProfile(event) {
   };
 }
 
-/** What a client may know about a person. */
+/**
+ * What a client may know about a person.
+ * @param {object} user The person.
+ * @returns {{id: string, name: string, roleId: string, kind: string}} The public fields.
+ */
 export const publicUser = ({ id, name, roleId, kind }) => ({ id, name, roleId, kind });
 
 /**
@@ -103,6 +119,26 @@ export function groupPeople(store, group) {
       user.kind !== "agent" &&
       group.memberRoleIds.includes(user.roleId),
   );
+}
+
+/**
+ * Whether a booked vendor reads this room, so nothing about the plan may be posted in it.
+ * @param {object} store The store.
+ * @param {{eventId: string, memberRoleIds: string[]}} group The group.
+ * @returns {boolean} Whether a vendor is in it.
+ */
+export const hasVendor = (store, group) =>
+  groupPeople(store, group).some(({ kind }) => kind === "vendor");
+
+/**
+ * The user's groups, each saying whether they may post there, so the screen can offer a composer.
+ * @param {object} store The store.
+ * @param {object} user The person.
+ * @returns {object[]} The groups.
+ */
+export function groupsFor(store, user) {
+  const role = store.roleOf(user);
+  return store.groupsForUser(user).map((group) => ({ ...group, canPost: canPost(role, group) }));
 }
 
 /**

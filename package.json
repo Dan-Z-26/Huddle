@@ -1,10 +1,15 @@
 {
   "name": "huddle",
   "version": "0.1.0",
+  "description": "A GenAI planning assistant and team workspace for weddings, birthdays, community events and product launches.",
   "private": true,
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Dan-Z-26/Huddle.git"
+  },
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22"
   },
   "overrides": {
     "minimatch": "^11.0.3"

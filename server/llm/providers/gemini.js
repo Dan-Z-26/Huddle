@@ -1,3 +1,4 @@
+/** The Gemini adapter: translates one model turn, and nothing else. */
 const MAX_OUTPUT_TOKENS = 4096;
 const clients = new Map();
 
