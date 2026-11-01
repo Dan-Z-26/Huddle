@@ -18,7 +18,7 @@ export async function showSignIn(onSignedIn) {
   const list = $("signin-list");
   clear(list);
   try {
-    const { people, eventName, isDemo } = await api.people();
+    const { people, eventName, isDemo, startWithNew } = await api.people();
     $("signin-event").textContent = eventName;
     $("signin-demo").hidden = isDemo;
     for (const person of people)
@@ -47,6 +47,7 @@ export async function showSignIn(onSignedIn) {
         ),
       );
     list.querySelector("button")?.focus();
+    if (startWithNew) $("signin-new").click();
   } catch (err) {
     announceError(err.message);
   }

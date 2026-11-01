@@ -140,6 +140,8 @@ export function sessionRoutes() {
     res.json({
       eventName: store.events.get(eventId).name,
       isDemo: eventId === DEMO_EVENT_ID,
+      // A deployed site can greet newcomers with "Start a new event" instead of the demo's people.
+      startWithNew: process.env.START_ON === "new" && eventId === DEMO_EVENT_ID,
       people: people.map((user) => ({ ...publicUser(user), roleName: roleNameOf(store, user) })),
     });
   });

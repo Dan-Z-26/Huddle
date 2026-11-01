@@ -30,6 +30,10 @@ npm run lint
 
 **No API key is needed.** Without one, every agent falls back to plain rules and the sample quotes have stored readings, so the whole demo works. To turn on real AI, copy `.env.example` to `.env` and add a `GEMINI_API_KEY`.
 
+## Deploy
+
+[render.yaml](render.yaml) deploys it to Render as one Node web service: push to GitHub, choose New > Blueprint, pick the repo, and paste `GEMINI_API_KEY` in the dashboard (the key is never in the repo). `START_ON=new` is set there, so a first-time visitor lands on "Start a new event"; cancel the chooser to reach the demo event. Run exactly one instance: the store, the live updates (SSE) and uploaded files all live in that process, so a restart resets the demo event, and the free plan sleeps after idle time and wakes on the next visit.
+
 ## Try the demo (5 minutes)
 
 Open the app and sign in as **Asha Menon, Event manager**. The first page is the event brief, today's digest from the AI, and a live feed. The team then starts working on its own for about a minute, using the same code a real user does:

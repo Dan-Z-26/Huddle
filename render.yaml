@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: huddle
+    runtime: node
+    plan: free
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: TRUST_PROXY_HOPS
+        value: 1
+      # First-time visitors land on "Start a new event" instead of the demo event.
+      - key: START_ON
+        value: new
+      - key: GEMINI_FAST_MODEL
+        value: gemini-flash-lite-latest
+      - key: GEMINI_SMART_MODEL
+        value: gemini-flash-lite-latest
+      # Set in the Render dashboard, never in this file.
+      - key: GEMINI_API_KEY
+        sync: false

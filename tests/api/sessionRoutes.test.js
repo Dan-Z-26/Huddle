@@ -18,6 +18,17 @@ describe("the demo sign-in list", () => {
     assert.ok((await ids(call)).every((id) => id.endsWith(`@${ID}`)));
   });
 
+  it("asks a newcomer to start a new event only when START_ON=new", async (t) => {
+    const { call, store } = await startDemo(t);
+    addEvent(store);
+    const startWithNew = async (as) => (await (await call("/people", { as })).json()).startWithNew;
+    assert.equal(await startWithNew(), false);
+    process.env.START_ON = "new";
+    t.after(() => delete process.env.START_ON);
+    assert.equal(await startWithNew(), true);
+    assert.equal(await startWithNew("user-manager@other"), false);
+  });
+
   it("names each role", async (t) => {
     const { call } = await startDemo(t);
     const { people } = await (await call("/people")).json();
