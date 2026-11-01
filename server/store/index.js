@@ -42,6 +42,7 @@ function dropOldSession(sessions, userId, newId) {
  * Creates an empty in-memory store. Messages must be inserted oldest first: pages rely on Map order.
  * @returns {object} Maps for each entity, and the functions that read across them.
  */
+// eslint-disable-next-line max-lines-per-function
 export function createStore() {
   const groups = new Map();
   const messages = new Map();
